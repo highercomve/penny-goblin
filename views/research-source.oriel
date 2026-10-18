@@ -1,0 +1,21 @@
+<style>
+ sheet: background=#f6f8f1 color=#191d19
+ card: background=#f0f3eb
+ primary: color=#2d6a4f
+ filled: background=#2d6a4f color=#ffffff
+ field: color=#191d19 border-color=#737a72 color-scheme=light
+ @media (prefers-color-scheme: dark) {
+  sheet: background=#111511 color=#e0e4dc
+  card: background=#191d19
+  primary: color=#9ad4ae
+  filled: background=#9ad4ae color=#003920
+  field: color=#e0e4dc border-color=#8c938a color-scheme=dark
+ }
+</style>
+<column gap="8" shrink="0">
+ <button id="toggle" class="primary" min-height="44" padding="8" clickable="true"><text id="title" font-size="14">{title}</text></button>
+ <column id="body" display="none" gap="8">
+  <text font-size="13">{quote}</text>
+  <button id="open" class="primary" min-height="40" padding="8" align-self="flex-start" clickable="true"><text font-size="14">Open source</text></button>
+ </column>
+</column>

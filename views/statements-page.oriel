@@ -1,0 +1,58 @@
+<style>
+  statements-page: grow=1 basis=0 width=640 height=auto min-height=0 max-width=1180 max-height=772 padding=0,24,24,24 color-scheme=light background=#eaeee4 radius=28 unset="position inset z"
+  n2: margin=0,-24,8,-24 padding=8,16,0,8 background=#eaeee4
+  n4: icon-color=#434a43 viewbox=0,0,24,24
+  n6: color=#191d19
+  n7: background=#2d6a4f
+  n8: color=#ffffff
+  statement-file: color-scheme=light background=#ffffff unset="color"
+  n10: color-scheme=light color=#ffffff
+  statement-status: color=#434a43
+  @media (prefers-color-scheme: dark) {
+    statements-page: color-scheme=dark background=#1d211d
+    n2: background=#1d211d
+    n4: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n6: color=#e0e4dc
+    n7: background=#9ad4ae
+    n8: color=#003920
+    statement-file: color-scheme=dark background=#6b6b6b color=#ffffff
+    n10: color-scheme=dark color=#003920
+    statement-status: color=#c2c9c0
+  }
+  @media (max-width: 839px) {
+    statements-page: width=393 height=820 max-width=393 max-height=820 padding=0,16,24,16 position=absolute top=0 right=0 bottom=0 left=0 background=#f6f8f1 z=2147483647 unset="grow basis min-height radius"
+    n2: margin=0,-16,8,-16 padding=0,12,0,4 background=#f6f8f1
+  }
+  @media (max-width: 839px) and (prefers-color-scheme: dark) {
+    statements-page: background=#111511
+    n2: background=#111511
+  }
+  @media (max-width: 380px) {
+    statements-page: width=320 height=820 max-width=320 max-height=820 padding=0,16,24,16 position=absolute top=0 right=0 bottom=0 left=0 background=#f6f8f1 z=2147483647 unset="grow basis min-height radius"
+    n2: margin=0,-16,8,-16 padding=0,12,0,4 background=#f6f8f1
+  }
+  @media (max-width: 380px) and (prefers-color-scheme: dark) {
+    statements-page: background=#111511
+    n2: background=#111511
+  }
+</style>
+<view id="statements-page" class="statements-page" scroll="true" scroll-x="true" unset="shrink color font-size">
+  <row class="n2" align="center" min-height="64" row-gap="4" column-gap="4" sticky="0,auto,auto,auto" z="2">
+    <row id="close-statements" justify="center" align="center" width="48" height="48" min-height="40" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
+      <icon class="n4" grow="0" shrink="0" width="24" height="24" clickable="true">
+        <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+      </icon>
+    </row>
+    <view id="statements-title" grow="1" shrink="1" basis="0%" clip="true">
+      <text class="n6" shrink="0" font-size="22" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Bank statements</text>
+    </view>
+    <row class="n7" justify="center" align="center" grow="0" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" clip="true" radius="20" clickable="true">
+      <text class="n8" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Add PDF</text>
+      <view id="statement-file" class="statement-file" justify="center" padding="1" border-width="2" border-color="#cdcdcd" position="absolute" top="0" right="0" bottom="0" left="0" radius="5" opacity="0" clickable="true" label="Add PDF" unset="shrink">
+        <text class="n10" shrink="0" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center">Choose File  No file chosen</text>
+      </view>
+    </row>
+  </row>
+  <text id="statement-status" class="statement-status" shrink="0" margin="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">Status</text>
+  <view id="statement-list" />
+</view>

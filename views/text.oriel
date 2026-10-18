@@ -1,0 +1,7 @@
+<style>
+  theme0: color=#434a43
+  @media (prefers-color-scheme: dark) {
+    theme0: color=#c2c9c0
+  }
+</style>
+<text class="theme0" font-size="14">{text}</text>

@@ -1,0 +1,745 @@
+//! macOS application shell: NSApplication lifecycle, the AppKit run loop,
+//! main-thread dispatch (tasks drained from the GCD main queue), the default
+//! menu bar and quitting.
+
+const std = @import("std");
+const apple = @import("../apple/apple.zig");
+const objc = apple.objc;
+const Object = apple.Object;
+const window = @import("window.zig");
+const dev_server = @import("dev_server.zig");
+const WindowHandle = window.WindowHandle;
+const App = @import("../../core/App.zig");
+const security = @import("../../core/security.zig");
+const isolation = @import("../../core/isolation.zig");
+const lifecycle = @import("../../core/lifecycle/backend.zig");
+const apple_hooks = @import("../apple/hooks.zig");
+const build_opts = @import("build_options");
+const single_instance = @import("single_instance.zig");
+const deep_link = if (build_opts.deep_link) @import("../../modules/deep_link/delivery.zig") else struct {};
+const share = if (build_opts.share) @import("../../modules/share/apple.zig") else struct {};
+
+const log = std.log.scoped(.oriel);
+
+pub const Mutex = struct {
+    inner: std.c.pthread_mutex_t = .{},
+
+    pub fn init() Mutex {
+        return .{};
+    }
+
+    pub fn lock(self: *Mutex) void {
+        _ = std.c.pthread_mutex_lock(&self.inner); // only fails for invalid or deadlocking use
+    }
+
+    pub fn unlock(self: *Mutex) void {
+        _ = std.c.pthread_mutex_unlock(&self.inner);
+    }
+};
+
+const Task = struct {
+    run_fn: *const fn (ctx: ?*anyopaque) void,
+    ctx: ?*anyopaque,
+    cleanup_fn: ?*const fn (ctx: ?*anyopaque) void,
+};
+
+var task_queue: std.ArrayList(Task) = .empty;
+var task_mutex: Mutex = .{};
+/// Set under `task_mutex` while `run` services the queue from the run loop.
+var running = false;
+/// Set under `task_mutex` when `run` stops, before its last drain: a task
+/// queued after that from another thread would never run (and a
+/// `runOnMainThread` caller would wait forever), so it is cleaned up at once.
+var shutting_down = false;
+/// A drain is already queued on the GCD main queue (coalesces wakeups).
+var drain_scheduled = false;
+
+/// Dispatches a task to execute on the main (AppKit) thread.
+///
+/// Thread-safe. Tasks queued before `run` starts run once it does; tasks
+/// still queued when the run loop ends run during shutdown (see
+/// `drainAtShutdown`). If the task can't be queued (out of memory) it is
+/// logged and dropped: use `dispatchWithCleanup` when `ctx` owns memory.
+pub fn dispatchToMainThread(func: *const fn (ctx: ?*anyopaque) void, ctx: ?*anyopaque) void {
+    dispatchWithCleanup(func, ctx, null);
+}
+
+/// Like `dispatchToMainThread`, but `cleanup(ctx)` runs instead of `func` when
+/// the task can't be queued (out of memory, or queued from another thread
+/// after shutdown; then on the calling thread, so it must only free memory,
+/// not touch AppKit/WebKit objects) or when it is still queued at shutdown
+/// (then on the main thread, after the run loop).
+pub fn dispatchWithCleanup(
+    func: *const fn (ctx: ?*anyopaque) void,
+    ctx: ?*anyopaque,
+    cleanup: ?*const fn (ctx: ?*anyopaque) void,
+) void {
+    task_mutex.lock();
+    // The main thread may still queue while it drains (drainAtShutdown loops).
+    if (shutting_down and !apple.isMainThread()) {
+        task_mutex.unlock();
+        if (cleanup) |c| c(ctx) else log.warn("dispatchToMainThread: dropped a task queued after shutdown", .{});
+        return;
+    }
+    task_queue.append(std.heap.smp_allocator, .{ .run_fn = func, .ctx = ctx, .cleanup_fn = cleanup }) catch {
+        task_mutex.unlock();
+        log.err("dispatchToMainThread failed: out of memory", .{});
+        if (cleanup) |c| c(ctx);
+        return;
+    };
+    const wake = running and !drain_scheduled;
+    if (wake) drain_scheduled = true;
+    task_mutex.unlock();
+
+    // Before `run` starts, tasks wait in the queue; `run` drains it.
+    if (wake) apple.asyncMain(null, &drainFromMainQueue);
+}
+
+fn drainFromMainQueue(_: ?*anyopaque) callconv(.c) void {
+    processDispatchQueue();
+}
+
+fn takeTasks() ?std.ArrayList(Task) {
+    task_mutex.lock();
+    defer task_mutex.unlock();
+    drain_scheduled = false;
+    if (task_queue.items.len == 0) return null;
+    // Take the buffer as is (no shrink, so this can't fail): a task lost
+    // here could leave a runOnMainThread caller waiting forever.
+    const tasks = task_queue;
+    task_queue = .empty;
+    return tasks;
+}
+
+pub fn processDispatchQueue() void {
+    var tasks = takeTasks() orelse return;
+    defer tasks.deinit(std.heap.smp_allocator);
+    const pool = objc.AutoreleasePool.init();
+    defer pool.deinit();
+    for (tasks.items) |t| t.run_fn(t.ctx);
+}
+
+/// Called on the main thread after the run loop ended: tasks with a cleanup
+/// are cleaned up, the others still run once (so their memory is freed and
+/// any thread waiting on them is released). Loops because a task may queue
+/// another one.
+fn drainAtShutdown() void {
+    while (takeTasks()) |taken| {
+        var tasks = taken;
+        defer tasks.deinit(std.heap.smp_allocator);
+        const pool = objc.AutoreleasePool.init();
+        defer pool.deinit();
+        for (tasks.items) |t| {
+            if (t.cleanup_fn) |c| c(t.ctx) else t.run_fn(t.ctx);
+        }
+    }
+}
+
+pub fn isRunning() bool {
+    task_mutex.lock();
+    defer task_mutex.unlock();
+    return running;
+}
+
+/// Run `func(ctx)` on the main (AppKit) thread and wait for it to finish.
+///
+/// Runs directly when already on the main thread. From another thread the
+/// call is queued and the caller blocks until it ran. Returns
+/// error.AppNotRunning when the shell isn't running, or when the task was
+/// dropped (out of memory) or discarded at shutdown instead of running.
+pub fn runOnMainThread(comptime Ctx: type, ctx: *Ctx, comptime func: fn (*Ctx) void) error{ AppNotRunning, SemaphoreCreateFailed }!void {
+    if (!isRunning()) return error.AppNotRunning;
+    if (apple.isMainThread()) {
+        func(ctx);
+        return;
+    }
+
+    const Call = struct {
+        ctx: *Ctx,
+        done: apple.Semaphore,
+        ran: bool = false,
+
+        fn run(p: ?*anyopaque) void {
+            const self: *@This() = @ptrCast(@alignCast(p.?));
+            func(self.ctx);
+            self.ran = true;
+            self.done.signal();
+        }
+
+        fn cleanup(p: ?*anyopaque) void {
+            const self: *@This() = @ptrCast(@alignCast(p.?));
+            self.done.signal();
+        }
+    };
+
+    const done = try apple.Semaphore.create();
+    defer done.deinit();
+    // `call` lives on this stack until the task has signalled.
+    var call: Call = .{ .ctx = ctx, .done = done };
+    dispatchWithCleanup(&Call.run, &call, &Call.cleanup);
+    done.wait();
+    if (!call.ran) return error.AppNotRunning;
+}
+
+pub var active_create_window_fn: ?*const fn (options: App.WindowOptions, win_inst: *App.Window) anyerror!WindowHandle = null;
+
+pub fn createWindow(options: App.WindowOptions, win_inst: *App.Window) !WindowHandle {
+    if (active_create_window_fn) |f| return f(options, win_inst) else return error.AppNotRunning;
+}
+
+var exit_code: std.atomic.Value(u8) = .init(0);
+/// Main thread only: `quit` ran before the run loop started.
+var quit_requested = false;
+
+/// Stop the run loop and make `run` return `code`. Thread-safe.
+pub fn quit(code: u8) void {
+    exit_code.store(code, .monotonic);
+    if (apple.isMainThread()) stopNow() else dispatchToMainThread(&stopTask, null);
+}
+
+fn stopTask(_: ?*anyopaque) void {
+    stopNow();
+}
+
+const NSEventTypeApplicationDefined: c_ulong = 15;
+
+fn stopNow() void {
+    quit_requested = true;
+    lifecycle.dispatch(.terminating);
+    const app = sharedApplication();
+    app.msgSend(void, "stop:", .{apple.nil});
+    // `stop:` only takes effect once the current event is handled: post an
+    // empty one so an idle loop wakes up and returns.
+    const event = apple.class("NSEvent").msgSend(
+        Object,
+        "otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:",
+        .{ NSEventTypeApplicationDefined, apple.NSPoint{ .x = 0, .y = 0 }, @as(c_ulong, 0), @as(f64, 0), @as(isize, 0), apple.nil, @as(i16, 0), @as(isize, 0), @as(isize, 0) },
+    );
+    if (event.value != null) app.msgSend(void, "postEvent:atStart:", .{ event, apple.boolean(true) });
+}
+
+pub fn sharedApplication() Object {
+    return apple.class("NSApplication").msgSend(Object, "sharedApplication", .{});
+}
+
+/// Global shortcut, tray and menu backends
+/// can hook shutdown here, like on Windows.
+// ---------------------------------------------------------------------------
+// Application delegate
+// ---------------------------------------------------------------------------
+
+const NSTerminateCancel: c_ulong = 0;
+
+/// Cmd+Q / "Quit" in the app menu: stop the run loop instead of letting
+/// AppKit call exit(), so `run` returns and cleans up like on the other platforms.
+fn applicationShouldTerminate(_: apple.id, _: apple.c.SEL, _: apple.id) callconv(.c) c_ulong {
+    quit(0);
+    return NSTerminateCancel;
+}
+
+/// Set by applicationDidFinishLaunching. Launch Services sends the URL that
+/// launched the app before that; later URLs are for the running app.
+var finished_launching = false;
+
+fn applicationDidFinishLaunching(_: apple.id, _: apple.c.SEL, notification: apple.id) callconv(.c) void {
+    finished_launching = true;
+    if (build_opts.notification) @import("../../modules/notification/macos.zig").installAtLaunch();
+    apple_hooks.notify(.did_finish_launching, .{notification});
+}
+
+// Platform hooks (src/platform/apple/hooks.zig): activities and remote
+// notification registration, which Oriel itself doesn't use.
+fn continueUserActivity(_: apple.id, _: apple.c.SEL, _: apple.id, activity: apple.id, _: apple.id) callconv(.c) apple.c.BOOL {
+    return apple.boolean(apple_hooks.intercept(.continue_user_activity, .{activity}));
+}
+
+fn didRegisterForRemoteNotifications(_: apple.id, _: apple.c.SEL, _: apple.id, token: apple.id) callconv(.c) void {
+    apple_hooks.notify(.did_register_push, .{token});
+}
+
+fn didFailToRegisterForRemoteNotifications(_: apple.id, _: apple.c.SEL, _: apple.id, err: apple.id) callconv(.c) void {
+    apple_hooks.notify(.did_fail_push, .{err});
+}
+
+/// OrielHooksContext.keyWindow: the key window, else the main one.
+fn hooksFront() ?*anyopaque {
+    const key = sharedApplication().msgSend(Object, "keyWindow", .{});
+    if (key.value != null) return key.value;
+    const w = App.getWindow("main") orelse return null;
+    return w.handle.window;
+}
+
+// ---------------------------------------------------------------------------
+// oriel.lifecycle: memory pressure (a dispatch source) and sleep / wake
+// (NSWorkspace's notification center, not the default one).
+// ---------------------------------------------------------------------------
+
+extern const NSWorkspaceWillSleepNotification: apple.id;
+extern const NSWorkspaceDidWakeNotification: apple.id;
+
+fn workspaceWillSleep(_: apple.id, _: apple.c.SEL, _: apple.id) callconv(.c) void {
+    lifecycle.dispatch(.suspend_);
+}
+
+fn workspaceDidWake(_: apple.id, _: apple.c.SEL, _: apple.id) callconv(.c) void {
+    lifecycle.dispatch(.resume_);
+}
+
+var memory_source: ?*anyopaque = null;
+
+fn onMemoryPressure(_: ?*anyopaque) callconv(.c) void {
+    const source = memory_source orelse return;
+    if (lifecycle.fromDispatchMemoryPressure(apple.sourceData(source))) |event| lifecycle.dispatch(event);
+}
+
+const LifecycleWatch = struct {
+    center: Object,
+    observer: Object,
+
+    fn install(observer: Object) LifecycleWatch {
+        memory_source = apple.memoryPressureSource(&onMemoryPressure);
+        if (memory_source == null) log.warn("could not watch memory pressure", .{});
+        const workspace = apple.class("NSWorkspace").msgSend(Object, "sharedWorkspace", .{});
+        const center = workspace.msgSend(Object, "notificationCenter", .{});
+        center.msgSend(void, "addObserver:selector:name:object:", .{ observer, objc.sel("orielWillSleep:"), Object{ .value = NSWorkspaceWillSleepNotification }, apple.nil });
+        center.msgSend(void, "addObserver:selector:name:object:", .{ observer, objc.sel("orielDidWake:"), Object{ .value = NSWorkspaceDidWakeNotification }, apple.nil });
+        return .{ .center = center, .observer = observer };
+    }
+
+    fn uninstall(self: LifecycleWatch) void {
+        self.center.msgSend(void, "removeObserver:", .{self.observer});
+        if (memory_source) |source| apple.cancelSource(source);
+        memory_source = null;
+    }
+};
+
+// Deep links: Launch Services sends `open myapp://...` (browser links,
+// `open`) to the app that declares the scheme in Info.plist as a kAEGetURL
+// Apple Event; to the running instance if there is one.
+const kInternetEventClass: u32 = 0x4755_524C; // 'GURL'
+const kAEGetURL: u32 = 0x4755_524C; // 'GURL'
+const keyDirectObject: u32 = 0x2D2D_2D2D; // '----'
+
+extern "c" fn _NSGetArgc() *c_int;
+extern "c" fn NSUpdateDynamicServices() void;
+extern "c" fn _NSGetArgv() *[*][*:0]u8;
+
+/// Files Launch Services opens with the app (Finder's "Open With", a drop
+/// on the Dock icon: kAEOpenDocuments, which NSApplication hands here;
+/// URLs of the app's schemes come as kAEGetURL instead). With the share
+/// module they are a share from `open_with`; a running app's window comes
+/// forward.
+/// Other URLs come here only without a GetURL handler (no deep_link
+/// module): for the platform hooks' openURL:.
+fn applicationOpenURLs(_: apple.id, _: apple.c.SEL, _: apple.id, urls: apple.id) callconv(.c) void {
+    if (!build_opts.share and !apple_hooks.active()) return;
+    const arr: Object = .{ .value = urls };
+    const n = arr.msgSend(c_ulong, "count", .{});
+    var paths: std.ArrayList([]const u8) = .empty;
+    defer paths.deinit(std.heap.smp_allocator);
+    for (0..n) |i| {
+        const url = arr.msgSend(Object, "objectAtIndex:", .{@as(c_ulong, i)});
+        if (!apple.isTrue(url.msgSend(apple.c.BOOL, "isFileURL", .{}))) {
+            _ = apple_hooks.intercept(.open_url, .{url.value});
+            continue;
+        }
+        if (!build_opts.share) continue;
+        const path = apple.utf8(url.msgSend(Object, "path", .{})) orelse continue;
+        paths.append(std.heap.smp_allocator, path) catch return;
+    }
+    if (paths.items.len == 0) return;
+    if (finished_launching) if (App.getWindow("main")) |w| w.show();
+    share.receivePaths(paths.items, .open_with, false);
+}
+
+/// macOS Services (Info.plist NSServices, NSMessage orielShare): another
+/// app's selection, sent from its Services menu, as a share from
+/// `service`. The window comes forward.
+fn orielShareService(_: apple.id, _: apple.c.SEL, pboard: apple.id, _: apple.id, _: ?*apple.id) callconv(.c) void {
+    if (!build_opts.share) return;
+    if (App.getWindow("main")) |w| w.show();
+    share.receiveService(.{ .value = pboard });
+}
+
+/// Clicking the Dock icon while every window is hidden (`hide_on_close`)
+/// brings the main window back. With `on_second_instance`, a reopen (a Dock
+/// click, or the app launched again through Launch Services, e.g. from
+/// Finder) also calls the handler, with no arguments.
+fn applicationShouldHandleReopen(_: apple.id, _: apple.c.SEL, app: apple.id, has_visible_windows: apple.c.BOOL) callconv(.c) apple.c.BOOL {
+    // A platform hook that returns YES handled it.
+    if (apple_hooks.intercept(.should_handle_reopen, .{ app, has_visible_windows })) return apple.boolean(true);
+    if (reopen_handler) |h| h(&.{});
+    if (!apple.isTrue(has_visible_windows)) if (App.getWindow("main")) |w| w.show();
+    return apple.boolean(true);
+}
+
+var reopen_handler: ?*const fn ([]const []const u8) void = null;
+
+// ---------------------------------------------------------------------------
+// Default menu bar: app menu (Hide, Quit), Edit (so Cmd+C/V/X/Z/A reach the
+// webview) and Window. Apps get their own menus with the menu module later.
+// ---------------------------------------------------------------------------
+
+fn menuItem(title: []const u8, action: ?[:0]const u8, key: []const u8) Object {
+    const title_ns = apple.nsString(title) orelse apple.nil;
+    defer if (title_ns.value != null) title_ns.release();
+    const key_ns = apple.nsString(key) orelse apple.nil;
+    defer if (key_ns.value != null) key_ns.release();
+    const sel: apple.c.SEL = if (action) |a| objc.sel(a).value else null;
+    return apple.class("NSMenuItem").msgSend(Object, "alloc", .{})
+        .msgSend(Object, "initWithTitle:action:keyEquivalent:", .{ title_ns, sel, key_ns });
+}
+
+/// Build a submenu `title` from `items` (`.{ title, action, key }`, or null
+/// for a separator) and add it to `bar`. Returns the (borrowed) submenu.
+/// Tags of the default top-level menus, so the menu module can keep them
+/// when an app installs its own menu bar.
+pub const app_menu_tag: isize = -100;
+pub const edit_menu_tag: isize = -101;
+pub const window_menu_tag: isize = -102;
+
+fn addSubmenu(bar: Object, title: []const u8, tag: isize, items: []const ?struct { []const u8, [:0]const u8, []const u8 }) Object {
+    const title_ns = apple.nsString(title) orelse apple.nil;
+    defer if (title_ns.value != null) title_ns.release();
+    const menu = apple.class("NSMenu").msgSend(Object, "alloc", .{}).msgSend(Object, "initWithTitle:", .{title_ns});
+    defer menu.release(); // the parent item keeps it
+    for (items) |entry| {
+        if (entry) |e| {
+            const item = menuItem(e[0], e[1], e[2]);
+            menu.msgSend(void, "addItem:", .{item});
+            item.release();
+        } else {
+            menu.msgSend(void, "addItem:", .{apple.class("NSMenuItem").msgSend(Object, "separatorItem", .{})});
+        }
+    }
+    const holder = menuItem(title, null, "");
+    holder.msgSend(void, "setTag:", .{tag});
+    holder.msgSend(void, "setSubmenu:", .{menu});
+    bar.msgSend(void, "addItem:", .{holder});
+    holder.release();
+    return menu;
+}
+
+fn installDefaultMenu(app: Object, app_name: []const u8) void {
+    const bar = apple.new(apple.class("NSMenu"));
+    defer bar.release(); // NSApp keeps it
+
+    var hide_buf: [256]u8 = undefined;
+    const hide = std.fmt.bufPrint(&hide_buf, "Hide {s}", .{app_name}) catch "Hide";
+    var quit_buf: [256]u8 = undefined;
+    const quit_title = std.fmt.bufPrint(&quit_buf, "Quit {s}", .{app_name}) catch "Quit";
+
+    _ = addSubmenu(bar, app_name, app_menu_tag, &.{
+        .{ hide, "hide:", "h" },
+        .{ "Show All", "unhideAllApplications:", "" },
+        null,
+        .{ quit_title, "terminate:", "q" },
+    });
+    _ = addSubmenu(bar, "Edit", edit_menu_tag, &.{
+        .{ "Undo", "undo:", "z" },
+        .{ "Redo", "redo:", "Z" },
+        null,
+        .{ "Cut", "cut:", "x" },
+        .{ "Copy", "copy:", "c" },
+        .{ "Paste", "paste:", "v" },
+        .{ "Select All", "selectAll:", "a" },
+    });
+    const window_menu = addSubmenu(bar, "Window", window_menu_tag, &.{
+        .{ "Minimize", "performMiniaturize:", "m" },
+        .{ "Zoom", "performZoom:", "" },
+        .{ "Close", "performClose:", "w" },
+    });
+    app.msgSend(void, "setMainMenu:", .{bar});
+    app.msgSend(void, "setWindowsMenu:", .{window_menu});
+}
+
+// ---------------------------------------------------------------------------
+// SIGTERM / SIGINT: quit through the run loop, so `run` still cleans up
+// (e.g. stops the dev server), like g_unix_signal_add on Linux.
+// ---------------------------------------------------------------------------
+
+const QuitSignals = struct {
+    const signals = [_]std.posix.SIG{ .TERM, .INT };
+    sources: [signals.len]?*anyopaque = @splat(null),
+    previous: [signals.len]std.posix.Sigaction = undefined,
+
+    fn install() QuitSignals {
+        var self: QuitSignals = .{};
+        const ignore: std.posix.Sigaction = .{
+            .handler = .{ .handler = std.posix.SIG.IGN },
+            .mask = std.posix.sigemptyset(),
+            .flags = 0,
+        };
+        for (signals, 0..) |sig, i| {
+            self.sources[i] = apple.signalSource(sig, &onQuitSignal);
+            if (self.sources[i] == null) {
+                log.err("could not watch signal {s}", .{@tagName(sig)});
+                continue;
+            }
+            std.posix.sigaction(sig, &ignore, &self.previous[i]);
+        }
+        return self;
+    }
+
+    fn uninstall(self: *QuitSignals) void {
+        for (signals, 0..) |sig, i| {
+            const source = self.sources[i] orelse continue;
+            std.posix.sigaction(sig, &self.previous[i], null);
+            apple.cancelSource(source);
+        }
+    }
+
+    fn onQuitSignal(_: ?*anyopaque) callconv(.c) void {
+        quit(0);
+    }
+};
+
+/// Watch `ORIEL_DEV_RUNNER_PID` (set by tools/dev_runner.zig) and quit when
+/// it exits. Returns the dispatch source, or null outside dev_runner.
+fn watchDevRunner() ?*anyopaque {
+    const value = std.c.getenv("ORIEL_DEV_RUNNER_PID") orelse return null;
+    const pid = std.fmt.parseInt(std.c.pid_t, std.mem.span(value), 10) catch {
+        log.err("invalid ORIEL_DEV_RUNNER_PID {s}", .{value});
+        return null;
+    };
+    const source = apple.processExitSource(pid, &onDevRunnerExit) orelse {
+        // Already gone (the source can't watch a dead pid).
+        log.err("dev_runner (pid {d}) is gone; exiting", .{pid});
+        quit(1);
+        return null;
+    };
+    return source;
+}
+
+fn onDevRunnerExit(_: ?*anyopaque) callconv(.c) void {
+    log.info("dev_runner exited; quitting", .{});
+    quit(0);
+}
+
+// ---------------------------------------------------------------------------
+// Run
+// ---------------------------------------------------------------------------
+
+const NSApplicationActivationPolicyRegular: isize = 0;
+const NSApplicationActivationPolicyAccessory: isize = 1;
+
+pub fn Shell(comptime api: App.Api, comptime config: App.Config) type {
+    const dev_url: ?[]const u8 = if (config.app.dev) |d| d.url else null;
+    const local: security.Local = comptime .{ .dev_origin = if (dev_url) |u| blk: {
+        var buf: [512]u8 = undefined;
+        const o = security.origin(&buf, u) orelse @compileError("invalid dev URL: " ++ u);
+        const copy = o[0..o.len].*;
+        break :blk &copy;
+    } else null };
+
+    // strict_styles and isolation adjust the app's CSP (security.effectiveCsp).
+    const csp_z: ?[:0]const u8 = if (comptime security.effectiveCsp(config.security, config.app.isolation)) |c| (c ++ "\x00")[0..c.len :0] else null;
+    const Creator = window.WindowCreator(api, config, local, csp_z);
+
+    return struct {
+        /// NSAppleEventManager handler for kAEGetURL (main thread).
+        fn handleGetURL(_: apple.id, _: apple.c.SEL, event: apple.id, _: apple.id) callconv(.c) void {
+            if (!build_opts.deep_link) return;
+            const desc = (Object{ .value = event }).msgSend(Object, "paramDescriptorForKeyword:", .{keyDirectObject});
+            if (desc.value == null) return;
+            const text = desc.msgSend(Object, "stringValue", .{});
+            const url = apple.utf8(text) orelse return;
+            // A platform hook may consume it (openURL:).
+            if (apple_hooks.active()) {
+                const ns_url = apple.class("NSURL").msgSend(Object, "URLWithString:", .{text});
+                if (ns_url.value != null and apple_hooks.intercept(.open_url, .{ns_url.value})) return;
+            }
+            _ = deep_link.validate(url, config.app.url_schemes) catch |err| {
+                log.warn("deep link rejected: {s}", .{@errorName(err)});
+                return;
+            };
+            if (!finished_launching) {
+                deep_link.setColdStartUrl(url);
+            } else {
+                if (App.getWindow("main")) |w| w.show();
+            }
+            deep_link.deliver(url);
+        }
+
+        /// A URL among the arguments (an unbundled executable started as
+        /// `app myapp://...`, as on Linux and Windows), or null.
+        fn urlFromArgv() ?[]const u8 {
+            const argc: usize = @intCast(@max(_NSGetArgc().*, 0));
+            if (argc < 2) return null; // argv may even be empty (execve with no arguments)
+            const argv = _NSGetArgv().*;
+            for (1..argc) |i| {
+                const arg = std.mem.span(argv[i]);
+                if (deep_link.validate(arg, config.app.url_schemes)) |_| return arg else |_| {}
+            }
+            return null;
+        }
+
+        /// A later launch's arguments (single instance): the app's handler,
+        /// then any deep link among them, as on Linux.
+        fn onSecondInstance(args: []const []const u8) void {
+            if (config.on_second_instance) |h| h(args);
+            if (build_opts.deep_link) {
+                for (args) |arg| {
+                    if (deep_link.validate(arg, config.app.url_schemes)) |_| {
+                        deep_link.deliver(arg);
+                        break;
+                    } else |_| {}
+                }
+            }
+        }
+
+        pub fn run(io: std.Io) u8 {
+            const pool = objc.AutoreleasePool.init();
+            defer pool.deinit();
+
+            // Single instance: a later launch hands its arguments to the
+            // running one and exits here, before any UI.
+            if (config.on_second_instance != null) {
+                const gpa = std.heap.smp_allocator;
+                const argc: usize = @intCast(@max(_NSGetArgc().*, 0));
+                const argv = _NSGetArgv().*;
+                if (gpa.alloc([]const u8, argc -| 1)) |args| {
+                    defer gpa.free(args);
+                    for (args, 1..) |*a, i| a.* = std.mem.span(argv[i]);
+                    switch (single_instance.acquire(config.app.id, args, &onSecondInstance)) {
+                        .primary => {},
+                        .forwarded => {
+                            log.info("{s} is already running: this launch's arguments were handed to it", .{config.app.id});
+                            return 0;
+                        },
+                        .failed => return 1,
+                    }
+                } else |_| log.warn("single instance: out of memory; running without it", .{});
+                reopen_handler = &onSecondInstance;
+            }
+            defer if (config.on_second_instance != null) {
+                single_instance.release();
+                reopen_handler = null;
+            };
+
+            exit_code.store(0, .monotonic);
+            quit_requested = false;
+
+            const app = sharedApplication();
+            // A plain executable (no .app bundle) is a background app by
+            // default: no Dock icon, no menu bar, windows behind others.
+            // A background app (tray, global shortcut: main window visible =
+            // false) stays out of the Dock and the app switcher (accessory
+            // policy): no Dock icon, no ⌘Tab, no menu bar, even once its
+            // main window is shown; showing a window still activates it.
+            _ = app.msgSend(apple.c.BOOL, "setActivationPolicy:", .{if (config.window.visible) NSApplicationActivationPolicyRegular else NSApplicationActivationPolicyAccessory});
+
+            if (config.app.icon) |icon_data| {
+                const ns_data_cls = apple.class("NSData");
+                const data = ns_data_cls.msgSend(Object, "dataWithBytes:length:", .{ icon_data.ptr, @as(c_ulong, icon_data.len) });
+                if (data.value != null) {
+                    const ns_image_cls = apple.class("NSImage");
+                    const alloc_img = ns_image_cls.msgSend(Object, "alloc", .{});
+                    const img = alloc_img.msgSend(Object, "initWithData:", .{data});
+                    if (img.value != null) {
+                        defer img.release();
+                        app.msgSend(void, "setApplicationIconImage:", .{img});
+                    }
+                }
+            }
+
+            const delegate_class = apple.defineClass("OrielAppDelegate", &.{"NSApplicationDelegate"}, .{
+                .{ "applicationShouldTerminate:", applicationShouldTerminate },
+                .{ "applicationShouldHandleReopen:hasVisibleWindows:", applicationShouldHandleReopen },
+                .{ "applicationDidFinishLaunching:", applicationDidFinishLaunching },
+                .{ "handleGetURLEvent:withReplyEvent:", handleGetURL },
+                .{ "application:openURLs:", applicationOpenURLs },
+                .{ "orielShare:userData:error:", orielShareService },
+                .{ "orielWillSleep:", workspaceWillSleep },
+                .{ "orielDidWake:", workspaceDidWake },
+                .{ "application:continueUserActivity:restorationHandler:", continueUserActivity },
+                .{ "application:didRegisterForRemoteNotificationsWithDeviceToken:", didRegisterForRemoteNotifications },
+                .{ "application:didFailToRegisterForRemoteNotificationsWithError:", didFailToRegisterForRemoteNotifications },
+            });
+            // NSApp's delegate is a weak reference: keep ours for the whole run.
+            const delegate = apple.new(delegate_class);
+            defer {
+                app.msgSend(void, "setDelegate:", .{apple.nil});
+                delegate.release();
+            }
+            app.msgSend(void, "setDelegate:", .{delegate});
+            const lifecycle_watch = LifecycleWatch.install(delegate);
+            defer lifecycle_watch.uninstall();
+            installDefaultMenu(app, config.window.title);
+            // The delegate answers the app's Services item (share module).
+            if (build_opts.share) {
+                app.msgSend(void, "setServicesProvider:", .{delegate});
+                NSUpdateDynamicServices();
+            }
+
+            // Before `run`: the launch URL arrives while it finishes launching.
+            finished_launching = false;
+            const ae_manager = apple.class("NSAppleEventManager").msgSend(Object, "sharedAppleEventManager", .{});
+            if (build_opts.deep_link) {
+                ae_manager.msgSend(void, "setEventHandler:andSelector:forEventClass:andEventID:", .{ delegate, objc.sel("handleGetURLEvent:withReplyEvent:").value, kInternetEventClass, kAEGetURL });
+            }
+            defer if (build_opts.deep_link) {
+                ae_manager.msgSend(void, "removeEventHandlerForEventClass:andEventID:", .{ kInternetEventClass, kAEGetURL });
+            };
+            const argv_url: ?[]const u8 = if (build_opts.deep_link) urlFromArgv() else null;
+            if (argv_url) |url| deep_link.setColdStartUrl(url);
+
+            // Before QuitSignals: children inherit ignored signals across exec,
+            // and a dev server ignoring SIGTERM couldn't be stopped.
+            var dev_server_proc: ?std.process.Child = if (config.app.dev) |dev| dev_server.startDevServer(io, dev) else null;
+            defer if (dev_server_proc) |*p| dev_server.stopDevServer(io, p);
+
+            var quit_signals = QuitSignals.install();
+            defer quit_signals.uninstall();
+
+            // Under `zig build dev`, exit with dev_runner even when it is
+            // killed outright (Linux: PR_SET_PDEATHSIG).
+            const runner_watch = watchDevRunner();
+            defer if (runner_watch) |w| apple.cancelSource(w);
+
+            // Platform hooks: constructed before the first window.
+            apple_hooks.start(&hooksFront);
+            Creator.init();
+            defer Creator.deinit();
+            active_create_window_fn = &Creator.createWindow;
+            defer active_create_window_fn = null;
+
+            task_mutex.lock();
+            running = true;
+            shutting_down = false;
+            task_mutex.unlock();
+            defer shutdown();
+            // Tasks queued before the run loop existed.
+            processDispatchQueue();
+
+            _ = App.openWindow(config.window) catch |err| {
+                log.err("failed to open main window: {s}", .{@errorName(err)});
+                return 1;
+            };
+
+            if (config.setup) |setup| setup() catch |err| log.err("setup failed: {s}", .{@errorName(err)});
+            if (argv_url) |url| deep_link.deliver(url);
+
+            // A background app (no main window at startup) leaves the focus
+            // where it is.
+            if (config.window.visible) app.msgSend(void, "activateIgnoringOtherApps:", .{apple.boolean(true)});
+            if (!quit_requested) app.msgSend(void, "run", .{});
+            return exit_code.load(.monotonic);
+        }
+
+        fn shutdown() void {
+            lifecycle.dispatch(.terminating);
+            task_mutex.lock();
+            running = false;
+            shutting_down = true; // later tasks from other threads are cleaned up, not queued
+            task_mutex.unlock();
+            window.destroyAllWindows();
+            drainAtShutdown();
+        }
+    };
+}
+
+test {
+    std.testing.refAllDecls(@This());
+    _ = single_instance;
+}

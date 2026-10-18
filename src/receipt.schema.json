@@ -1,0 +1,62 @@
+{
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "receipt",
+        "transfer",
+        "unknown"
+      ]
+    },
+    "payee": {
+      "type": "string",
+      "maxLength": 80
+    },
+    "amount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000000
+    },
+    "currency": {
+      "type": "string",
+      "enum": [
+        "CLP"
+      ]
+    },
+    "date": {
+      "type": "string",
+      "maxLength": 10,
+      "pattern": "^([0-9]{4}-[0-9]{2}-[0-9]{2})?$"
+    },
+    "time": {
+      "type": "string",
+      "maxLength": 5,
+      "pattern": "^([0-9]{2}:[0-9]{2})?$"
+    },
+    "reference": {
+      "type": "string",
+      "maxLength": 40
+    },
+    "location": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "bank": {
+      "type": "string",
+      "maxLength": 40
+    }
+  },
+  "required": [
+    "kind",
+    "payee",
+    "amount",
+    "currency",
+    "date",
+    "time",
+    "reference",
+    "location",
+    "bank"
+  ],
+  "additionalProperties": false
+}

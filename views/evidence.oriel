@@ -1,0 +1,21 @@
+<style>
+  image: background=#eaeee4
+  toggle: color=#2d6a4f
+  detail: color-scheme=light background=#eaeee4
+  n6: color=#191d19
+  @media (prefers-color-scheme: dark) {
+    image: background=#1d211d
+    toggle: color=#9ad4ae
+    detail: color-scheme=dark background=#1d211d
+    n6: color=#e0e4dc
+  }
+</style>
+<view id="evidence" margin="12,0,12,0" unset="color font-size">
+  <image id="image" class="image" shrink="0" width="100%" max-height="320" margin="0,0,8,0" radius="16" src="logo.png" fit="contain" />
+  <view margin="0">
+    <text id="toggle" class="toggle" shrink="0" margin="0,0,12,0" padding="10,0,10,0" clickable="true" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif"><span>Extraction</span><span> ▴</span></text>
+    <view id="detail" class="detail" max-height="260" margin="0" padding="12" scroll="true" scroll-x="true" radius="8">
+      <text class="n6" shrink="0" font-size="12" font-weight="400" mono="true" font-family="monospace">{detail}</text>
+    </view>
+  </view>
+</view>

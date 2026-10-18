@@ -1,0 +1,258 @@
+<style>
+  editor: grow=1 basis=0 width=640 height=auto min-height=0 max-width=1180 max-height=772 padding=0,24,24,24 color-scheme=light background=#eaeee4 radius=28 unset="position inset z"
+  n3: margin=0,-24,8,-24 padding=8,16,0,8 background=#eaeee4
+  n5: icon-color=#434a43 viewbox=0,0,24,24
+  n7: color=#191d19
+  save: background=#2d6a4f
+  n9: color=#ffffff
+  editor-status: color=#434a43
+  n13: background=#eaeee4
+  n14: icon-color=#2d6a4f viewbox=0,0,24,24
+  n15: color=#191d19
+  receipt-file: color-scheme=light background=#ffffff unset="color"
+  n17: color-scheme=light color=#191d19
+  camera-label: background=#eaeee4
+  n19: icon-color=#2d6a4f viewbox=0,0,24,24
+  n20: color=#191d19
+  camera-file: color-scheme=light background=#ffffff unset="color"
+  n22: color-scheme=light color=#191d19
+  n24: color=#2d6a4f
+  n26: color=#2d6a4f
+  preview: background=#eaeee4
+  analyze: background=#dce7d6
+  n33: color=#17241a
+  n35: color=#2d6a4f
+  n38: color=#434a43
+  field-payee: border-color=#737a72 color-scheme=light color=#191d19
+  n40: direction=row row-gap=12 column-gap=12
+  n41: shrink=1 basis=0%
+  n42: color=#434a43
+  field-amount: border-color=#737a72 color-scheme=light color=#191d19
+  n44: shrink=1 basis=0%
+  n45: color=#434a43
+  field-date: border-color=#737a72 color-scheme=light color=#191d19
+  n48: color=#434a43
+  field-account: border-color=#737a72 color-scheme=light color=#191d19
+  details-toggle: color=#2d6a4f
+  n54: color=#434a43
+  field-category: border-color=#737a72 color-scheme=light color=#191d19
+  categories-category-list: color-scheme=light background=#eaeee4
+  n58: color=#434a43
+  field-reference: border-color=#737a72 color-scheme=light color=#191d19
+  n61: color=#434a43
+  field-location: border-color=#737a72 color-scheme=light color=#191d19
+  n64: color=#434a43
+  field-notes: border-color=#737a72 color-scheme=light color=#191d19
+  extraction-toggle: color=#2d6a4f
+  extraction-text: color-scheme=light background=#eaeee4
+  delete-confirm: background=#ffdad6
+  n71: color=#191d19
+  n74: color=#2d6a4f
+  confirm-delete: background=#ba1a1a
+  n79: color=#ba1a1a
+  cancel-analysis: background=#dce7d6
+  n81: color=#17241a
+  @media (prefers-color-scheme: dark) {
+    editor: color-scheme=dark background=#1d211d
+    n3: background=#1d211d
+    n5: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n7: color=#e0e4dc
+    save: background=#9ad4ae
+    n9: color=#003920
+    editor-status: color=#c2c9c0
+    n13: background=#1d211d
+    n14: icon-color=#9ad4ae viewbox=0,0,24,24
+    n15: color=#e0e4dc
+    receipt-file: color-scheme=dark background=#6b6b6b color=#ffffff
+    n17: color-scheme=dark color=#e0e4dc
+    camera-label: background=#1d211d
+    n19: icon-color=#9ad4ae viewbox=0,0,24,24
+    n20: color=#e0e4dc
+    camera-file: color-scheme=dark background=#6b6b6b color=#ffffff
+    n22: color-scheme=dark color=#e0e4dc
+    n24: color=#9ad4ae
+    n26: color=#9ad4ae
+    preview: background=#1d211d
+    analyze: background=#384a3b
+    n33: color=#d6e8d6
+    n35: color=#9ad4ae
+    n38: color=#c2c9c0
+    field-payee: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    n42: color=#c2c9c0
+    field-amount: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    n45: color=#c2c9c0
+    field-date: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    n48: color=#c2c9c0
+    field-account: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    details-toggle: color=#9ad4ae
+    n54: color=#c2c9c0
+    field-category: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    categories-category-list: color-scheme=dark background=#1d211d
+    n58: color=#c2c9c0
+    field-reference: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    n61: color=#c2c9c0
+    field-location: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    n64: color=#c2c9c0
+    field-notes: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    extraction-toggle: color=#9ad4ae
+    extraction-text: color-scheme=dark background=#1d211d
+    delete-confirm: background=#93000a
+    n71: color=#e0e4dc
+    n74: color=#9ad4ae
+    confirm-delete: background=#ffb4ab
+    n79: color=#ffb4ab
+    cancel-analysis: background=#384a3b
+    n81: color=#d6e8d6
+  }
+  @media (max-width: 839px) {
+    editor: width=393 height=820 max-width=393 max-height=820 padding=0,16,24,16 position=absolute top=0 right=0 bottom=0 left=0 background=#f6f8f1 z=2147483647 unset="grow basis min-height radius"
+    n3: margin=0,-16,8,-16 padding=0,12,0,4 background=#f6f8f1
+  }
+  @media (max-width: 839px) and (prefers-color-scheme: dark) {
+    editor: background=#111511
+    n3: background=#111511
+  }
+  @media (max-width: 380px) {
+    editor: width=320 height=820 max-width=320 max-height=820 padding=0,16,24,16 position=absolute top=0 right=0 bottom=0 left=0 background=#f6f8f1 z=2147483647 unset="grow basis min-height radius"
+    n3: margin=0,-16,8,-16 padding=0,12,0,4 background=#f6f8f1
+    n40: unset="direction row-gap column-gap"
+    n41: shrink=0 unset="basis"
+    n44: shrink=0 unset="basis"
+  }
+  @media (max-width: 380px) and (prefers-color-scheme: dark) {
+    editor: background=#111511
+    n3: background=#111511
+  }
+</style>
+<view id="editor" class="editor" scroll="true" scroll-x="true" unset="shrink color font-size">
+  <view id="expense-form">
+    <row class="n3" align="center" min-height="64" row-gap="4" column-gap="4" sticky="0,auto,auto,auto" z="2">
+      <row id="close-editor" justify="center" align="center" width="48" height="48" min-height="40" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
+        <icon class="n5" grow="0" shrink="0" width="24" height="24" clickable="true">
+          <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+        </icon>
+      </row>
+      <view id="editor-title" grow="1" shrink="1" basis="0%" clip="true">
+        <text class="n7" shrink="0" font-size="22" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Payment</text>
+      </view>
+      <row id="save" class="save" justify="center" align="center" grow="0" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
+        <text class="n9" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Save</text>
+      </row>
+    </row>
+    <text id="editor-status" class="editor-status" shrink="0" margin="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">Status</text>
+    <view id="expense-fields" min-width="0" margin="0,0,16,0">
+      <row id="capture-choices" wrap="wrap" margin="0,0,8,0" row-gap="12" column-gap="12">
+        <view class="n13" justify="center" align="center" grow="1" shrink="1" basis="0%" min-width="140" min-height="112" row-gap="8" column-gap="8" clip="true" radius="16" clickable="true">
+          <icon class="n14" grow="0" shrink="0" width="32" height="32" clickable="true">
+            <path d="M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+            <path d="M7.5 9a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0 -3 0z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+            <path d="m20 15-4-4-9 9" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+          </icon>
+          <text class="n15" shrink="0" clickable="true" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Choose image</text>
+          <view id="receipt-file" class="receipt-file" justify="center" padding="1" border-width="2" border-color="#cdcdcd" position="absolute" top="0" right="0" bottom="0" left="0" radius="5" opacity="0" clickable="true" label="Choose image" unset="shrink">
+            <text class="n17" shrink="0" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center">Choose File  No file chosen</text>
+          </view>
+        </view>
+        <view id="camera-label" class="camera-label" justify="center" align="center" grow="1" shrink="1" basis="0%" min-width="140" min-height="112" row-gap="8" column-gap="8" clip="true" radius="16" clickable="true">
+          <icon class="n19" grow="0" shrink="0" width="32" height="32" clickable="true">
+            <path d="M4 8a1 1 0 0 1 1-1h3l1.5-2h5L16 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+            <path d="M8.5 13a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+          </icon>
+          <text class="n20" shrink="0" clickable="true" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Take photo</text>
+          <view id="camera-file" class="camera-file" justify="center" padding="1" border-width="2" border-color="#cdcdcd" position="absolute" top="0" right="0" bottom="0" left="0" radius="5" opacity="0" clickable="true" label="Take photo" unset="shrink">
+            <text class="n22" shrink="0" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center">Choose File  No file chosen</text>
+          </view>
+        </view>
+      </row>
+      <row id="scanner-setup" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+        <text class="n24" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Choose scanner</text>
+      </row>
+      <row id="manual-fallback" justify="center" align="center" min-height="40" margin="0,auto,8,auto" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+        <text class="n26" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Enter manually</text>
+      </row>
+      <view id="pending-evidence" margin="4,0,12,0">
+        <view id="preview-frame" margin="0,0,12,0" clip="true" radius="16">
+          <image id="preview" class="preview" shrink="0" width="100%" max-height="320" radius="16" src="logo.png" fit="contain" />
+          <canvas id="scan-sweep" shrink="0" width="100%" height="100%" position="absolute" top="0" right="0" bottom="0" left="0" pixel-width="300" pixel-height="150" />
+        </view>
+        <row id="image-actions" wrap="wrap" align="center" margin="0" row-gap="8" column-gap="8">
+          <row id="analyze" class="analyze" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" opacity="0.38" clickable="true" disabled="true" unset="shrink">
+            <text class="n33" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Scan again</text>
+          </row>
+          <row id="remove-image" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+            <text class="n35" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Remove</text>
+          </row>
+        </row>
+      </view>
+      <view id="review-fields">
+        <view grow="1" shrink="1" basis="0%" min-width="0" margin="0,0,12,0" row-gap="4" column-gap="4" clickable="true">
+          <text class="n38" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Payee</text>
+          <input id="field-payee" class="field-payee" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" enterkey="go" autocapitalize="sentences" label="Payee" unset="shrink" />
+        </view>
+        <view class="n40" margin="0">
+          <view class="n41" grow="1" min-width="0" margin="0,0,12,0" row-gap="4" column-gap="4" clickable="true">
+            <text class="n42" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Amount (CLP)</text>
+            <input id="field-amount" class="field-amount" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" type="number" inputmode="numeric" enterkey="go" autocapitalize="none" autocorrect="false" label="Amount (CLP)" unset="shrink" />
+          </view>
+          <view class="n44" grow="1" min-width="0" margin="0,0,12,0" row-gap="4" column-gap="4" clickable="true">
+            <text class="n45" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Date</text>
+            <input id="field-date" class="field-date" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" type="date" enterkey="go" autocapitalize="sentences" label="Date" unset="shrink" />
+          </view>
+        </view>
+        <view grow="1" shrink="1" basis="0%" min-width="0" margin="0,0,12,0" row-gap="4" column-gap="4" clickable="true">
+          <text class="n48" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Account</text>
+          <select id="field-account" class="field-account" width="100%" min-height="52" padding="0,40,0,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="1234" label="Account" unset="shrink">
+            <option value="">Choose account</option>
+            <option value="1234">1234 · Household</option>
+          </select>
+        </view>
+        <view id="more-details" margin="0,0,12,0">
+          <text id="details-toggle" class="details-toggle" shrink="0" padding="10,0,10,0" clickable="true" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif"><span>More details</span><span> ▴</span></text>
+          <view id="details-body" margin="0">
+            <view grow="1" shrink="1" basis="0%" min-width="0" margin="0,0,12,0" row-gap="4" column-gap="4" clickable="true" z="10">
+              <text class="n54" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Category</text>
+              <input id="field-category" class="field-category" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" enterkey="go" autocapitalize="sentences" label="Category" unset="shrink" />
+              <view id="categories-category-list" class="categories-category-list" max-height="240" margin="4,0,0,0" padding="4,0,4,0" position="absolute" top="100%" right="0" left="0" scroll="true" radius="8" shadow="0,4,12,0,rgba(0, 0, 0, 0.3)" z="10" unset="shrink bottom" />
+            </view>
+            <view grow="1" shrink="1" basis="0%" min-width="0" margin="0,0,12,0" row-gap="4" column-gap="4" clickable="true">
+              <text class="n58" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Reference</text>
+              <input id="field-reference" class="field-reference" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" enterkey="go" autocapitalize="sentences" label="Reference" unset="shrink" />
+            </view>
+            <view grow="1" shrink="1" basis="0%" min-width="0" margin="0,0,12,0" row-gap="4" column-gap="4" clickable="true">
+              <text class="n61" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Location</text>
+              <input id="field-location" class="field-location" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" enterkey="go" autocapitalize="sentences" label="Location" unset="shrink" />
+            </view>
+            <view grow="1" shrink="1" basis="0%" min-width="0" margin="0" row-gap="4" column-gap="4" clickable="true">
+              <text class="n64" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Notes</text>
+              <textarea id="field-notes" class="field-notes" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" rows="2" autocapitalize="sentences" label="Notes" unset="shrink" />
+            </view>
+          </view>
+        </view>
+      </view>
+      <view id="extraction-details" margin="8,0,8,0">
+        <text id="extraction-toggle" class="extraction-toggle" shrink="0" margin="0,0,12,0" padding="10,0,10,0" clickable="true" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif"><span>Extraction</span><span> ▴</span></text>
+        <view id="extraction-text" class="extraction-text" max-height="260" margin="0,0,12,0" padding="12" scroll="true" scroll-x="true" radius="8" />
+      </view>
+      <view id="saved-evidence" />
+      <view id="delete-confirm" class="delete-confirm" margin="12,0,0,0" padding="16" radius="16">
+        <text class="n71" shrink="0" margin="0,0,12,0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Delete this payment?</text>
+        <row wrap="wrap" justify="flex-end" align="center" margin="0" row-gap="8" column-gap="8">
+          <row id="cancel-delete" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+            <text class="n74" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Keep</text>
+          </row>
+          <row id="confirm-delete" class="confirm-delete" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+            <text shrink="1" color="#ffffff" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Delete</text>
+          </row>
+        </row>
+      </view>
+    </view>
+    <row justify="center" align="center" margin="0">
+      <row id="delete" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+        <text class="n79" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Delete</text>
+      </row>
+      <row id="cancel-analysis" class="cancel-analysis" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+        <text class="n81" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Cancel scan</text>
+      </row>
+    </row>
+  </view>
+</view>

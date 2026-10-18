@@ -1,0 +1,7 @@
+<style>
+  suggestion: color=#191d19
+  @media (prefers-color-scheme: dark) {
+    suggestion: color=#e0e4dc
+  }
+</style>
+<text id="suggestion" class="suggestion" shrink="0" padding="12,16,12,16" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">{text}</text>

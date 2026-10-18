@@ -1,0 +1,51 @@
+<style>
+  mapping: background=#e4e9de
+  n3: color=#434a43
+  key: border-color=#737a72 color-scheme=light color=#191d19
+  n6: color=#434a43
+  amount: border-color=#737a72 color-scheme=light color=#191d19
+  n9: color=#434a43
+  value: border-color=#737a72 color-scheme=light color=#191d19
+  n12: icon-color=#434a43 viewbox=0,0,24,24
+  @media (prefers-color-scheme: dark) {
+    mapping: background=#272b27
+    n3: color=#c2c9c0
+    key: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    n6: color=#c2c9c0
+    amount: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    n9: color=#c2c9c0
+    value: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    n12: icon-color=#c2c9c0 viewbox=0,0,24,24
+  }
+  @media (max-width: 839px) {
+    mapping: background=#f0f3eb
+  }
+  @media (max-width: 839px) and (prefers-color-scheme: dark) {
+    mapping: background=#191d19
+  }
+  @media (max-width: 380px) {
+    mapping: background=#f0f3eb
+  }
+  @media (max-width: 380px) and (prefers-color-scheme: dark) {
+    mapping: background=#191d19
+  }
+</style>
+<view id="mapping" class="mapping" margin="0" padding="12,52,12,12" row-gap="8" column-gap="8" radius="16" unset="color font-size">
+  <view id="key-field" row-gap="4" column-gap="4" clickable="true">
+    <text class="n3" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">{key_label}</text>
+    <input id="key" class="key" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" enterkey="go" autocapitalize="sentences" label="{key_label}" unset="shrink" />
+  </view>
+  <view id="amount-field" row-gap="4" column-gap="4" clickable="true">
+    <text class="n6" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Monthly amount (CLP)</text>
+    <input id="amount" class="amount" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" type="number" enterkey="go" autocapitalize="none" autocorrect="false" label="Monthly amount (CLP)" unset="shrink" />
+  </view>
+  <view id="value-field" row-gap="4" column-gap="4" clickable="true">
+    <text class="n9" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">{value_label}</text>
+    <input id="value" class="value" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" enterkey="go" autocapitalize="sentences" label="{value_label}" unset="shrink" />
+  </view>
+  <row id="remove" justify="center" align="center" width="40" height="40" min-height="40" row-gap="8" column-gap="8" position="absolute" top="8" right="4" radius="50%" clickable="true" unset="shrink bottom left">
+    <icon class="n12" grow="0" shrink="0" width="18" height="18" clickable="true">
+      <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+    </icon>
+  </row>
+</view>

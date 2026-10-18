@@ -1,0 +1,38 @@
+<style>
+  statement-source: background=#e4e9de
+  n2: color=#191d19
+  n3: color=#434a43
+  action: background=#dce7d6
+  n5: color=#17241a
+  n7: color=#2d6a4f
+  @media (prefers-color-scheme: dark) {
+    statement-source: background=#272b27
+    n2: color=#e0e4dc
+    n3: color=#c2c9c0
+    action: background=#384a3b
+    n5: color=#d6e8d6
+    n7: color=#9ad4ae
+  }
+  @media (max-width: 839px) {
+    statement-source: background=#f0f3eb
+  }
+  @media (max-width: 839px) and (prefers-color-scheme: dark) {
+    statement-source: background=#191d19
+  }
+  @media (max-width: 380px) {
+    statement-source: background=#f0f3eb
+  }
+  @media (max-width: 380px) and (prefers-color-scheme: dark) {
+    statement-source: background=#191d19
+  }
+</style>
+<row id="statement-source" class="statement-source" wrap="wrap" align="center" margin="0,0,8,0" padding="12" row-gap="12" column-gap="12" radius="16" unset="color font-size">
+  <text class="n2" grow="1" shrink="1" basis="100%" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">{title}</text>
+  <text class="n3" grow="1" shrink="1" basis="0%" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">{detail}</text>
+  <row id="action" class="action" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+    <text class="n5" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Review</text>
+  </row>
+  <row id="secondary" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+    <text class="n7" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Save PDF</text>
+  </row>
+</row>

@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f8f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111511" media="(prefers-color-scheme: dark)">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Penny Goblin</title>
+  <link rel="stylesheet" href="styles.css?v=8">
+  <script src="progress.js?v=8" defer></script>
+  <script src="merchants.js?v=8" defer></script>
+  <script src="reports.js?v=8" defer></script>
+  <script src="analysis.js?v=8" defer></script>
+  <script src="app.js?v=8" defer></script>
+  <script src="preferences.js?v=8" defer></script>
+  <script src="statements.js?v=8" defer></script>
+  <script src="sync.js?v=8" defer></script>
+  <script src="nav.js?v=8" defer></script>
+  <script src="scanner.js?v=8" defer></script>
+  <script src="research.js?v=1" defer></script>
+  <script src="qa.js?v=8" defer></script>
+</head>
+<body>
+  <div id="global-progress" popover="manual" role="status" aria-live="polite">
+    <div class="progress-track"><div id="global-progress-value" class="progress-value"></div></div>
+    <div class="progress-message"><span id="global-progress-message"></span><span id="global-progress-percent"></span></div>
+  </div>
+  <svg class="icons" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M7 4h10a1 1 0 0 1 1 1v15l-3-2-3 2-3-2-3 2V5a1 1 0 0 1 1-1zM9 9h6M9 13h4"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M5 20V11M12 20V5M19 20v-6"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M5 7h9M18 7h1M5 17h1M10 17h9"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
+    <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/></symbol>
+    <symbol id="i-add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.05-4.95M19 4v4h-4"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></symbol>
+    <symbol id="i-sync" viewBox="0 0 24 24"><path d="M5 9a7 7 0 0 1 12.5-2.5L19 8M19 4v4h-4M19 15a7 7 0 0 1-12.5 2.5L5 16M5 20v-4h4"/></symbol>
+    <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h11v4M4 7v11a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H6a2 2 0 0 1-2-2zM16 14h1"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/></symbol>
+    <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h3"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M4 4h7l9 9-7 7-9-9zM8 8h.01"/></symbol>
+    <symbol id="i-store" viewBox="0 0 24 24"><path d="M4 9 5.5 4h13L20 9M4 9h16M4 9v1a3 3 0 0 0 5.33 1.9A3 3 0 0 0 12 13a3 3 0 0 0 2.67-1.1A3 3 0 0 0 20 10V9M5 13v7h14v-7"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 4 2.4 5 5.6.7-4.1 3.8 1 5.5L12 16.3 7.1 19l1-5.5L4 9.7 9.6 9z"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M7 9l5-5 5 5M5 15v4a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4"/></symbol>
+    <symbol id="i-chip" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8a1 1 0 0 1 1-1h3l1.5-2h5L16 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="m20 15-4-4-9 9"/></symbol>
+    <symbol id="i-exit" viewBox="0 0 24 24"><path d="M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5M15 8l4 4-4 4M19 12H9"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 10 6 6 6-6"/></symbol>
+  </svg>
+
+  <nav class="nav" aria-label="Main">
+    <img class="nav-logo" src="logo.png" alt="">
+    <div class="fab-group">
+      <button id="new-receipt" class="fab" disabled><svg><use href="#i-scan"/></svg><span>Scan</span></button>
+      <button id="new-expense" class="fab small" aria-label="Add manually" title="Add manually" disabled><svg><use href="#i-add"/></svg></button>
+    </div>
+    <button class="nav-item" data-view="home" aria-current="page"><span class="nav-icon"><svg><use href="#i-home"/></svg></span><span>Home</span></button>
+    <button class="nav-item" data-view="payments"><span class="nav-icon"><svg><use href="#i-list"/></svg></span><span>Payments</span></button>
+    <button class="nav-item" data-view="insights"><span class="nav-icon"><svg><use href="#i-chart"/></svg></span><span>Insights</span></button>
+    <button class="nav-item" data-view="settings"><span class="nav-icon"><svg><use href="#i-settings"/></svg></span><span>Settings</span></button>
+  </nav>
+
+  <div class="app">
+    <header class="top-bar">
+      <h1 id="view-title">Penny Goblin</h1>
+      <button id="refresh" class="icon-button" aria-label="Refresh" title="Refresh"><svg><use href="#i-refresh"/></svg></button>
+    </header>
+    <p id="status" class="snackbar" role="status" aria-live="polite"></p>
+
+    <main>
+      <section class="view" id="view-home" aria-label="Home">
+        <div class="chips period-controls" aria-label="Period">
+          <label class="select-chip"><span class="visually-hidden">Month</span><select id="month"><option value="">All months</option></select></label>
+          <label class="select-chip"><span class="visually-hidden">Account</span><select id="account-filter"><option value="">All accounts</option></select></label>
+        </div>
+        <h2 id="period-title" class="visually-hidden">Overview</h2>
+
+        <section class="hero card" aria-label="Spending">
+          <p class="label">Spent</p>
+          <strong id="total" class="hero-amount">—</strong>
+          <p id="dollar-total" class="hero-dollars" hidden></p>
+          <div class="hero-stats"><span><b id="count">—</b> payments</span><span><b id="evidence-count">—</b> with receipt</span></div>
+        </section>
+
+        <section id="monthly-budget" class="card budget" aria-label="Budget">
+          <div class="stat-row">
+            <div><p class="label">Left this month</p><strong id="budget-forecast">—</strong></div>
+            <button id="open-fixed" class="stat-button" type="button" aria-label="Fixed expenses"><p class="label">Fixed ›</p><strong id="fixed-planned">—</strong><small id="fixed-paid" class="stat-note"></small></button>
+            <div><p class="label">Salary</p><strong id="salary-total">—</strong></div>
+          </div>
+          <div class="budget-parts" id="budget-parts"></div>
+          <p id="budget-hint" class="supporting"></p>
+        </section>
+
+        <section class="card"><h3 class="card-title">Categories</h3><div id="category-report" class="list"></div></section>
+        <section class="card"><h3 class="card-title">Accounts</h3><div id="account-report" class="list"></div></section>
+      </section>
+
+      <section class="view" id="view-payments" aria-labelledby="ledger-title" hidden>
+        <h2 id="ledger-title" class="visually-hidden">Payments</h2>
+        <label class="search-bar"><svg><use href="#i-search"/></svg><span class="visually-hidden">Search payments</span><input id="search" type="search" placeholder="Search payments"></label>
+        <div class="chips filters">
+          <label class="select-chip"><span class="visually-hidden">Category</span><select id="category-filter"><option value="">All categories</option></select></label>
+          <label class="select-chip"><span class="visually-hidden">Sort</span><select id="ledger-sort"><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="highest">Highest</option><option value="lowest">Lowest</option></select></label>
+          <button id="audit-other" class="chip">Uncategorized</button>
+          <button id="research-open" class="chip" hidden>Research categories</button>
+          <button id="clear-drilldown" class="chip selected" hidden>Clear filter</button>
+          <button id="clear-ledger" class="chip">Reset</button>
+        </div>
+        <details class="range"><summary class="chip"><svg><use href="#i-calendar"/></svg>Date range</summary>
+          <div class="range-fields"><label>From<input id="date-from" type="date" min="1900-01-01" max="2199-12-31"></label><label>To<input id="date-through" type="date" min="1900-01-01" max="2199-12-31"></label><button id="clear-filters" class="text-button">All time</button></div>
+        </details>
+        <p id="ledger-filter-hint" class="supporting" role="status"></p>
+        <div id="rows" class="list payments"></div>
+
+        <details class="card bulk-editor"><summary>Categorize matching payments</summary>
+          <form id="bulk-form">
+            <label class="field">Payee contains<input id="bulk-pattern" required maxlength="240"></label>
+            <label class="field">Category<input id="bulk-category" required maxlength="120" data-suggest="categories" autocomplete="off"></label>
+            <label class="switch-row"><input id="bulk-only-other" type="checkbox" checked><span>Only uncategorized</span></label>
+            <label class="switch-row"><input id="bulk-remember" type="checkbox" checked><span>Remember keyword</span></label>
+            <button type="submit" class="tonal">Preview</button>
+          </form>
+          <div id="bulk-preview" hidden><p id="bulk-summary"></p><div id="bulk-matches"></div><div class="actions"><button id="bulk-cancel" class="text-button">Cancel</button><button id="bulk-apply" class="filled">Apply</button></div></div>
+          <p id="bulk-status" class="supporting" role="status"></p>
+        </details>
+      </section>
+
+      <section class="view" id="view-insights" aria-label="Insights" hidden>
+        <div class="section-heading"><span></span><button id="export-report" class="tonal">Export report</button></div>
+        <p id="report-status" class="supporting" role="status"></p>
+        <div class="grid">
+          <section class="card"><h3 class="card-title">By cardholder</h3><div id="account-chart"></div></section>
+          <section class="card"><h3 class="card-title">By category</h3><label class="switch-row"><input id="chart-fixed" type="checkbox"><span>Include planned fixed</span></label><div id="category-chart" class="list"></div></section>
+        </div>
+        <section class="card"><div class="card-heading"><h3 class="card-title">Comparison</h3><label class="select-chip"><span class="visually-hidden">Comparison</span><select id="comparison-mode"><option value="split">By cardholder</option><option value="combined">Combined</option></select></label></div><div id="account-comparison" class="comparison-grid"></div></section>
+        <section class="card"><h3 class="card-title">Merchants</h3>
+          <label class="search-bar compact"><svg><use href="#i-search"/></svg><span class="visually-hidden">Find merchant</span><input id="merchant-search" type="search" placeholder="Find merchant"></label>
+          <div class="chips">
+            <label class="select-chip"><span class="visually-hidden">Category</span><select id="merchant-category"><option value="">All categories</option></select></label>
+            <label class="select-chip"><span class="visually-hidden">Group</span><select id="merchant-grouping"><option value="brand">By brand</option><option value="exact">Exact name</option></select></label>
+            <label class="select-chip"><span class="visually-hidden">Sort</span><select id="merchant-sort"><option value="spend">Highest</option><option value="low">Lowest</option><option value="purchases">Most frequent</option><option value="name">A–Z</option></select></label>
+          </div>
+          <div id="merchant-report" class="list scroll"></div>
+        </section>
+        <section class="card"><h3 class="card-title">Fixed · planned vs paid</h3><div id="fixed-report" class="list"></div></section>
+        <section class="card"><h3 class="card-title">Special payments</h3><div id="special-payments" class="list"></div></section>
+        <section class="card"><h3 class="card-title">Monthly history</h3><div id="month-report" class="list scroll"></div></section>
+      </section>
+
+      <section class="view" id="view-settings" aria-label="Settings" hidden>
+        <h3 class="list-header">Budget</h3>
+        <div class="card list settings-list">
+          <button class="list-item" data-pref="budget"><svg><use href="#i-wallet"/></svg><span>Salary & owners</span><svg class="trail"><use href="#i-chevron"/></svg></button>
+          <button class="list-item" data-pref="fixed"><svg><use href="#i-calendar"/></svg><span>Fixed commitments</span><svg class="trail"><use href="#i-chevron"/></svg></button>
+          <button class="list-item" data-pref="accounts"><svg><use href="#i-card"/></svg><span>Accounts</span><svg class="trail"><use href="#i-chevron"/></svg></button>
+          <button class="list-item" data-pref="categories"><svg><use href="#i-tag"/></svg><span>Category rules</span><svg class="trail"><use href="#i-chevron"/></svg></button>
+          <button class="list-item" data-pref="vendors"><svg><use href="#i-store"/></svg><span>Merchant names</span><svg class="trail"><use href="#i-chevron"/></svg></button>
+          <button class="list-item" data-pref="special"><svg><use href="#i-star"/></svg><span>Special payments</span><svg class="trail"><use href="#i-chevron"/></svg></button>
+        </div>
+        <h3 class="list-header">Scanning</h3>
+        <div class="card list settings-list">
+          <button id="open-scanner" class="list-item"><svg><use href="#i-chip"/></svg><span class="two-line"><span>Receipt scanner</span><small id="settings-model-summary">Read receipts and vouchers on this device</small></span><svg class="trail"><use href="#i-chevron"/></svg></button>
+        </div>
+        <h3 class="list-header">Data</h3>
+        <div class="card list settings-list">
+          <button id="open-sync" class="list-item"><svg><use href="#i-sync"/></svg><span>Pairing & sync</span><svg class="trail"><use href="#i-chevron"/></svg></button>
+          <button id="open-statements" class="list-item"><svg><use href="#i-doc"/></svg><span>Bank statements</span><svg class="trail"><use href="#i-chevron"/></svg></button>
+          <label class="list-item file-item"><svg><use href="#i-upload"/></svg><span>Import web export</span><input id="legacy-file" type="file" accept=".json,application/json" disabled></label>
+        </div>
+        <div id="desktop-actions" class="card list settings-list">
+          <button id="hide-to-tray" class="list-item" hidden><svg><use href="#i-down"/></svg><span>Hide to tray</span></button>
+          <button id="quit" class="list-item" hidden><svg><use href="#i-exit"/></svg><span>Quit</span></button>
+        </div>
+        <p class="supporting center">Saved on this device · <span id="tray-hint"></span></p>
+        <button id="open-preferences" hidden>Budget</button>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="editor" class="sheet" aria-labelledby="editor-title">
+    <form id="expense-form">
+      <header class="dialog-bar"><button id="close-editor" type="button" class="icon-button" aria-label="Close"><svg><use href="#i-close"/></svg></button><h2 id="editor-title">Add payment</h2><button id="save" type="submit" class="filled">Save</button></header>
+      <p id="editor-status" class="supporting" role="status" aria-live="polite"></p>
+      <fieldset id="expense-fields">
+        <div class="capture">
+          <label class="capture-option"><svg><use href="#i-image"/></svg><span>Choose image</span><input id="receipt-file" type="file" accept="image/png,image/jpeg"></label>
+          <label id="camera-label" class="capture-option" hidden><svg><use href="#i-camera"/></svg><span>Take photo</span><input id="camera-file" type="file" accept="image/*" capture="environment"></label>
+        </div>
+        <button id="scanner-setup" type="button" class="text-button">Choose scanner</button>
+        <button id="manual-fallback" type="button" class="text-button">Enter manually</button>
+        <div id="pending-evidence" hidden><div class="preview-frame"><img id="preview" alt="Voucher to review"><span class="scan-line" aria-hidden="true"></span></div><div class="actions"><button id="analyze" type="button" class="tonal">Scan again</button><button id="remove-image" type="button" class="text-button">Remove</button></div></div>
+        <div id="review-fields">
+          <label class="field">Payee<input name="payee" required maxlength="240" autocomplete="off"></label>
+          <div class="field-row">
+            <label class="field currency-field">Currency<select name="currency"><option value="CLP">CLP</option><option value="USD">USD</option></select></label>
+            <label class="field">Amount<input name="amount" type="number" inputmode="numeric" min="1" max="1000000000000" step="1" required></label>
+            <label class="field">Date<input name="date" type="date" min="1900-01-01" max="2199-12-31" required></label>
+          </div>
+          <label class="field">Account<select name="account" required></select></label>
+          <details id="more-details" class="inline-details"><summary>More details</summary>
+            <label class="field">Category<input name="category" required maxlength="120" value="Other" data-suggest="categories" autocomplete="off"></label>
+            <label class="field">Reference<input name="reference" maxlength="240"></label>
+            <label class="field">Location<input name="location" maxlength="500"></label>
+            <label class="field">Notes<textarea name="notes" maxlength="4000" rows="2"></textarea></label>
+          </details>
+        </div>
+        <details id="extraction-details" class="inline-details" hidden><summary>Extraction</summary><pre id="extraction-text"></pre></details>
+        <section id="saved-evidence" aria-label="Saved evidence"></section>
+        <div id="delete-confirm" class="confirm" hidden><p>Delete this payment?</p><div class="actions"><button id="cancel-delete" type="button" class="text-button">Keep</button><button id="confirm-delete" type="button" class="filled danger">Delete</button></div></div>
+      </fieldset>
+      <footer class="dialog-footer"><button id="delete" type="button" class="text-button danger" hidden>Delete</button><span class="spacer"></span><button id="cancel-analysis" type="button" class="tonal" hidden>Cancel scan</button></footer>
+    </form>
+  </dialog>
+  <datalist id="categories"></datalist>
+  <dialog id="ask-dialog" class="ask" aria-labelledby="ask-message"><form method="dialog"><p id="ask-message"></p><div class="actions"><button value="" class="text-button">Cancel</button><button id="ask-ok" value="ok" class="filled">OK</button></div></form></dialog>
+
+  <dialog id="preferences-dialog" class="sheet" aria-labelledby="preferences-title"><form id="preferences-form">
+    <header class="dialog-bar"><button id="close-preferences" type="button" class="icon-button" aria-label="Close"><svg><use href="#i-close"/></svg></button><h2 id="preferences-title">Budget</h2><button id="save-preferences" class="filled" type="submit">Save</button></header>
+    <p id="preferences-status" class="supporting" role="status"></p>
+    <fieldset id="preferences-fields">
+      <section data-section="budget">
+        <label class="field">Monthly salary (CLP)<input id="preferences-salary" type="number" min="0" max="1000000000000" step="1" required></label>
+        <label class="field">Account owners<input id="preferences-owners" maxlength="2400" placeholder="Comma separated"></label>
+        <p class="supporting">Transfers to these names aren't counted as spending.</p>
+      </section>
+      <section data-section="fixed"><div id="preferences-fixed"></div><button type="button" id="add-fixed" class="tonal"><svg><use href="#i-add"/></svg>Add commitment</button></section>
+      <section data-section="accounts"><div id="preferences-accounts"></div><button type="button" id="add-account" class="tonal"><svg><use href="#i-add"/></svg>Add account</button></section>
+      <section data-section="categories"><div id="preferences-categories"></div><button type="button" id="add-category" class="tonal"><svg><use href="#i-add"/></svg>Add rule</button></section>
+      <section data-section="vendors"><div id="preferences-vendors"></div><button type="button" id="add-vendor" class="tonal"><svg><use href="#i-add"/></svg>Add name</button></section>
+      <section data-section="special"><div id="preferences-special"></div><button type="button" id="add-special" class="tonal"><svg><use href="#i-add"/></svg>Add rule</button></section>
+    </fieldset>
+  </form></dialog>
+
+  <dialog id="fixed-page" class="sheet" aria-labelledby="fixed-title">
+    <header class="dialog-bar"><button id="close-fixed" type="button" class="icon-button" aria-label="Close"><svg><use href="#i-close"/></svg></button><h2 id="fixed-title">Fixed expenses</h2><button id="edit-fixed" type="button" class="text-button">Edit</button></header>
+    <p id="fixed-summary" class="supporting"></p>
+    <div id="fixed-list" class="card list"></div>
+  </dialog>
+
+  <dialog id="statements-page" class="sheet" aria-labelledby="statements-title">
+    <header class="dialog-bar"><button id="close-statements" type="button" class="icon-button" aria-label="Close"><svg><use href="#i-close"/></svg></button><h2 id="statements-title">Bank statements</h2><label class="filled file-button">Add PDF<input id="statement-file" type="file" accept="application/pdf,.pdf"></label></header>
+    <p id="statement-status" class="supporting" role="status"></p>
+    <div id="statement-list" class="list"></div>
+  </dialog>
+
+  <dialog id="scanner-page" class="sheet" aria-labelledby="scanner-title">
+    <header class="dialog-bar"><button id="close-scanner" type="button" class="icon-button" aria-label="Close"><svg><use href="#i-close"/></svg></button><h2 id="scanner-title">Receipt scanner</h2><span></span></header>
+    <p id="scanner-summary" class="supporting" role="status"></p>
+    <section id="scanner-system" hidden><h3 class="list-header">Built into this phone</h3><div id="scanner-system-row" class="card list"></div></section>
+    <section id="scanner-installed-section"><h3 class="list-header">On this device</h3><div id="scanner-installed" class="card list"></div></section>
+    <section id="scanner-available-section"><h3 class="list-header">Download</h3><div id="scanner-models" class="card list"></div></section>
+    <h3 class="list-header">Your own model</h3>
+    <div class="card list">
+      <div id="scanner-custom-row"></div>
+      <p class="supporting custom-help">A GGUF vision model and its matching projector (mmproj).</p>
+      <div class="actions custom-actions"><button id="model" type="button" class="tonal" disabled>Load model file</button><button id="projector" type="button" class="tonal" disabled>Load projector file</button></div>
+    </div>
+    <label id="scanner-fast-row" class="switch-row" hidden><input id="scanner-fast" type="checkbox"><span>Fast scan: read text first, use the model only when a field is missing</span></label>
+    <label id="scanner-gpu-row" class="switch-row" hidden><input id="scanner-gpu" type="checkbox"><span id="scanner-gpu-label">Use GPU</span></label>
+    <p class="supporting">Models run offline. Vouchers never leave this device.</p>
+    <p id="model-status" class="supporting" role="status"></p>
+  </dialog>
+
+  <dialog id="statement-dialog" class="sheet" aria-labelledby="statement-title"><form id="statement-form">
+    <header class="dialog-bar"><button id="close-statement" type="button" class="icon-button" aria-label="Close"><svg><use href="#i-close"/></svg></button><h2 id="statement-title">Review statement</h2><button id="confirm-statement" type="submit" class="filled">Confirm</button></header>
+    <p id="statement-review-status" class="supporting" role="status"></p>
+    <fieldset id="statement-fields"><div id="statement-rows"></div></fieldset>
+  </form></dialog>
+
+  <dialog id="sync-dialog" class="sheet" aria-labelledby="sync-title">
+    <header class="dialog-bar"><button id="close-sync" type="button" class="icon-button" aria-label="Close"><svg><use href="#i-close"/></svg></button><h2 id="sync-title">Pairing & sync</h2><span></span></header>
+    <section class="card sync-status"><svg><use href="#i-sync"/></svg><p id="sync-summary"></p></section>
+    <p id="sync-message" class="supporting" role="status"></p>
+    <section id="sync-desktop" hidden>
+      <button id="sync-pairing" type="button" class="filled wide">Pair a phone</button>
+      <section id="sync-code" hidden><img id="sync-qr" alt="Pairing QR code" width="280" height="280"><p id="sync-expiry" class="supporting center"></p><details class="inline-details"><summary>Pairing link</summary><textarea id="sync-link" readonly rows="3"></textarea></details></section>
+      <h3 class="list-header">Paired phones</h3><div id="sync-devices" class="card list"></div>
+      <details class="inline-details"><summary>Service</summary><ul id="sync-routes" class="routes"></ul><div class="actions"><button id="sync-start" type="button" class="tonal">Start</button><button id="sync-restart" type="button" class="tonal">Restart</button><button id="sync-stop" type="button" class="text-button">Stop</button></div></details>
+    </section>
+    <section id="sync-mobile" hidden>
+      <button id="sync-scan" type="button" class="filled wide"><svg><use href="#i-camera"/></svg>Scan desktop QR</button>
+      <div class="actions"><button id="sync-now" type="button" class="tonal">Sync now</button><button id="sync-unpair" type="button" class="text-button danger">Disconnect</button></div>
+      <details class="inline-details"><summary>Paste link instead</summary><textarea id="sync-paste" rows="3" maxlength="8192" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" aria-label="Pairing link"></textarea><button id="sync-connect" type="button" class="tonal">Pair</button></details>
+      <label class="switch-row"><input id="sync-replace" type="checkbox"><span>Replace paired desktop</span></label>
+    </section>
+    <h3 class="list-header">Conflicts</h3><div id="sync-conflicts" class="list"></div>
+    <section id="sync-review" hidden><div class="comparison"><div><h4>This device</h4><pre id="sync-local"></pre></div><div><h4>Desktop</h4><pre id="sync-remote"></pre></div></div><div class="actions"><button id="sync-use-local" type="button" class="tonal">Keep mine</button><button id="sync-use-remote" type="button" class="filled">Use desktop</button></div></section>
+  </dialog>
+  <dialog id="research-dialog" class="sheet" aria-labelledby="research-title">
+    <header class="dialog-bar"><button id="research-close" class="icon-button" type="button" aria-label="Close"><svg><use href="#i-close"/></svg></button><h2 id="research-title">Research categories</h2><button id="research-apply" class="filled" type="button" disabled>Apply selected</button></header>
+    <p class="supporting">Find categories for up to 10 merchants in this period. Review before applying.</p>
+    <section class="card research-model-card">
+      <p id="research-model-status" class="supporting" role="status">Checking desktop model…</p>
+      <details id="research-details" class="inline-details"><summary>Model &amp; privacy details</summary>
+      <p class="supporting">Only merchant names and country context are searched online. Amounts, accounts and receipts stay private. Uncertain results stay uncategorized.</p>
+      <p class="supporting">Qwen3.5 9B: 5.7 GB. Loads on desktop for each batch, then unloads. Receipt scanning uses its own model.</p>
+      <div id="research-model-controls" class="actions"><button id="research-model-download" type="button" class="tonal">Download Qwen3.5 9B</button><button id="research-model-pick" type="button" class="text-button">Choose GGUF</button><button id="research-model-default" type="button" class="text-button" hidden>Use Qwen3.5 9B</button><button id="research-model-cancel" type="button" class="text-button" hidden>Cancel download</button></div>
+      </details>
+    </section>
+    <div class="actions"><button id="research-start" class="tonal" type="button">Research merchants</button><button id="research-cancel" class="text-button" type="button" hidden>Cancel research</button></div>
+    <p id="research-status" class="supporting" role="status"></p>
+    <section id="research-activity-panel" class="card" hidden>
+      <p id="research-progress" class="research-progress" role="status">Waiting for desktop…</p>
+      <h3 id="research-merchant" class="card-title"></h3>
+      <p class="supporting">Latest activity · newest first</p>
+      <pre id="research-activity"></pre>
+    </section>
+    <div id="research-results" class="list"></div>
+  </dialog>
+</body>
+</html>

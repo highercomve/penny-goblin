@@ -1,0 +1,132 @@
+name: Build and test
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  ZIG_VERSION: 0.16.0
+jobs:
+  test:
+    name: Ledger, UI and sync tests
+    runs-on: ubuntu-latest
+    container: ghcr.io/archlinux/archlinux:latest
+    timeout-minutes: 30
+    steps:
+      - name: Install platform dependencies
+        run: pacman -Syu --noconfirm --needed git pkgconf gtk4 webkitgtk-6.0 wayland wayland-protocols libxkbcommon libxtst libx11 dbus ttf-dejavu python python-pip python-gobject nodejs xorg-server-xvfb xorg-xauth
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - run: python scripts/check-vendor.py
+      - run: zig build test -Dvision=false --summary all
+      - run: zig build test-ui -Drenderer=oriel -Dvision=false --summary all
+      - run: node --test scripts/reports.test.cjs
+      - name: Python sync and network tests
+        run: |
+          python -m venv .helper-venv
+          .helper-venv/bin/python -m pip install -r scripts/helper-requirements.txt
+          .helper-venv/bin/python scripts/research_jobs_test.py
+          .helper-venv/bin/python scripts/research_network_test.py
+      - name: WebKit review tests (isolated synthetic fixtures)
+        env:
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
+          GDK_BACKEND: x11
+          GTK_A11Y: none
+        run: dbus-run-session -- xvfb-run -a python scripts/research_ui_test.py
+  linux:
+    name: Linux x86_64 (${{ matrix.renderer }})
+    runs-on: ubuntu-latest
+    container: ghcr.io/archlinux/archlinux:latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        renderer: [oriel, webview]
+    steps:
+      - name: Install platform dependencies
+        run: pacman -Syu --noconfirm --needed git pkgconf gtk4 webkitgtk-6.0 wayland wayland-protocols libxkbcommon libxtst libx11 dbus ttf-dejavu python python-pip squashfs-tools curl
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - run: bash scripts/build-linux.sh '${{ matrix.renderer }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: penny-goblin-linux-x86_64-${{ matrix.renderer }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+  android:
+    name: Android arm64 (Oriel)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+      - name: Install pinned Android toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev
+          sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'ndk;28.2.13676358'
+      - name: Build and verify APK
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          python3 scripts/build-android.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: penny-goblin-android-arm64-oriel
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+  website:
+    name: Zine website
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Zine 0.14.0
+        run: |
+          curl --fail --location --retry 3 https://github.com/kristoff-it/zine/releases/download/v0.14.0/x86_64-linux-musl.tar.xz -o /tmp/zine.tar.xz
+          echo '897642f46c3872a6311f2ab3d4c622f5f8625bfee8e1de2d0de42597c1385629  /tmp/zine.tar.xz' | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/zine"
+          tar -xJf /tmp/zine.tar.xz -C "$RUNNER_TEMP/zine"
+          echo "$RUNNER_TEMP/zine" >> "$GITHUB_PATH"
+      - run: bash scripts/build-site.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: penny-goblin-website
+          path: public/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Load website-only deploy key
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.WEBSITE_DEPLOY_KEY }}
+      - name: Trust GitHub SSH host keys from its HTTPS metadata
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          curl --fail --silent --show-error https://api.github.com/meta | python3 -c 'import json,sys; print("\n".join("github.com " + key for key in json.load(sys.stdin)["ssh_keys"]))' >> ~/.ssh/known_hosts
+      - name: Publish static website
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: bash scripts/publish-site.sh

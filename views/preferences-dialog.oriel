@@ -1,0 +1,150 @@
+<style>
+  preferences-dialog: grow=1 basis=0 width=640 height=auto min-height=0 max-width=1180 max-height=772 padding=0,24,24,24 color-scheme=light background=#eaeee4 radius=28 unset="position inset z"
+  n3: margin=0,-24,8,-24 padding=8,16,0,8 background=#eaeee4
+  n5: icon-color=#434a43 viewbox=0,0,24,24
+  n7: color=#191d19
+  save-preferences: background=#2d6a4f
+  n9: color=#ffffff
+  preferences-status: color=#434a43
+  n14: color=#434a43
+  preferences-salary: border-color=#737a72 color-scheme=light color=#191d19
+  n17: color=#434a43
+  preferences-owners: border-color=#737a72 color-scheme=light color=#191d19
+  n19: color=#434a43
+  add-fixed: background=#dce7d6
+  n23: icon-color=#17241a viewbox=0,0,24,24
+  n24: color=#17241a
+  add-account: background=#dce7d6
+  n28: icon-color=#17241a viewbox=0,0,24,24
+  n29: color=#17241a
+  add-category: background=#dce7d6
+  n33: icon-color=#17241a viewbox=0,0,24,24
+  n34: color=#17241a
+  add-vendor: background=#dce7d6
+  n38: icon-color=#17241a viewbox=0,0,24,24
+  n39: color=#17241a
+  add-special: background=#dce7d6
+  n43: icon-color=#17241a viewbox=0,0,24,24
+  n44: color=#17241a
+  @media (prefers-color-scheme: dark) {
+    preferences-dialog: color-scheme=dark background=#1d211d
+    n3: background=#1d211d
+    n5: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n7: color=#e0e4dc
+    save-preferences: background=#9ad4ae
+    n9: color=#003920
+    preferences-status: color=#c2c9c0
+    n14: color=#c2c9c0
+    preferences-salary: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    n17: color=#c2c9c0
+    preferences-owners: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    n19: color=#c2c9c0
+    add-fixed: background=#384a3b
+    n23: icon-color=#d6e8d6 viewbox=0,0,24,24
+    n24: color=#d6e8d6
+    add-account: background=#384a3b
+    n28: icon-color=#d6e8d6 viewbox=0,0,24,24
+    n29: color=#d6e8d6
+    add-category: background=#384a3b
+    n33: icon-color=#d6e8d6 viewbox=0,0,24,24
+    n34: color=#d6e8d6
+    add-vendor: background=#384a3b
+    n38: icon-color=#d6e8d6 viewbox=0,0,24,24
+    n39: color=#d6e8d6
+    add-special: background=#384a3b
+    n43: icon-color=#d6e8d6 viewbox=0,0,24,24
+    n44: color=#d6e8d6
+  }
+  @media (max-width: 839px) {
+    preferences-dialog: width=393 height=820 max-width=393 max-height=820 padding=0,16,24,16 position=absolute top=0 right=0 bottom=0 left=0 background=#f6f8f1 z=2147483647 unset="grow basis min-height radius"
+    n3: margin=0,-16,8,-16 padding=0,12,0,4 background=#f6f8f1
+  }
+  @media (max-width: 839px) and (prefers-color-scheme: dark) {
+    preferences-dialog: background=#111511
+    n3: background=#111511
+  }
+  @media (max-width: 380px) {
+    preferences-dialog: width=320 height=820 max-width=320 max-height=820 padding=0,16,24,16 position=absolute top=0 right=0 bottom=0 left=0 background=#f6f8f1 z=2147483647 unset="grow basis min-height radius"
+    n3: margin=0,-16,8,-16 padding=0,12,0,4 background=#f6f8f1
+  }
+  @media (max-width: 380px) and (prefers-color-scheme: dark) {
+    preferences-dialog: background=#111511
+    n3: background=#111511
+  }
+</style>
+<view id="preferences-dialog" class="preferences-dialog" scroll="true" scroll-x="true" unset="shrink color font-size">
+  <view id="preferences-form">
+    <row class="n3" align="center" min-height="64" row-gap="4" column-gap="4" sticky="0,auto,auto,auto" z="2">
+      <row id="close-preferences" justify="center" align="center" width="48" height="48" min-height="40" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
+        <icon class="n5" grow="0" shrink="0" width="24" height="24" clickable="true">
+          <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+        </icon>
+      </row>
+      <view id="preferences-title" grow="1" shrink="1" basis="0%" clip="true">
+        <text class="n7" shrink="0" font-size="22" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Budget</text>
+      </view>
+      <row id="save-preferences" class="save-preferences" justify="center" align="center" grow="0" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
+        <text class="n9" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Save</text>
+      </row>
+    </row>
+    <text id="preferences-status" class="preferences-status" shrink="0" margin="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">Status</text>
+    <view id="preferences-fields" min-width="0">
+      <view id="pref-section-budget">
+        <view grow="1" shrink="1" basis="0%" min-width="0" margin="0,0,12,0" row-gap="4" column-gap="4" clickable="true">
+          <text class="n14" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Monthly salary (CLP)</text>
+          <input id="preferences-salary" class="preferences-salary" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" type="number" enterkey="go" autocapitalize="none" autocorrect="false" label="Monthly salary (CLP)" unset="shrink" />
+        </view>
+        <view grow="1" shrink="1" basis="0%" min-width="0" margin="0,0,12,0" row-gap="4" column-gap="4" clickable="true">
+          <text class="n17" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Account owners</text>
+          <input id="preferences-owners" class="preferences-owners" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="Comma separated" placeholder-color="#a9a9a9" cols="20" enterkey="go" autocapitalize="sentences" label="Account owners" unset="shrink" />
+        </view>
+        <text class="n19" shrink="0" margin="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">Transfers to these names aren't counted as spending.</text>
+      </view>
+      <view id="pref-section-fixed">
+        <view id="preferences-fixed" margin="0" />
+        <row id="add-fixed" class="add-fixed" justify="center" align="center" align-self="flex-start" min-height="40" margin="8,0,0,0" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
+          <icon class="n23" grow="0" shrink="0" width="18" height="18" clickable="true">
+            <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+          </icon>
+          <text class="n24" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Add commitment</text>
+        </row>
+      </view>
+      <view id="pref-section-accounts">
+        <view id="preferences-accounts" margin="0" />
+        <row id="add-account" class="add-account" justify="center" align="center" align-self="flex-start" min-height="40" margin="8,0,0,0" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
+          <icon class="n28" grow="0" shrink="0" width="18" height="18" clickable="true">
+            <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+          </icon>
+          <text class="n29" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Add account</text>
+        </row>
+      </view>
+      <view id="pref-section-categories">
+        <view id="preferences-categories" margin="0" />
+        <row id="add-category" class="add-category" justify="center" align="center" align-self="flex-start" min-height="40" margin="8,0,0,0" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
+          <icon class="n33" grow="0" shrink="0" width="18" height="18" clickable="true">
+            <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+          </icon>
+          <text class="n34" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Add rule</text>
+        </row>
+      </view>
+      <view id="pref-section-vendors">
+        <view id="preferences-vendors" margin="0" />
+        <row id="add-vendor" class="add-vendor" justify="center" align="center" align-self="flex-start" min-height="40" margin="8,0,0,0" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
+          <icon class="n38" grow="0" shrink="0" width="18" height="18" clickable="true">
+            <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+          </icon>
+          <text class="n39" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Add name</text>
+        </row>
+      </view>
+      <view id="pref-section-special">
+        <view id="preferences-special" margin="0" />
+        <row id="add-special" class="add-special" justify="center" align="center" align-self="flex-start" min-height="40" margin="8,0,0,0" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
+          <icon class="n43" grow="0" shrink="0" width="18" height="18" clickable="true">
+            <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+          </icon>
+          <text class="n44" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Add rule</text>
+        </row>
+      </view>
+    </view>
+  </view>
+</view>

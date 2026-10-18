@@ -1,0 +1,55 @@
+<style>
+  fixed-page: grow=1 basis=0 width=640 height=auto min-height=0 max-width=1180 max-height=772 padding=0,24,24,24 color-scheme=light background=#eaeee4 radius=28 unset="position inset z"
+  n2: margin=0,-24,8,-24 padding=8,16,0,8 background=#eaeee4
+  n4: icon-color=#434a43 viewbox=0,0,24,24
+  n6: color=#191d19
+  n8: color=#2d6a4f
+  fixed-summary: color=#434a43
+  fixed-list: background=#e4e9de
+  @media (prefers-color-scheme: dark) {
+    fixed-page: color-scheme=dark background=#1d211d
+    n2: background=#1d211d
+    n4: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n6: color=#e0e4dc
+    n8: color=#9ad4ae
+    fixed-summary: color=#c2c9c0
+    fixed-list: background=#272b27
+  }
+  @media (max-width: 839px) {
+    fixed-page: width=393 height=820 max-width=393 max-height=820 padding=0,16,24,16 position=absolute top=0 right=0 bottom=0 left=0 background=#f6f8f1 z=2147483647 unset="grow basis min-height radius"
+    n2: margin=0,-16,8,-16 padding=0,12,0,4 background=#f6f8f1
+    fixed-list: background=#f0f3eb
+  }
+  @media (max-width: 839px) and (prefers-color-scheme: dark) {
+    fixed-page: background=#111511
+    n2: background=#111511
+    fixed-list: background=#191d19
+  }
+  @media (max-width: 380px) {
+    fixed-page: width=320 height=820 max-width=320 max-height=820 padding=0,16,24,16 position=absolute top=0 right=0 bottom=0 left=0 background=#f6f8f1 z=2147483647 unset="grow basis min-height radius"
+    n2: margin=0,-16,8,-16 padding=0,12,0,4 background=#f6f8f1
+    fixed-list: background=#f0f3eb
+  }
+  @media (max-width: 380px) and (prefers-color-scheme: dark) {
+    fixed-page: background=#111511
+    n2: background=#111511
+    fixed-list: background=#191d19
+  }
+</style>
+<view id="fixed-page" class="fixed-page" scroll="true" scroll-x="true" unset="shrink color font-size">
+  <row class="n2" align="center" min-height="64" row-gap="4" column-gap="4" sticky="0,auto,auto,auto" z="2">
+    <row id="close-fixed" justify="center" align="center" width="48" height="48" min-height="40" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
+      <icon class="n4" grow="0" shrink="0" width="24" height="24" clickable="true">
+        <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+      </icon>
+    </row>
+    <view id="fixed-title" grow="1" shrink="1" basis="0%" clip="true">
+      <text class="n6" shrink="0" font-size="22" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Fixed expenses</text>
+    </view>
+    <row id="edit-fixed" justify="center" align="center" grow="0" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true">
+      <text class="n8" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Edit</text>
+    </row>
+  </row>
+  <text id="fixed-summary" class="fixed-summary" shrink="0" margin="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">$300.000 a month · $0 paid in October 2026</text>
+  <view id="fixed-list" class="fixed-list" min-width="0" padding="16" radius="16" />
+</view>

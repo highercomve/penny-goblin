@@ -1,0 +1,11 @@
+.{
+    .name = .native,
+    .version = "0.2.5",
+    // Derived from the package name; changing it has security and trust implications.
+    .fingerprint = 0xc0881db76ce39fb8,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .oriel = .{ .path = "vendor/oriel" },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "src", "frontend", "views", "platform", "icon.png", "brand", "scripts", "vendor", "README.md", "PLAN.md", "TODO.md", "WEB_PARITY.md", "SYNC.md" },
+}

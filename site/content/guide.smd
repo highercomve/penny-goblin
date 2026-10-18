@@ -1,0 +1,56 @@
+---
+.title = "Make room for your goblin.",
+.date = .date("2026-10-18T00:00:00"),
+.layout = "page.shtml",
+---
+Penny Goblin is a household ledger for **Linux and Android**, built with Zig and
+Oriel. It is in early development. The application repository and test builds
+are private; this website is public.
+
+# Try a build
+
+Project collaborators can download Linux AppImages and Android arm64 APKs from
+[successful GitHub Actions runs](https://github.com/highercomve/penny-goblin/actions).
+People without repository access will see GitHub's sign-in or not-found page.
+There is no public app-store or stable release channel yet.
+
+Linux builds need compatible GTK4 and WebKitGTK 6 system libraries. The compiled
+Oriel interface is also available. Android test builds require Android 10 or newer.
+CI APKs use development signing: an existing installation can only be upgraded
+by an APK with the same certificate. Keep your current data and pairing safe;
+use an isolated test device or profile when trying differently signed builds.
+
+# Your first payment
+
+1. Choose Scan, then take a photo or select a receipt or transfer voucher.
+2. Check the total after discounts, merchant, date and account. Correct any mistakes.
+3. Save the reviewed payment. Explore its month, category and account from the ledger.
+
+Scanner models are optional, downloaded separately and not included with the app.
+Manual entry remains available. Scan accuracy and speed depend on the image,
+device and selected model.
+
+# Pair your devices
+
+Open pairing and synchronization on your desktop and pair the phone using its
+QR code or pairing link. The app authenticates and pins the desktop certificate.
+Use the same reachable local network, or connect through Tailscale.
+
+Once paired, the phone can ask the desktop to scan an image or research
+uncategorized merchants. Category research uses the current period and payment
+filters. Its suggestions remain a draft until you review and select Apply.
+
+# Build it yourself
+
+Collaborators can clone the private repository and follow its README. The source
+contains a documented Oriel snapshot so builds do not depend on a developer's
+local framework checkout. Zig 0.16.0 is required.
+
+```sh
+zig build run -Drenderer=oriel
+bash scripts/build-linux.sh oriel
+python3 scripts/build-android.py
+```
+
+For Android, install JDK 17, Gradle 8.14.3 and the SDK/NDK versions listed in the
+README first. The project website is built with Zine 0.14.0.

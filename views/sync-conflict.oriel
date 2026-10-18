@@ -1,0 +1,11 @@
+<style>
+  sync-conflict: background=#ffdad6
+  n2: color=#191d19
+  @media (prefers-color-scheme: dark) {
+    sync-conflict: background=#93000a
+    n2: color=#e0e4dc
+  }
+</style>
+<row id="sync-conflict" class="sync-conflict" justify="flex-start" align="center" width="100%" min-height="40" margin="0,0,8,0" padding="0,24,0,24" row-gap="8" column-gap="8" radius="12" clickable="true" unset="shrink color font-size">
+  <text class="n2" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">{text}</text>
+</row>

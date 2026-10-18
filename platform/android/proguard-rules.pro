@@ -1,0 +1,2 @@
+-keep class com.pennygoblin.sync.NativeSync { *; }
+-keep class com.pennygoblin.sync.SyncWorker { public <init>(android.content.Context, androidx.work.WorkerParameters); }

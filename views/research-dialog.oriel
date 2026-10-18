@@ -1,0 +1,52 @@
+<style>
+ sheet: background=#f6f8f1 color=#191d19
+ card: background=#f0f3eb
+ primary: color=#2d6a4f
+ filled: background=#2d6a4f color=#ffffff
+ field: color=#191d19 border-color=#737a72 color-scheme=light
+ @media (prefers-color-scheme: dark) {
+  sheet: background=#111511 color=#e0e4dc
+  card: background=#191d19
+  primary: color=#9ad4ae
+  filled: background=#9ad4ae color=#003920
+  field: color=#e0e4dc border-color=#8c938a color-scheme=dark
+ }
+</style>
+<column id="research-dialog" class="sheet" position="absolute" z="2147483647" radius="28" width="640" height="740" padding="16" gap="16" clip="true">
+ <row gap="12" align="center" shrink="0">
+  <button id="close" class="primary" width="40" height="48" clickable="true" justify="center" align="center"><text font-size="24">×</text></button>
+  <text font-size="22" grow="1" shrink="1">Research categories</text>
+  <button id="apply" class="filled" min-height="40" padding="8,16,8,16" radius="20" clickable="true"><text font-size="14" font-weight="500">Apply selected</text></button>
+ </row>
+ <column id="scroll" grow="1" min-height="0" scroll="true" gap="16">
+  <text font-size="14">Find categories for up to 10 merchants in this period. Review before applying.</text>
+  <column class="card" padding="12" gap="4" radius="16" shrink="0">
+   <text id="model-status" font-size="14">Checking desktop model…</text>
+   <button id="details-toggle" class="primary" min-height="40" clickable="true"><text font-size="14">Model &amp; privacy details ▾</text></button>
+   <column id="details" gap="8">
+    <text font-size="13">Only merchant names and country context are searched online. Amounts, accounts and receipts stay private. Uncertain results stay uncategorized.</text>
+    <text font-size="13">Qwen3.5 9B: 5.7 GB. Loads on desktop for each batch, then unloads. Receipt scanning uses its own model.</text>
+    <row id="model-controls" gap="8" wrap="wrap">
+     <button id="model-download" class="primary" min-height="44" padding="8" clickable="true"><text font-size="14">Download Qwen3.5 9B</text></button>
+     <button id="model-pick" class="primary" min-height="44" padding="8" clickable="true"><text font-size="14">Choose GGUF</text></button>
+     <button id="model-default" class="primary" min-height="44" padding="8" clickable="true"><text font-size="14">Use Qwen3.5 9B</text></button>
+     <button id="model-cancel" class="primary" min-height="44" padding="8" clickable="true"><text font-size="14">Cancel download</text></button>
+    </row>
+   </column>
+  </column>
+  <row gap="12" wrap="wrap">
+   <button id="start" class="filled" min-height="44" padding="10,16,10,16" radius="22" clickable="true"><text font-size="14" font-weight="500">Research merchants</text></button>
+   <button id="cancel" class="primary" min-height="44" padding="10" clickable="true"><text font-size="14">Cancel research</text></button>
+  </row>
+  <text id="status" font-size="18" font-weight="500">No expenses change until you select Apply.</text>
+  <column id="activity-panel" class="card" gap="10" padding="16" radius="16" shrink="0">
+   <text id="progress" class="primary" font-size="14" font-weight="700">Waiting for desktop…</text>
+   <text id="merchant" font-size="20" font-weight="700" />
+   <text font-size="13">Latest activity · newest first</text>
+   <column id="activity-scroll" max-height="360" scroll="true" min-height="160" shrink="0">
+    <text id="activity" font-size="14" shrink="0">Connecting to research…</text>
+   </column>
+  </column>
+  <column id="results" gap="12" />
+ </column>
+</column>

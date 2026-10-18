@@ -1,0 +1,18 @@
+<style>
+  theme0: color=#191d19
+  theme1: color=#434a43
+  theme2: color=#2d6a4f background=#dce7d6
+  theme3: color=#ba1a1a
+  @media (prefers-color-scheme: dark) {
+    theme0: color=#e0e4dc
+    theme1: color=#c2c9c0
+    theme2: color=#9ad4ae background=#384a3b
+    theme3: color=#ffb4ab
+  }
+</style>
+<row class="theme0" id="item" min-height="60" padding="12,8,12,8" gap="12" align="center" clickable="true">
+  <column grow="1" min-width="0" gap="3"><text id="title" font-size="15">{title}</text><text class="theme1" id="detail" font-size="13">{detail}</text></column>
+  <text id="amount" font-size="15" font-weight="500">{amount}</text>
+  <button class="theme2" id="action" label="Open item" height="40" width="64" radius="20" justify="center" align="center" clickable="true"><text font-size="14" font-weight="500" text-align="center">Open</text></button>
+  <button class="theme3" id="secondary" label="Delete item" height="40" width="72" radius="20" display="none" justify="center" align="center" clickable="true"><text font-size="14" font-weight="500" text-align="center">Delete</text></button>
+</row>

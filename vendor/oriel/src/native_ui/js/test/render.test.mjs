@@ -1,0 +1,646 @@
+import assert from "node:assert/strict";
+import { parseHTML } from "../vendor/linkedom/esm/index.js";
+import { StyleEngine, viewport } from "../src/css.js";
+import { Renderer, UA_CSS, arithmetic } from "../src/render.js";
+import { transitionsOf } from "../src/transitions.js";
+
+globalThis.requestAnimationFrame = () => 0;
+
+function makeRenderer(document, css, reference = false, direct = false) {
+  const engine = new StyleEngine();
+  engine.addSheet(UA_CSS + css);
+  const nodes = new Map(), batches = [];
+  const leafStyles = new Map();
+  const directCreates = [];
+  const renderer = new Renderer(document, engine, {
+    leafStyle: direct ? (id, json) => { leafStyles.set(id, JSON.parse(json)); return true; } : undefined,
+    leaf: direct ? (id, style, text, isText) => {
+      if (nodes.has(id)) return false;
+      const props = structuredClone(leafStyles.get(style));
+      if (isText) props.runs[0].t = text;
+      nodes.set(id, { kind: isText ? "text" : "view", props, kids: [] });
+      directCreates.push(id);
+      return true;
+    } : undefined,
+    text: direct ? (id, text) => {
+      nodes.get(id).props.runs[0].t = text;
+      return true;
+    } : undefined,
+    ops(json) {
+      const ops = JSON.parse(json);
+      batches.push(ops);
+      for (const [op, id, x] of ops) {
+        if (op === "c") nodes.set(id, { kind: x, props: {}, kids: [] });
+        if (op === "p") nodes.get(id).props = x;
+        if (op === "k") {
+          // Native nodes have one parent: attaching a moved child also
+          // detaches it from its previous parent's children.
+          for (const [parent, n] of nodes) if (parent !== id) n.kids = n.kids.filter((k) => !x.includes(k));
+          nodes.get(id).kids = x;
+        }
+        if (op === "d") nodes.delete(id);
+      }
+    },
+    frame: () => [0, 0, 600, 400, 400],
+  });
+  // A fresh traversal with independent selector matches is the reference.
+  if (reference) {
+    renderer.matchOf = (el) => engine.matching(el);
+    renderer.simpleLeaves = false;
+  }
+  const tree = (id = 0) => {
+    const n = nodes.get(id);
+    return n && { kind: n.kind, props: n.props, kids: n.kids.map((k) => tree(k)) };
+  };
+  return { renderer, nodes, batches, tree, directCreates };
+}
+
+function fixture(css, direct = false) {
+  const { document, window } = parseHTML("<html><body><main></main></body></html>");
+  const got = makeRenderer(document, css, false, direct);
+  const observer = new window.MutationObserver(() => {});
+  observer.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+  got.renderer.observer = observer;
+  const check = () => {
+    got.renderer.render();
+    const ref = makeRenderer(document, css, true);
+    ref.renderer.render();
+    assert.deepEqual(got.tree(), ref.tree());
+  };
+  return { document, ...got, check };
+}
+
+{
+  const { document } = parseHTML('<html><body></body></html>');
+  const { renderer } = makeRenderer(document, '');
+  const element = document.createElement('div');
+  const primary = renderer.idOf(element, 'el');
+  assert.equal(typeof renderer.ids.get(element), 'number', 'ordinary elements need no id dictionary');
+  const pseudo = renderer.idOf(element, 'before');
+  assert.notEqual(pseudo, primary);
+  assert.equal(renderer.idOf(element, 'el'), primary, 'expanding id storage preserves the primary id');
+  assert.equal(renderer.idOf(element, 'before'), pseudo);
+  assert.notEqual(renderer.idOf(element, 'row0'), primary);
+}
+
+// The first edit after typed creation still has a lazy previous snapshot.
+// A declined text bridge must compare against the original text.
+{
+  const f = fixture('.row { display: flex }', true);
+  f.document.querySelector('main').innerHTML = '<div class="row"><span>before</span></div>';
+  f.renderer.render();
+  f.renderer.observer.takeRecords();
+  let declined = 0;
+  f.renderer.host.text = () => { declined++; return false; };
+  f.document.querySelector('span').textContent = 'after';
+  f.check();
+  assert.equal(declined, 1, "first edit reaches the direct bridge before fallback");
+}
+
+// A full restyle invalidates matching while preserving last-style reads
+// for elements no longer visited under a hidden ancestor.
+{
+  const f = fixture('.row { display:flex } .leaf { width:40px }', true);
+  f.document.querySelector('main').innerHTML = '<div class="row"><span class="leaf">one</span></div><div class="row"><span class="leaf">two</span></div>';
+  f.check();
+  const leaves = [...f.document.querySelectorAll('.leaf')];
+  assert.ok(Object.isFrozen(f.renderer.fc.get(leaves[1]).root.kids));
+  f.renderer.engine.addSheet('.leaf { width:75px; color:blue }');
+  f.renderer.markAll();
+  f.renderer.render();
+  for (const leaf of leaves) assert.equal(f.renderer.styleOf(leaf).width, '75px');
+  leaves[1].parentNode.style.display = 'none';
+  f.renderer.markAll();
+  f.renderer.render();
+  assert.equal(f.renderer.styleOf(leaves[1]).width, '75px');
+}
+
+// Cached font sizes include the resolved parent size, including relative
+// units and inherited sizes after stylesheet/inline changes.
+{
+  const f = fixture('.row { display:flex; font-size:1.5em } .leaf { font-size:80% }', true);
+  const main = f.document.querySelector('main');
+  main.setAttribute('style', 'font-size:20px');
+  main.innerHTML = '<div class="row"><span class="leaf">one</span></div><div class="row"><span class="leaf">two</span></div>';
+  f.check();
+  assert.equal(f.renderer.styleOf(main.firstChild).__fs, 30);
+  assert.equal(f.renderer.styleOf(main.firstChild.firstChild).__fs, 24);
+  main.setAttribute('style', 'font-size:30px');
+  f.check();
+  assert.equal(f.renderer.styleOf(main.firstChild).__fs, 45);
+  assert.equal(f.renderer.styleOf(main.firstChild.firstChild).__fs, 36);
+  main.firstChild.setAttribute('style', 'font-size:18px');
+  f.check();
+  assert.equal(f.renderer.styleOf(main.firstChild).__fs, 18);
+  assert.equal(f.renderer.styleOf(main.firstChild.firstChild).__fs, 14.4);
+}
+
+for (const direct of [false, true]) for (const extra of ["", ".row:first-child .n { color: red } .row + .row .dot { width: 9px }"]) {
+  const f = fixture(`.row { display: flex } .n { width: 30px } .dot { width: 5px } .theme span { color: green } ${extra}`, direct);
+  const stage = f.document.querySelector("main");
+  stage.innerHTML = `<section>${Array.from({ length: 30 }, (_, i) => `<div class="row"><span class="n">${i}</span><!-- gap --><span class="dot"></span><span>Row ${i}</span></div>`).join("")}</section>`;
+  f.check();
+  if (direct) {
+    assert.ok(f.directCreates.length > 0);
+    assert.ok(!f.batches.flat().some(([op, id]) => f.directCreates.includes(id) && (op === "c" || op === "p")), "direct creation avoids redundant JSON create/props operations");
+    assert.ok(!f.batches.flat().some(([op, id, kids]) => f.directCreates.includes(id) && op === "k" && !kids.length), "new leaves need no empty child operation");
+  }
+  const row = stage.querySelector(".row"), text = row.lastElementChild;
+  text.textContent = "Changed";
+  f.check();
+  row.setAttribute("data-nui-focus", "");
+  row.style.width = "200px";
+  text.style.color = "blue";
+  stage.className = "theme";
+  f.check();
+  text.removeAttribute("style");
+  stage.className = "";
+  row.parentNode.append(row);
+  f.check();
+  row.remove();
+  stage.append(row);
+  f.check();
+  text.textContent = "Changed after reattachment";
+  f.check();
+  row.setAttribute("hidden", "");
+  f.check();
+  row.removeAttribute("hidden");
+  f.check();
+  const count = f.batches.length;
+  f.renderer.render();
+  assert.equal(f.batches.length, count, "unchanged frames send no operations");
+}
+
+// Descendants distinguish otherwise identical cousins for :has().
+{
+  const f = fixture(".card { width: 20px } .card:has(.active) { width: 80px }");
+  f.document.querySelector("main").innerHTML = '<div class="card"><span class="active">A</span></div><div class="card"><span>B</span></div>';
+  f.check();
+  const cards = f.document.querySelectorAll(".card");
+  assert.equal(f.renderer.styleOf(cards[0]).width, "80px");
+  assert.equal(f.renderer.styleOf(cards[1]).width, "20px");
+  cards[0].firstChild.className = "";
+  cards[1].firstChild.className = "active";
+  f.check();
+}
+
+// Equivalent box styles can still have different descendant rules. Flex
+// templates must distinguish selector ancestry and start fresh each frame.
+{
+  const f = fixture(".row { display: flex } .a .row span { color: red } .b .row span { color: blue }", true);
+  const main = f.document.querySelector("main");
+  for (const order of [["a", "b"], ["b", "a"]]) {
+    main.innerHTML = order.map((cls) => `<section class="${cls}"><div class="row"><span>first</span><span>second</span></div><div class="row"><span>third</span><span>fourth</span></div></section>`).join("");
+    f.check();
+  }
+}
+
+// Shared row setup keeps text/font properties owned by each leaf, including
+// labels, listeners, decorated runs and a later switch between view and text.
+for (const direct of [false, true]) {
+  const f = fixture(".row { display: flex } .decorated { font-style: italic; font-family: monospace; text-decoration: underline; background: red }", direct);
+  const main = f.document.querySelector("main");
+  main.innerHTML = Array.from({ length: 3 }, (_, i) => `<div class="row"><span>plain ${i}</span><span class="decorated">styled ${i}</span><label>label ${i}</label></div>`).join("");
+  const rows = main.children;
+  rows[2].firstElementChild.__listens = 1;
+  f.check();
+  assert.equal(f.renderer.sc.get(rows[1].firstElementChild), f.renderer.fc.get(rows[1].firstElementChild), "direct leaf caches share one snapshot");
+  const a = f.renderer.fc.get(rows[1].firstElementChild).root.props;
+  const b = f.renderer.fc.get(rows[2].firstElementChild).root.props;
+  assert.notEqual(a, b, "shared setup does not share mutable props");
+  assert.notEqual(a.runs, b.runs);
+  assert.notEqual(a.runs[0], b.runs[0], "text updates cannot change a cousin run");
+  assert.equal(b.click, true);
+  assert.equal(f.renderer.fc.get(rows[1].lastElementChild).root.props.click, true);
+  rows[1].firstElementChild.textContent = "";
+  f.check();
+  rows[1].firstElementChild.textContent = "restored";
+  rows[1].firstElementChild.setAttribute("disabled", "");
+  rows[1].lastElementChild.setAttribute("onclick", "void 0");
+  f.check();
+  rows[1].firstElementChild.removeAttribute("disabled");
+  rows[1].firstElementChild.setAttribute("style", "color: blue; font-size: 23px");
+  f.check();
+}
+
+// Direct and JSON text updates agree with a fresh traversal, including
+// fallbacks that change kind/flow and general renders after direct writes.
+for (const direct of [false, true]) {
+  const f = fixture(".row { display: flex } .label { color: red; text-transform: uppercase }", direct);
+  const main = f.document.querySelector("main");
+  main.innerHTML = '<div class="row"><span class="label">Old</span><span>Fixed</span></div>';
+  const label = main.querySelector(".label");
+  f.check();
+  for (const text of ["New", "quote \" \\ Ω\u0000", "", "   ", "Restored"]) {
+    label.textContent = text;
+    f.check();
+  }
+  label.firstChild.data = "Changed in place";
+  f.check();
+  label.append(f.document.createTextNode(" and more"));
+  f.check();
+  label.textContent = "Single";
+  f.check();
+  label.style.width = "50px";
+  f.check();
+  label.textContent = "Latest";
+  f.check();
+  // A changed click listener uses markFlat and must rebuild click props.
+  label.addEventListener("click", () => {});
+  f.renderer.markFlat(label);
+  f.check();
+  // If the native bridge declines, use the ordinary property operation.
+  if (direct) f.renderer.host.text = () => false;
+  label.textContent = "Fallback";
+  f.check();
+  if (direct) f.renderer.host.leaf = () => false;
+  label.append(f.document.createElement("div"));
+  f.check();
+  label.innerHTML = "Mixed <b>bold</b>";
+  f.check();
+  main.firstChild.remove();
+  f.check();
+}
+
+// Repeated flex leaves may differ in text emptiness, order, listeners and
+// inline styles; complex children and pseudo-elements must stay general.
+for (const css of [
+  ".row { display: flex; align-items: center } span { order: 2 } .first { order: -1; align-self: end }",
+  ".row { display: flex } span { display: inline-flex; justify-content: center }",
+  ".row { display: flex } span::after { content: 'after' }",
+  ".row { display: flex } .first { position: fixed }",
+  ".row { display: flex } span { transition: width 100ms linear }",
+]) {
+  const f = fixture(css, true), main = f.document.querySelector("main");
+  main.innerHTML = '<div class="row"><span class="first">text</span><span></span></div><div class="row"><span class="first"></span><span>changed</span></div>';
+  main.lastElementChild.lastElementChild.__listens = 1;
+  f.check();
+  main.innerHTML = '<div class="row"><span class="first" style="width: 50px">one</span><span>two</span></div><div class="row"><span class="first" style="width: 80px">three</span><span><b>mixed</b></span></div>';
+  f.check();
+}
+
+// Text leaves keep the parent's layout adjustments outside flex rows too;
+// inline aggregation and structural selectors must use the fallback.
+for (const css of [
+  "div { display: block } span { display: block }",
+  "div { display: grid; gap: 4px }",
+  "div { display: block } span { display: inline }",
+  "div { display: flex } span:empty { width: 50px }",
+  "div { display: flex } span::before { content: 'prefix' }",
+  // A clipped cell (overflow: hidden keeps a box around its text): its
+  // text child is updated in place; with generated content it isn't.
+  "div { display: flex } span { overflow: hidden; padding-right: 8px }",
+  "div { display: flex } span { overflow: hidden } span::before { content: 'prefix' }",
+]) {
+  const f = fixture(css, true);
+  const main = f.document.querySelector("main");
+  main.innerHTML = '<div><span>Old</span><span>Sibling</span></div>';
+  f.check();
+  const label = main.querySelector("span");
+  for (const text of ["New", "", "Restored"]) {
+    label.textContent = text;
+    f.check();
+  }
+}
+
+// The cached root props retain defaults for the parent's next traversal;
+// on the wire, absence resets a previous row/center to column/stretch.
+{
+  const { document } = parseHTML("<html><body></body></html>");
+  const f = makeRenderer(document, "");
+  const emit = (props) => f.renderer.emit(new Map([[1, { kind: "view", props, kids: [] }]]), false);
+  emit({ fd: "row", ai: "center" });
+  emit({ fd: "column", ai: "stretch" });
+  assert.deepEqual(f.nodes.get(1).props, {});
+  const count = f.batches.length;
+  emit({ fd: "column", ai: "stretch" });
+  assert.equal(f.batches.length, count);
+}
+
+// Animation ticks use the same wire defaults as a normal render.
+{
+  const { document } = parseHTML("<html><body></body></html>");
+  const f = makeRenderer(document, "");
+  const originalNow = Date.now;
+  let now = 1000;
+  Date.now = () => now;
+  try {
+    f.renderer.specs.set(1, transitionsOf({ transition: "width 100ms linear" }));
+    const emit = (w) => f.renderer.emit(new Map([[1, { kind: "view", props: { fd: "column", ai: "stretch", w }, kids: [] }]]), false);
+    emit(0);
+    now = 1010;
+    emit(100);
+    now = 1060;
+    f.renderer.tick();
+    assert.deepEqual(f.nodes.get(1).props, { w: 50 });
+  } finally {
+    Date.now = originalNow;
+  }
+}
+
+// Finishing transient runs must keep mixed inline whitespace and paint.
+{
+  const f = fixture("span { color: red }");
+  const main = f.document.querySelector("main");
+  main.innerHTML = " A <span> B </span>C ";
+  f.check();
+  const props = f.nodes.get(f.renderer.idOf(main, "el")).props;
+  assert.equal(props.runs.map((r) => r.t).join(""), "A B C");
+  assert.deepEqual(props.runs[1].c, [255, 0, 0, 1]);
+  assert.ok(props.runs.every((r) => !Object.hasOwn(r, "ws")));
+}
+
+
+// A text-only button keeps a box that centers its label in its height (a
+// row of flex: 1 buttons stretches the short ones to the tallest); the label
+// spans its width, so the button's text-align applies (a menu item's left).
+{
+  const f = fixture(".seg { display: flex } .seg button { flex: 1 } .menu { display: block; width: 100%; text-align: left }");
+  const stage = f.document.querySelector("main");
+  stage.innerHTML = '<div class="seg"><button>A</button><button>A much longer label</button></div><button class="menu">Item</button>';
+  f.check();
+  const find = (n, pred) => pred(n) ? n : n.kids.map((k) => find(k, pred)).find(Boolean);
+  const tree = f.tree();
+  const labelOf = (t) => find(tree, (n) => n.kind === "text" && n.props.runs?.[0]?.t === t);
+  const boxOf = (label) => find(tree, (n) => n.kids.includes(label));
+  const a = labelOf("A"), item = labelOf("Item");
+  assert.ok(a && item, "the labels are text nodes");
+  assert.equal(boxOf(a).kind, "view", "inside a box");
+  assert.equal(boxOf(a).props.jc, "center", "centered in its height");
+  assert.equal(boxOf(a).props.ai ?? "stretch", "stretch", "spanning its width (stretch: the wire default)");
+  assert.equal(a.props.ta, "center", "a button's label is centered by its text-align");
+  assert.equal(item.props.ta ?? "left", "left", "a menu item's stays left (left: the wire default)");
+}
+
+// A label's line with one box: a checkbox keeps its text beside it (no
+// wrap); a field sized in % (`width: 100%`) wraps under its text, as in a
+// browser, instead of squeezing it to its longest word.
+{
+  const f = fixture("input { width: 100% } input[type=checkbox] { width: auto }");
+  const main = f.document.querySelector("main");
+  main.innerHTML = '<label>Profile name<input value="x"></label><label>Temperature<input type="range"></label><label><input type="checkbox">Remember me</label>';
+  f.check();
+  const [name, temp, check] = f.tree().kids[0].kids[0].kids.at(-1).kids;
+  assert.equal(name.props.fw, "wrap", "a 100% field goes under its label");
+  assert.equal(temp.props.fw, "wrap", "so does a 100% slider");
+  assert.equal(check.props.fw, undefined, "a checkbox keeps its text beside it");
+}
+
+// An inline element with a box of its own (GhostPen's "148 MB" model
+// badge: margin, padding, rounded corners, a background) is an inline box in
+// its line; bold text and a background-only highlight stay runs.
+{
+  const f = fixture(".badge { margin-left: 6px; padding: 1px 6px; border-radius: 8px; background: #3b6cff } .hl { background: yellow }");
+  const stage = f.document.querySelector("main");
+  stage.innerHTML = '<p>Small <b>model</b> <span class="hl">148 MB</span><span class="badge">in use</span></p>';
+  f.check();
+  const find = (n, pred) => pred(n) ? n : n.kids.map((k) => find(k, pred)).find(Boolean);
+  const tree = f.tree();
+  const badge = find(tree, (n) => n.props.runs?.some((r) => r.t === "in use"));
+  assert.ok(badge, "the badge is a node");
+  assert.deepEqual(badge.props.pad, [1, 6, 1, 6], "with its padding");
+  assert.deepEqual(badge.props.m, [-1, 0, -1, 6], "its margin, less its vertical padding (which overflows the line)");
+  assert.ok(badge.props.br && badge.props.bg, "its corners and background");
+  assert.ok(!badge.props.runs.some((r) => r.t.includes("148")), "not merged into the paragraph's runs");
+  const line = find(tree, (n) => n.kids.includes(badge));
+  assert.equal(line.props.fd, "row", "the paragraph is a line with the badge in it");
+  const text = line.kids.find((k) => k !== badge && k.kind === "text");
+  const ts = text.props.runs.map((r) => r.t).join("");
+  assert.ok(ts.includes("model") && ts.includes("148 MB"), "bold text and the highlight stay runs");
+}
+
+// Amid the text, a padded inline (a <code> in prose, a boxed one inside a
+// plain link) stays a run: the paragraph stays one text, not a row of columns.
+// At the start of the line, a badge is an inline box too.
+{
+  const f = fixture("code, .pad { padding: 2px 4px; border-radius: 3px; background: #eee } .tag { padding: 0 4px; border-radius: 4px; margin-right: 6px; background: #3b6cff }");
+  const stage = f.document.querySelector("main");
+  stage.innerHTML = '<p id="a">Run <code>zig build</code> then wait for the long build to finish.</p>' +
+    '<p id="b">See <a>the docs <span class="pad">x</span></a> here.</p>' +
+    '<p id="c"><span class="tag">NEW</span>Faster builds</p>';
+  f.check();
+  const find = (n, pred) => pred(n) ? n : n.kids.map((k) => find(k, pred)).find(Boolean);
+  const tree = f.tree();
+  const prose = find(tree, (n) => n.kind === "text" && n.props.runs?.some((r) => r.t.includes("zig build")));
+  assert.ok(prose && prose.props.runs.some((r) => r.t.includes("then wait")), "prose with a padded code is one text");
+  const link = find(tree, (n) => n.kind === "text" && n.props.runs?.some((r) => r.t.includes("the docs")));
+  assert.ok(link && link.props.runs.some((r) => r.t.includes("here")), "a boxed inline inside a link mid-line stays in the paragraph's text");
+  const tag = find(tree, (n) => n.props.runs?.length === 1 && n.props.runs[0].t === "NEW");
+  assert.ok(tag && tag.props.pad && tag.props.br, "a leading badge is an inline box");
+  assert.equal(find(tree, (n) => n.kids.includes(tag)).props.fd, "row", "in a line with its text");
+}
+
+// A canvas a max-width may narrow keeps its shape: its parent's stretch
+// gives the width, capped at its bitmap's, with height capped to match
+// (Yoga takes a ratio from a width before clamping that width). Without a
+// max-width it keeps its bitmap's size.
+{
+  const f = fixture("div, canvas { display: block } .fit { max-width: 100% }");
+  const main = f.document.querySelector("main");
+  main.innerHTML = '<div><canvas class="fit"></canvas></div><div><canvas></canvas></div>';
+  for (const c of main.querySelectorAll("canvas")) { c.width = 428; c.height = 40; }
+  f.check();
+  const find = (n, pred, out = []) => { if (pred(n)) out.push(n); n.kids.forEach((k) => find(k, pred, out)); return out; };
+  const [fit, fixed] = find(f.tree(), (n) => n.kind === "canvas");
+  assert.equal(fit.props.w, undefined, "no set width: the parent stretches it");
+  assert.equal(fit.props.maxw, 428, "no wider than its bitmap");
+  assert.ok(Math.abs(fit.props.maxh - 40) < 1e-9, "no taller than its bitmap");
+  assert.ok(Math.abs(fit.props.ar - 10.7) < 1e-9, "its bitmap's ratio");
+  assert.deepEqual([fixed.props.w, fixed.props.h], [428, 40], "without a max-width: its bitmap's size");
+}
+
+// Block flow's vertical margins collapse as in a browser: adjacent blocks
+// share the larger margin (a negative one subtracts), a first or last
+// block's margin goes through a parent with no padding or border on that
+// side, and nothing collapses in a flex container, through a padded,
+// clipped or flex-item parent, or across a line of text.
+{
+  const f = fixture(".box { padding: 1px } p { margin: 10px 0 } .big { margin-top: 20px } .neg { margin-top: -4px }" +
+    " .wrap { margin: 5px 0 } .pad { padding-top: 2px } .clip { overflow: hidden } .row { display: flex; flex-direction: column }");
+  const main = f.document.querySelector("main");
+  main.innerHTML =
+    '<div class="box"><p>s1</p><p class="big">s2</p><p class="neg">s3</p></div>' +
+    '<div class="box"><div class="wrap" id="w"><p>t1</p></div></div>' +
+    '<div class="box"><div class="wrap pad" id="wp"><p>u1</p></div></div>' +
+    '<div class="box"><div class="wrap clip" id="wc"><p>v1</p></div></div>' +
+    '<div class="box"><p>x1</p>loose text<p>x2</p></div>' +
+    '<div class="box row"><p>y1</p><p>y2</p></div>';
+  f.check();
+  const find = (n, pred) => pred(n) ? n : n.kids.map((k) => find(k, pred)).find(Boolean);
+  const tree = f.tree();
+  const text = (t) => find(tree, (n) => n.kind === "text" && n.props.runs?.length === 1 && n.props.runs[0].t === t);
+  const m = (n) => n.props.m ?? [0, 0, 0, 0];
+  const parentOf = (k) => find(tree, (n) => n.kids.includes(k));
+  assert.deepEqual([m(text("s1"))[2], m(text("s2"))[0]], [20, 0], "adjacent blocks: the larger margin");
+  assert.deepEqual([m(text("s2"))[2], m(text("s3"))[0]], [6, 0], "a negative margin subtracts");
+  const w = parentOf(text("t1"));
+  assert.deepEqual([m(w)[0], m(w)[2], m(text("t1"))[0], m(text("t1"))[2]], [10, 10, 0, 0], "first and last child's margins go through the parent");
+  const wp = parentOf(text("u1"));
+  assert.deepEqual([m(wp)[0], m(text("u1"))[0]], [5, 10], "not through a padded side");
+  assert.deepEqual([m(wp)[2], m(text("u1"))[2]], [10, 0], "the other side still collapses");
+  const wc = parentOf(text("v1"));
+  assert.deepEqual([m(wc)[0], m(text("v1"))[0]], [5, 10], "not through a clipped parent");
+  assert.deepEqual([m(text("x1"))[2], m(text("x2"))[0]], [10, 10], "a line of text between blocks keeps both");
+  assert.deepEqual([m(text("y1"))[2], m(text("y2"))[0]], [10, 10], "a flex container's items don't collapse");
+  // Rendered again after a change elsewhere: the reused blocks collapse
+  // the same (their saved nodes keep the margins as made).
+  main.firstChild.querySelector(".big").textContent = "s2 again";
+  f.check();
+  const again = f.tree();
+  const t1 = find(again, (n) => n.kind === "text" && n.props.runs?.[0]?.t === "t1");
+  assert.equal(m(t1)[0], 0);
+  assert.equal(m(find(again, (n) => n.kids.includes(t1)))[0], 10);
+}
+
+// Vite's starters: <html>'s color and font reach the text (the UA sheet
+// sets them on html, not body); `flex: <width>` is 1 1 <width>;
+// inset-inline and the small/dynamic viewport units; an SVG picture is an
+// icon sized by its ratio; a <use> of another file's symbol (a sprite).
+{
+  const { document } = parseHTML("<html><body><main></main></body></html>");
+  const css = ":root { --t: #9ca3af; color: var(--t); font: 18px/145% sans-serif } li { flex: calc(50% - 8px) } .tall { display: flex; flex-direction: column; place-content: center } .ab { position: absolute; inset-inline: 0; top: 4px }" +
+    " .tall { min-height: 100svh } .logo { height: 26px; width: auto }";
+  const { renderer, tree } = makeRenderer(document, css);
+  const files = {
+    "icons.svg": '<svg xmlns="http://www.w3.org/2000/svg"><symbol id="gh" viewBox="0 0 16 16"><path d="M0 0h16v16z"/></symbol></svg>',
+    "assets/logo.svg": '<svg xmlns="http://www.w3.org/2000/svg" width="77" height="47" viewBox="0 0 77 47"><mask id="m"><path d="M1 1h2v2z"/></mask><path fill="#9135ff" d="M0 0h77v47z"/><g mask="url(#m)"><path d="M5 5h9v9z"/></g></svg>',
+  };
+  renderer.host.asset = (p) => files[p];
+  document.querySelector("main").innerHTML = '<p>Edit <code>x</code></p><ul><li>a</li><li>b</li></ul><div class="ab">abs</div><div class="tall">t</div>' +
+    '<img class="logo" src="./assets/logo.svg"><svg class="i"><use href="/icons.svg#gh"></use></svg>';
+  renderer.render();
+  const find = (n, pred) => pred(n) ? n : n.kids.map((k) => find(k, pred)).find(Boolean);
+  const t = tree();
+  const edit = find(t, (n) => n.props.runs?.[0]?.t.trim() === "Edit");
+  assert.deepEqual(edit.props.col, [156, 163, 175, 1], "html's color reaches the paragraph");
+  assert.equal(edit.props.fz, 18, "and its font size");
+  // The item's box (its text in it, beside its marker).
+  const li = find(t, (n) => n.kids.some((k) => k.props.runs?.[0]?.t.trim() === "a"));
+  assert.equal(li.props.fg, 1, "flex: <width> grows");
+  assert.equal(li.props.fs, 1, "and shrinks");
+  const ab = find(t, (n) => n.props.runs?.[0]?.t.trim() === "abs");
+  assert.deepEqual([ab.props.ins[1], ab.props.ins[3]], [0, 0], "inset-inline: left and right");
+  const tall = find(t, (n) => n.kids.some((k) => k.props.runs?.[0]?.t.trim() === "t"));
+  assert.equal(tall.props.minh, viewport.height, "svh is the viewport's height");
+  assert.equal(tall.props.jc, "center", "place-content: justify-content too");
+  const icons = [];
+  const all = (n) => { if (n.kind === "icon") icons.push(n); n.kids.forEach(all); };
+  all(t);
+  assert.equal(icons.length, 2, "the SVG picture and the sprite's symbol are icons");
+  const [logo, gh] = icons;
+  assert.deepEqual(logo.props.icon.vb, [0, 0, 77, 47]);
+  assert.equal(logo.props.h, 26);
+  assert.equal(logo.props.w, undefined, "width: auto: from the ratio");
+  assert.ok(Math.abs(logo.props.ar - 77 / 47) < 1e-9);
+  assert.equal(logo.props.icon.shapes.length, 1, "the mask and the masked group are left out");
+  assert.deepEqual(gh.props.icon.vb, [0, 0, 16, 16], "the other file's symbol");
+}
+
+// calc() with a percentage: sent as "P%±Npx" for sizes and flex-basis
+// (tree.zig resolves it against the container); without one, px as before.
+{
+  const { document } = parseHTML("<html><body><main></main></body></html>");
+  const css = ".a { flex: calc(50% - 8px) } .b { width: calc(25% + 1rem); max-width: calc(100% / 3 - 2px) } .c { width: calc(10px + 2em); font-size: 10px } .d { height: calc(100% * 50%) }";
+  const { renderer, tree } = makeRenderer(document, css);
+  document.querySelector("main").innerHTML = '<div class="a">a</div><div class="b">b</div><div class="c">c</div><div class="d">d</div>';
+  renderer.render();
+  const find = (n, pred) => pred(n) ? n : n.kids.map((k) => find(k, pred)).find(Boolean);
+  const t = tree();
+  const of = (s) => find(t, (n) => n.props.runs?.[0]?.t.trim() === s).props;
+  assert.equal(of("a").fb, "50%-8px");
+  assert.equal(of("b").w, "25%+16px");
+  assert.ok(/^33\.33\d*%-2px$/.test(of("b").maxw), of("b").maxw);
+  assert.equal(of("c").w, 30, "no percentage: px");
+  assert.equal(of("d").h, undefined, "% times %: not a length");
+}
+
+// Run backgrounds: an inline element's (and what's inside it), never the
+// box that holds the text (it paints its own; a run's band would spill out
+// of a short line box).
+{
+  const { document } = parseHTML('<html><body><h1 class="box">Big title</h1><p>a <mark>marked <b>bold</b></mark> end</p></body></html>');
+  const { renderer, tree } = makeRenderer(document, ".box { background: #224; line-height: 10px; font-size: 36px } mark { background: yellow }");
+  renderer.render();
+  const texts = [];
+  const all = (n) => { if (n.props.runs) texts.push(n); n.kids.forEach(all); };
+  all(tree());
+  const h1 = texts.find((n) => n.props.runs.some((r) => r.t.includes("Big")));
+  assert.ok(h1.props.runs.every((r) => r.bg === undefined), "the h1's own background isn't its run's");
+  const p = texts.find((n) => n.props.runs.some((r) => r.t.includes("marked")));
+  const byText = (t) => p.props.runs.find((r) => r.t.includes(t));
+  assert.equal(byText("a ").bg, undefined);
+  assert.deepEqual(byText("marked").bg, [255, 255, 0, 1]);
+  assert.deepEqual(byText("bold").bg, [255, 255, 0, 1], "inside the mark: its background");
+  assert.equal(byText("end").bg, undefined);
+}
+
+// outline: sent only when there is one (none, hidden or 0 wide: no prop).
+{
+  const { document } = parseHTML('<html><body><div class="a">a</div><div class="b">b</div><div class="c">c</div><div class="d">d</div></body></html>');
+  const { renderer, tree } = makeRenderer(document, ".a { outline: 2px dashed red; outline-offset: 3px } .b { outline: thick solid; color: blue } .c { outline: none } .d { outline: 0 solid red }");
+  renderer.render();
+  const boxes = [];
+  const all = (n) => { if (n.props.runs) boxes.push(n); n.kids.forEach(all); };
+  all(tree());
+  const by = (t) => boxes.find((n) => n.props.runs[0].t === t).props;
+  assert.deepEqual(by("a").ol, { w: 2, c: [255, 0, 0, 1], o: 3, s: "dashed" });
+  assert.deepEqual(by("b").ol, { w: 5, c: [0, 0, 255, 1] }, "currentColor; solid without s");
+  assert.equal(by("c").ol, undefined);
+  assert.equal(by("d").ol, undefined);
+}
+
+// A font size is inherited as its computed length: a span in an h1 (2em)
+// is 32px, not 2em of 32; nested ems still compound.
+{
+  const { document } = parseHTML('<html><body><h1><span style="background: red">h</span></h1><div class="e"><span>a</span><div class="e"><b style="background: red">b</b></div></div></body></html>');
+  const { renderer, tree } = makeRenderer(document, ".e { font-size: 1.5em }");
+  renderer.render();
+  const sizes = {};
+  const all = (n) => { for (const r of n.props.runs || []) sizes[r.t] = r.sz; n.kids.forEach(all); };
+  all(tree());
+  assert.deepEqual(sizes, { h: 32, a: 24, b: 36 });
+}
+
+// border-radius per axis: one length per corner when its axes agree, else
+// [x, y] ("a / b", or a longhand's two values); percentages stay "N%".
+{
+  const { document } = parseHTML('<html><body><div class="a">a</div><div class="b">b</div><div class="c">c</div><div class="d">d</div><div class="e">e</div></body></html>');
+  const { renderer, tree } = makeRenderer(document, ".a { border-radius: 50% } .b { border-radius: 10px / 20px } .c { border-radius: 4px 8px / 2px } .d { border-top-left-radius: 6px 12px } .e { border-radius: 0 }");
+  renderer.render();
+  const boxes = [];
+  const all = (n) => { if (n.props.runs) boxes.push(n); n.kids.forEach(all); };
+  all(tree());
+  const by = (t) => boxes.find((n) => n.props.runs[0].t === t).props;
+  assert.deepEqual(by("a").br, ["50%", "50%", "50%", "50%"]);
+  assert.deepEqual(by("b").br, [[10, 20], [10, 20], [10, 20], [10, 20]]);
+  assert.deepEqual(by("c").br, [[4, 2], [8, 2], [4, 2], [8, 2]]);
+  assert.deepEqual(by("d").br, [[6, 12], 0, 0, 0]);
+  assert.equal(by("e").br, undefined);
+}
+
+// A calc() of numbers, parsed (not compiled: the app's CSP may refuse eval).
+assert.equal(arithmetic("1.05"), 1.05);
+assert.equal(arithmetic("(1 + 0.5) * 2"), 3);
+assert.equal(arithmetic("-(2 - 3) / 4"), 0.25);
+assert.ok(Number.isNaN(arithmetic("1 +")));
+assert.ok(Number.isNaN(arithmetic("(1")));
+
+console.log("render: incremental trees, selector sharing, and wire defaults pass");
+
+// A native button elsewhere on the page (volatile: made again every render)
+// doesn't stop a text cell's in-place update, and the result matches a full
+// render; text inside the button still goes the general way.
+{
+  const f = fixture("div { display: flex } span { overflow: hidden }", true);
+  const main = f.document.querySelector("main");
+  main.innerHTML = '<div><span>Old</span><button>Act</button></div>';
+  f.check();
+  const label = main.querySelector("span"), button = main.querySelector("button");
+  for (const text of ["New", "Newer"]) {
+    label.textContent = text;
+    f.check();
+  }
+  button.textContent = "Done";
+  f.check();
+  console.log("render: text cells update in place beside native buttons");
+}

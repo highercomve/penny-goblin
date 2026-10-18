@@ -1,0 +1,866 @@
+//! NSIS script generator for building Windows installers (`setup.exe`).
+//!
+//! Generates a modern per-user NSIS script with:
+//! - No administrative privileges required (installs to `$LOCALAPPDATA\Programs\<name>`)
+//! - Start Menu shortcut and uninstaller
+//! - HKCU registry registration under `Software\Microsoft\Windows\CurrentVersion\Uninstall\<id>`
+//! - Bundled application executable, optional `WebView2Loader.dll`, and the
+//!   package's extra executables and files (removed again by the uninstaller)
+//! - Automatic detection of the Microsoft Edge WebView2 Evergreen runtime
+//!   with bootstrapper download/install prompt if missing.
+
+const std = @import("std");
+const metadata = @import("metadata.zig");
+const contents = @import("contents.zig");
+
+pub const NsisOptions = struct {
+    name: []const u8,
+    version: []const u8,
+    publisher: []const u8,
+    id: []const u8,
+    exe_name: []const u8,
+    binary_src: []const u8,
+    out_file: []const u8,
+    icon_path: ?[]const u8 = null,
+    webview2_loader: ?[]const u8 = null,
+    homepage: ?[]const u8 = null,
+    url_schemes: []const []const u8 = &.{},
+    /// Receiving shares (`.share_target`): a Send To shortcut with this
+    /// name, running the app with `--oriel-send-to` (Explorer appends the
+    /// files). Null: none.
+    send_to: ?[]const u8 = null,
+    /// "Open with" for these extensions (".txt" or "txt"), running the app
+    /// with `--oriel-open-with "%1"`.
+    open_with_extensions: []const []const u8 = &.{},
+    estimated_size_kb: ?u64 = null,
+    /// Other executables, installed into `$INSTDIR` under `name`.
+    extra_exes: []const contents.Exe = &.{},
+    /// Files installed at `$INSTDIR\<rel>` (subdirectories created).
+    extra_files: []const contents.File = &.{},
+};
+
+/// Evergreen WebView2 Runtime bootstrapper download URL (Microsoft official fwlink).
+pub const WEBVIEW2_BOOTSTRAPPER_URL = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
+
+/// Generate the complete NSIS script (.nsi) from application metadata and options.
+pub fn generateNsisScript(allocator: std.mem.Allocator, opts: NsisOptions) ![]const u8 {
+    try validateOptions(opts);
+
+    // Strip trailing .exe if present in exe_name
+    const clean_exe_name = if (std.mem.endsWith(u8, opts.exe_name, ".exe"))
+        opts.exe_name[0 .. opts.exe_name.len - 4]
+    else
+        opts.exe_name;
+
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    defer out.deinit();
+    const w = &out.writer;
+
+    try writeDefines(allocator, w, opts, clean_exe_name);
+    try writePrologue(allocator, w, opts);
+    try writeWebView2Check(w);
+
+    try writeInstallSectionStart(w);
+    try writeExtraInstallFiles(allocator, w, opts);
+    try writeInstallRegistry(w);
+    try writeUrlSchemes(allocator, w, opts, .install);
+    try writeShareTarget(allocator, w, opts, .install);
+
+    try writeUninstallSectionStart(w);
+    try writeExtraUninstallFiles(allocator, w, opts);
+    try w.writeAll(
+        \\  Delete "$INSTDIR\Uninstall.exe"
+        \\
+        \\  Delete "$SMPROGRAMS\${NAME}\${NAME}.lnk"
+        \\  Delete "$SMPROGRAMS\${NAME}\Uninstall ${NAME}.lnk"
+        \\  RMDir "$SMPROGRAMS\${NAME}"
+        \\
+        \\  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}"
+        \\
+    );
+    try writeUrlSchemes(allocator, w, opts, .uninstall);
+    try writeShareTarget(allocator, w, opts, .uninstall);
+    try w.writeAll(
+        \\  RMDir "$INSTDIR"
+        \\
+        \\  ${If} $uninst_remove_data == "1"
+        \\    RMDir /r "$LOCALAPPDATA\${APP_ID}"
+        \\  ${EndIf}
+        \\SectionEnd
+        \\
+    );
+
+    return try allocator.dupe(u8, out.written());
+}
+
+fn validateOptions(opts: NsisOptions) !void {
+    try metadata.validateExeName(opts.exe_name);
+    try metadata.validateNoControlOrNewline(opts.id);
+    if (!metadata.validAppId(opts.id)) return error.InvalidAppId;
+    // Paths makensis reads at compile time (`File`, `Icon`): `$` and `"`
+    // can't be escaped there.
+    try metadata.validateNsisSource(opts.binary_src);
+    if (opts.webview2_loader) |p| try metadata.validateNsisSource(p);
+    if (opts.icon_path) |p| try metadata.validateNsisSource(p);
+    for (opts.extra_exes) |e| try metadata.validateNsisSource(e.src);
+    for (opts.extra_files) |f| try metadata.validateNsisSource(f.src);
+}
+
+/// The script's header and its `!define`s; the optional ones only when set.
+fn writeDefines(allocator: std.mem.Allocator, w: *std.Io.Writer, opts: NsisOptions, clean_exe_name: []const u8) !void {
+    const Define = struct { name: []const u8, value: ?[]const u8 };
+    const defines = [_]Define{
+        .{ .name = "NAME", .value = opts.name },
+        .{ .name = "EXE_NAME", .value = clean_exe_name },
+        .{ .name = "VERSION", .value = opts.version },
+        .{ .name = "PUBLISHER", .value = opts.publisher },
+        .{ .name = "APP_ID", .value = opts.id },
+        .{ .name = "BINARY_SRC", .value = opts.binary_src },
+        .{ .name = "OUT_FILE", .value = opts.out_file },
+        .{ .name = "ICON_PATH", .value = opts.icon_path },
+        .{ .name = "WEBVIEW2_LOADER", .value = opts.webview2_loader },
+        .{ .name = "HOMEPAGE", .value = opts.homepage },
+    };
+
+    try w.writeAll(
+        \\; Generated by Oriel packaging tool - DO NOT EDIT MANUALLY
+        \\Unicode true
+        \\SetCompressor /SOLID zlib
+        \\RequestExecutionLevel user
+        \\
+        \\
+    );
+    for (defines) |d| {
+        const value = d.value orelse continue;
+        const esc = try metadata.escapeNsisString(allocator, value);
+        defer allocator.free(esc);
+        try w.print("!define {s} \"{s}\"\n", .{ d.name, esc });
+    }
+    if (opts.estimated_size_kb) |kb| {
+        try w.print("!define ESTIMATED_SIZE {d}\n", .{kb});
+    }
+}
+
+/// Installer attributes, includes, the ORIEL_REQUIRE_NOT_RUNNING macro and
+/// the Modern UI pages.
+fn writePrologue(allocator: std.mem.Allocator, w: *std.Io.Writer, opts: NsisOptions) !void {
+    try w.writeAll(
+        \\
+        \\Name "${NAME}"
+        \\OutFile "${OUT_FILE}"
+        \\InstallDir "$LOCALAPPDATA\Programs\${NAME}"
+        \\InstallDirRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}" "InstallLocation"
+        \\
+        \\!ifdef ICON_PATH
+        \\Icon "${ICON_PATH}"
+        \\UninstallIcon "${ICON_PATH}"
+        \\!endif
+        \\
+        \\!include "MUI2.nsh"
+        \\!include "LogicLib.nsh"
+        \\!include "FileFunc.nsh"
+        \\!insertmacro un.GetParameters
+        \\!insertmacro un.GetOptions
+        \\
+        \\; A running program keeps its exe locked: Delete/File would skip it and
+        \\; the (un)install would still report success. Opening an exe for writing
+        \\; fails while it runs (and changes nothing otherwise), so check the app
+        \\; and every extra executable first.
+        \\!macro ORIEL_REQUIRE_NOT_RUNNING
+        \\
+    );
+    try writeRunningCheck(w, 0, "${EXE_NAME}.exe", "${NAME}", " (it may be in the notification area)");
+    for (opts.extra_exes, 1..) |e, i| {
+        try metadata.validateExeName(e.name);
+        const esc_extra = try metadata.escapeNsisString(allocator, e.name);
+        defer allocator.free(esc_extra);
+        try writeRunningCheck(w, i, esc_extra, esc_extra, "");
+    }
+    try w.writeAll(
+        \\!macroend
+        \\
+        \\!define MUI_ABORTWARNING
+        \\!ifdef ICON_PATH
+        \\!define MUI_ICON "${ICON_PATH}"
+        \\!define MUI_UNICON "${ICON_PATH}"
+        \\!endif
+        \\
+        \\!insertmacro MUI_PAGE_DIRECTORY
+        \\!insertmacro MUI_PAGE_INSTFILES
+        \\
+        \\!insertmacro MUI_UNPAGE_CONFIRM
+        \\!insertmacro MUI_UNPAGE_INSTFILES
+        \\
+        \\!insertmacro MUI_LANGUAGE "English"
+        \\
+        \\
+    );
+}
+
+fn writeWebView2Check(w: *std.Io.Writer) !void {
+    try w.writeAll(
+        \\; Check for the Microsoft Edge WebView2 Evergreen runtime.
+        \\; Checks HKCU and HKLM in both 64-bit and 32-bit registry views.
+        \\Function CheckWebView2
+        \\  Var /GLOBAL wv2_installed
+        \\  StrCpy $wv2_installed "0"
+        \\
+        \\  ReadRegStr $0 HKCU "Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
+        \\  ${If} $0 != ""
+        \\  ${AndIf} $0 != "0.0.0.0"
+        \\    StrCpy $wv2_installed "1"
+        \\  ${EndIf}
+        \\
+        \\  ${If} $wv2_installed == "0"
+        \\    ReadRegStr $0 HKLM "Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
+        \\    ${If} $0 != ""
+        \\    ${AndIf} $0 != "0.0.0.0"
+        \\      StrCpy $wv2_installed "1"
+        \\    ${EndIf}
+        \\  ${EndIf}
+        \\
+        \\  ${If} $wv2_installed == "0"
+        \\    ReadRegStr $0 HKLM "Software\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
+        \\    ${If} $0 != ""
+        \\    ${AndIf} $0 != "0.0.0.0"
+        \\      StrCpy $wv2_installed "1"
+        \\    ${EndIf}
+        \\  ${EndIf}
+        \\
+        \\  ${If} $wv2_installed == "0"
+        \\    ReadRegStr $0 HKCU "Software\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
+        \\    ${If} $0 != ""
+        \\    ${AndIf} $0 != "0.0.0.0"
+        \\      StrCpy $wv2_installed "1"
+        \\    ${EndIf}
+        \\  ${EndIf}
+        \\
+        \\  ${If} $wv2_installed == "0"
+        \\    MessageBox MB_YESNO|MB_ICONEXCLAMATION "Microsoft Edge WebView2 Runtime is required to run ${NAME}.$\n$\nWould you like to download and install it now?" /SD IDNO IDYES install_wv2 IDNO skip_wv2
+        \\    install_wv2:
+        \\      DetailPrint "Downloading WebView2 Runtime bootstrapper..."
+        \\      nsExec::Exec `powershell -NoProfile -ExecutionPolicy Bypass -Command "$$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object System.Net.WebClient).DownloadFile('https://go.microsoft.com/fwlink/p/?LinkId=2124703', '$TEMP\MicrosoftEdgeWebview2Setup.exe')"`
+        \\      Pop $0
+        \\      ${If} $0 == 0
+        \\        DetailPrint "Installing WebView2 Runtime..."
+        \\        ExecWait '"$TEMP\MicrosoftEdgeWebview2Setup.exe" /silent /install' $1
+        \\        Delete "$TEMP\MicrosoftEdgeWebview2Setup.exe"
+        \\      ${Else}
+        \\        ExecShell "open" "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+        \\      ${EndIf}
+        \\      Goto done_wv2
+        \\    skip_wv2:
+        \\      MessageBox MB_ICONINFORMATION "Please install Microsoft Edge WebView2 Runtime manually before running ${NAME}:$\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703"
+        \\    done_wv2:
+        \\  ${EndIf}
+        \\FunctionEnd
+        \\
+        \\
+    );
+}
+
+/// The install section up to the app's own files: the running check, then
+/// the installed version's uninstaller for an upgrade.
+fn writeInstallSectionStart(w: *std.Io.Writer) !void {
+    try w.writeAll(
+        \\Section "Install"
+        \\  ; First, by name, whatever of ours is installed and running; the old
+        \\  ; uninstaller below then refuses for files under older names.
+        \\  !insertmacro ORIEL_REQUIRE_NOT_RUNNING
+        \\  ; Upgrade: the installed version removes its own files first (their names
+        \\  ; may differ from ours), in place and keeping the user's data.
+        \\  ReadRegStr $R8 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}" "UninstallString"
+        \\  ${If} $R8 != ""
+        \\  ${AndIf} ${FileExists} "$INSTDIR\Uninstall.exe"
+        \\  oriel_upgrade_uninstall:
+        \\    DetailPrint "Removing the installed version of ${NAME}..."
+        \\    ClearErrors
+        \\    ExecWait '"$INSTDIR\Uninstall.exe" /S _?=$INSTDIR' $R7
+        \\    ${If} ${Errors}
+        \\      DetailPrint "Could not run the previous uninstaller: continuing."
+        \\    ${ElseIf} $R7 == 2
+        \\      IfSilent oriel_upgrade_abort
+        \\      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${NAME} (or one of its programs) is running. Close it (it may be in the notification area), then click Retry." IDRETRY oriel_upgrade_uninstall
+        \\    oriel_upgrade_abort:
+        \\      SetErrorLevel 2
+        \\      DetailPrint "${NAME} (or one of its programs) is running: close it and try again."
+        \\      Abort
+        \\    ${ElseIf} $R7 != 0
+        \\      DetailPrint "The previous uninstaller exited with $R7: continuing."
+        \\    ${EndIf}
+        \\    ; Run in place, it can't delete itself.
+        \\    Delete "$INSTDIR\Uninstall.exe"
+        \\  ${EndIf}
+        \\  Call CheckWebView2
+        \\
+        \\  SetOutPath "$INSTDIR"
+        \\  File "/oname=${EXE_NAME}.exe" "${BINARY_SRC}"
+        \\  !ifdef WEBVIEW2_LOADER
+        \\  File "/oname=WebView2Loader.dll" "${WEBVIEW2_LOADER}"
+        \\  !endif
+        \\
+    );
+}
+
+/// Extra executables and files (paths validated: no `..`, no `\\`).
+fn writeExtraInstallFiles(allocator: std.mem.Allocator, w: *std.Io.Writer, opts: NsisOptions) !void {
+    for (opts.extra_exes) |e| {
+        try metadata.validateExeName(e.name);
+        const esc_src = try metadata.escapeNsisString(allocator, e.src);
+        defer allocator.free(esc_src);
+        const esc_dest = try metadata.escapeNsisString(allocator, e.name);
+        defer allocator.free(esc_dest);
+        try w.print("  File \"/oname=$INSTDIR\\{s}\" \"{s}\"\n", .{ esc_dest, esc_src });
+    }
+    for (opts.extra_files) |f| {
+        try metadata.validateRelativePath(f.rel);
+        const esc_src = try metadata.escapeNsisString(allocator, f.src);
+        defer allocator.free(esc_src);
+        const esc_dest = try windowsRelPath(allocator, f.rel);
+        defer allocator.free(esc_dest);
+        if (std.mem.lastIndexOfScalar(u8, esc_dest, '\\')) |slash| {
+            try w.print("  CreateDirectory \"$INSTDIR\\{s}\"\n", .{esc_dest[0..slash]});
+        }
+        try w.print("  File \"/oname=$INSTDIR\\{s}\" \"{s}\"\n", .{ esc_dest, esc_src });
+    }
+}
+
+/// The uninstaller, Start Menu shortcuts and the Add/Remove Programs entry.
+fn writeInstallRegistry(w: *std.Io.Writer) !void {
+    try w.writeAll(
+        \\
+        \\  ; Generate uninstaller
+        \\  WriteUninstaller "$INSTDIR\Uninstall.exe"
+        \\
+        \\  ; Start Menu Shortcuts
+        \\  CreateDirectory "$SMPROGRAMS\${NAME}"
+        \\  CreateShortcut "$SMPROGRAMS\${NAME}\${NAME}.lnk" "$INSTDIR\${EXE_NAME}.exe" "" "$INSTDIR\${EXE_NAME}.exe" 0
+        \\  CreateShortcut "$SMPROGRAMS\${NAME}\Uninstall ${NAME}.lnk" "$INSTDIR\Uninstall.exe" "" "$INSTDIR\Uninstall.exe" 0
+        \\
+        \\  ; Add/Remove Programs registry entry under HKCU
+        \\  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}" "DisplayName" "${NAME}"
+        \\  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}" "DisplayVersion" "${VERSION}"
+        \\  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}" "Publisher" "${PUBLISHER}"
+        \\  !ifdef ESTIMATED_SIZE
+        \\  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}" "EstimatedSize" ${ESTIMATED_SIZE}
+        \\  !endif
+        \\  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}" "UninstallString" "$\"$INSTDIR\Uninstall.exe$\""
+        \\  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}" "QuietUninstallString" "$\"$INSTDIR\Uninstall.exe$\" /S"
+        \\  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}" "DisplayIcon" "$\"$INSTDIR\${EXE_NAME}.exe$\""
+        \\  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}" "InstallLocation" "$INSTDIR"
+        \\  !ifdef HOMEPAGE
+        \\  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}" "URLInfoAbout" "${HOMEPAGE}"
+        \\  !endif
+        \\
+    );
+}
+
+/// URL protocol handlers under HKCU\Software\Classes, or their removal.
+fn writeUrlSchemes(allocator: std.mem.Allocator, w: *std.Io.Writer, opts: NsisOptions, comptime part: enum { install, uninstall }) !void {
+    for (opts.url_schemes) |s| {
+        try metadata.validateNoControlOrNewline(s);
+        if (!metadata.isValidSchemeFormat(s)) return error.InvalidUrlScheme;
+        const esc_s = try metadata.escapeNsisString(allocator, s);
+        defer allocator.free(esc_s);
+        if (part == .uninstall) {
+            try w.print("  DeleteRegKey HKCU \"Software\\Classes\\{s}\"\n", .{esc_s});
+            continue;
+        }
+        try w.print("  ; URL Protocol handler for {s}\n", .{esc_s});
+        try w.print("  WriteRegStr HKCU \"Software\\Classes\\{s}\" \"\" \"URL:${{NAME}}\"\n", .{esc_s});
+        try w.print("  WriteRegStr HKCU \"Software\\Classes\\{s}\" \"URL Protocol\" \"\"\n", .{esc_s});
+        try w.print("  WriteRegStr HKCU \"Software\\Classes\\{s}\\shell\\open\\command\" \"\" \"$\\\"$INSTDIR\\${{EXE_NAME}}.exe$\\\" $\\\"%1$\\\"\"\n", .{esc_s});
+    }
+}
+
+/// The uninstall section up to the extra files: the running check, the
+/// question about the user's data, and the app's own files.
+fn writeUninstallSectionStart(w: *std.Io.Writer) !void {
+    try w.writeAll(
+        \\SectionEnd
+        \\
+        \\Section "Uninstall"
+        \\  !insertmacro ORIEL_REQUIRE_NOT_RUNNING
+        \\  Var /GLOBAL uninst_remove_data
+        \\  StrCpy $uninst_remove_data "0"
+        \\
+        \\  ${If} ${Silent}
+        \\    ${un.GetParameters} $R0
+        \\    ${un.GetOptions} $R0 "/REMOVEDATA" $R1
+        \\    ${IfNot} ${Errors}
+        \\      StrCpy $uninst_remove_data "1"
+        \\    ${EndIf}
+        \\  ${Else}
+        \\    MessageBox MB_YESNO|MB_DEFBUTTON2|MB_ICONQUESTION "Do you want to remove application data for ${NAME} (including WebView2 profile and logs)?" IDYES uninst_do_remove IDNO uninst_skip_remove
+        \\    uninst_do_remove:
+        \\      StrCpy $uninst_remove_data "1"
+        \\    uninst_skip_remove:
+        \\  ${EndIf}
+        \\
+        \\  Delete "$INSTDIR\${EXE_NAME}.exe"
+        \\  !ifdef WEBVIEW2_LOADER
+        \\  Delete "$INSTDIR\WebView2Loader.dll"
+        \\  !endif
+        \\
+    );
+}
+
+fn writeExtraUninstallFiles(allocator: std.mem.Allocator, w: *std.Io.Writer, opts: NsisOptions) !void {
+    for (opts.extra_exes) |e| {
+        const esc_dest = try metadata.escapeNsisString(allocator, e.name);
+        defer allocator.free(esc_dest);
+        try w.print("  Delete \"$INSTDIR\\{s}\"\n", .{esc_dest});
+    }
+    for (opts.extra_files) |f| {
+        const esc_dest = try windowsRelPath(allocator, f.rel);
+        defer allocator.free(esc_dest);
+        try w.print("  Delete \"$INSTDIR\\{s}\"\n", .{esc_dest});
+    }
+    // The directories the files needed, deepest first; RMDir without /r
+    // leaves a directory that still holds something (e.g. the user's files).
+    var dirs: std.ArrayList([]const u8) = .empty;
+    defer dirs.deinit(allocator);
+    for (opts.extra_files) |f| {
+        var it = contents.parentDirs(f.rel);
+        while (it.next()) |d| {
+            for (dirs.items) |seen| {
+                if (std.mem.eql(u8, seen, d)) break;
+            } else try dirs.append(allocator, d);
+        }
+    }
+    std.mem.sort([]const u8, dirs.items, {}, struct {
+        fn deeperFirst(_: void, a: []const u8, b: []const u8) bool {
+            const da = std.mem.count(u8, a, "/");
+            const db = std.mem.count(u8, b, "/");
+            return if (da != db) da > db else std.mem.lessThan(u8, a, b);
+        }
+    }.deeperFirst);
+    for (dirs.items) |d| {
+        const esc_dir = try windowsRelPath(allocator, d);
+        defer allocator.free(esc_dir);
+        try w.print("  RMDir \"$INSTDIR\\{s}\"\n", .{esc_dir});
+    }
+}
+
+/// The share target's entries (src/modules/share/windows.zig reads the
+/// launches): a Send To shortcut, and "Open with" through a ProgID
+/// (`<id>.share`) listed in each extension's OpenWithProgids plus the
+/// exe's Applications key. All per user (HKCU), removed by the uninstaller.
+fn writeShareTarget(allocator: std.mem.Allocator, w: *std.Io.Writer, opts: NsisOptions, comptime part: enum { install, uninstall }) !void {
+    if (opts.send_to) |label| {
+        if (!validSendToLabel(label)) return error.InvalidSendToLabel;
+        const esc = try metadata.escapeNsisString(allocator, label);
+        defer allocator.free(esc);
+        if (part == .install) {
+            try w.print("  ; Share target: Send To\n", .{});
+            try w.print("  CreateShortcut \"$SENDTO\\{s}.lnk\" \"$INSTDIR\\${{EXE_NAME}}.exe\" \"--oriel-send-to\" \"$INSTDIR\\${{EXE_NAME}}.exe\" 0\n", .{esc});
+        } else {
+            try w.print("  Delete \"$SENDTO\\{s}.lnk\"\n", .{esc});
+        }
+    }
+    if (opts.open_with_extensions.len == 0) return;
+    const command = "$\\\"$INSTDIR\\${EXE_NAME}.exe$\\\" --oriel-open-with $\\\"%1$\\\"";
+    if (part == .install) {
+        try w.writeAll("  ; Share target: Open with\n");
+        try w.writeAll("  WriteRegStr HKCU \"Software\\Classes\\${APP_ID}.share\" \"\" \"${NAME}\"\n");
+        try w.writeAll("  WriteRegStr HKCU \"Software\\Classes\\${APP_ID}.share\\DefaultIcon\" \"\" \"$INSTDIR\\${EXE_NAME}.exe,0\"\n");
+        try w.writeAll("  WriteRegStr HKCU \"Software\\Classes\\${APP_ID}.share\\shell\\open\\command\" \"\" \"" ++ command ++ "\"\n");
+        try w.writeAll("  WriteRegStr HKCU \"Software\\Classes\\Applications\\${EXE_NAME}.exe\" \"FriendlyAppName\" \"${NAME}\"\n");
+        try w.writeAll("  WriteRegStr HKCU \"Software\\Classes\\Applications\\${EXE_NAME}.exe\\shell\\open\\command\" \"\" \"" ++ command ++ "\"\n");
+    }
+    for (opts.open_with_extensions) |raw| {
+        var buf: [40]u8 = undefined;
+        const ext = normalizeExtension(&buf, raw) orelse return error.InvalidExtension;
+        if (part == .install) {
+            try w.print("  WriteRegStr HKCU \"Software\\Classes\\{s}\\OpenWithProgids\" \"${{APP_ID}}.share\" \"\"\n", .{ext});
+            try w.print("  WriteRegStr HKCU \"Software\\Classes\\Applications\\${{EXE_NAME}}.exe\\SupportedTypes\" \"{s}\" \"\"\n", .{ext});
+        } else {
+            // Only our value: the key may have been there before (empty
+            // too), so it stays.
+            try w.print("  DeleteRegValue HKCU \"Software\\Classes\\{s}\\OpenWithProgids\" \"${{APP_ID}}.share\"\n", .{ext});
+        }
+    }
+    if (part == .uninstall) {
+        try w.writeAll("  DeleteRegKey HKCU \"Software\\Classes\\${APP_ID}.share\"\n");
+        try w.writeAll("  DeleteRegKey HKCU \"Software\\Classes\\Applications\\${EXE_NAME}.exe\"\n");
+    }
+    // Explorer rereads associations.
+    try w.writeAll("  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'\n");
+}
+
+/// A Send To shortcut's name: a file name (no path or reserved characters,
+/// nothing NSIS would expand), 1-64 bytes.
+fn validSendToLabel(label: []const u8) bool {
+    if (label.len == 0 or label.len > 64) return false;
+    if (label[0] == ' ' or label[label.len - 1] == ' ' or label[label.len - 1] == '.') return false;
+    for (label) |c| {
+        if (c < 0x20 or c == 0x7f) return false;
+        if (std.mem.indexOfScalar(u8, "\\/:*?\"<>|$`", c) != null) return false;
+    }
+    return true;
+}
+
+/// ".txt" from "txt" or ".TXT" (lower case), or null when it isn't a
+/// plain extension (letters, digits, `_+-`, up to 32).
+fn normalizeExtension(buf: *[40]u8, raw: []const u8) ?[]const u8 {
+    const bare = if (raw.len > 0 and raw[0] == '.') raw[1..] else raw;
+    if (bare.len == 0 or bare.len > 32) return null;
+    buf[0] = '.';
+    for (bare, 1..) |c, i| {
+        if (!(std.ascii.isAlphanumeric(c) or c == '_' or c == '+' or c == '-')) return null;
+        buf[i] = std.ascii.toLower(c);
+    }
+    return buf[0 .. bare.len + 1];
+}
+
+/// One block of ORIEL_REQUIRE_NOT_RUNNING: if `$INSTDIR\<file>` exists and
+/// can't be opened for writing, `what` is running: Retry/Cancel, or exit 2
+/// when silent. `index` keeps the labels unique within a section; `file`,
+/// `what` and `hint` are already escaped for NSIS strings.
+fn writeRunningCheck(w: *std.Io.Writer, index: usize, file: []const u8, what: []const u8, hint: []const u8) !void {
+    try w.print(
+        \\  ${{If}} ${{FileExists}} "$INSTDIR\{[file]s}"
+        \\  oriel_check_running_{[i]d}:
+        \\    ClearErrors
+        \\    FileOpen $R9 "$INSTDIR\{[file]s}" a
+        \\    ${{If}} ${{Errors}}
+        \\      IfSilent oriel_running_abort_{[i]d}
+        \\      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "{[what]s} is running. Close it{[hint]s}, then click Retry." IDRETRY oriel_check_running_{[i]d}
+        \\    oriel_running_abort_{[i]d}:
+        \\      SetErrorLevel 2
+        \\      DetailPrint "{[what]s} is running: close it and try again."
+        \\      Abort
+        \\    ${{EndIf}}
+        \\    FileClose $R9
+        \\  ${{EndIf}}
+        \\
+    , .{ .file = file, .i = index, .what = what, .hint = hint });
+}
+
+/// `rel` with `\\` separators, escaped for an NSIS string. Caller frees.
+fn windowsRelPath(allocator: std.mem.Allocator, rel: []const u8) ![]u8 {
+    const esc = try metadata.escapeNsisString(allocator, rel);
+    const owned: []u8 = @constCast(esc);
+    std.mem.replaceScalar(u8, owned, '/', '\\');
+    return owned;
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+test {
+    std.testing.refAllDecls(@This());
+}
+
+test "generateNsisScript produces valid script with all options and escaping" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    const opts = NsisOptions{
+        .name = "Oriel \"React\" Notes $1",
+        .version = "0.2.0",
+        .publisher = "Oriel \"Team\" $Org",
+        .id = "dev.oriel.ReactNotes",
+        .exe_name = "oriel-react-notes",
+        .binary_src = "/path/to/bin with spaces/notes.exe",
+        .out_file = "/path/to/out/setup.exe",
+        .icon_path = "/path/to/icon.ico",
+        .webview2_loader = "/path/to/WebView2Loader.dll",
+        .homepage = "https://oriel.dev",
+        .estimated_size_kb = 2048,
+    };
+
+    const script = try generateNsisScript(allocator, opts);
+    defer allocator.free(script);
+
+    // Verify escaped defines
+    try testing.expect(std.mem.indexOf(u8, script, "!define NAME \"Oriel $\\\"React$\\\" Notes $$1\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "!define PUBLISHER \"Oriel $\\\"Team$\\\" $$Org\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "!define EXE_NAME \"oriel-react-notes\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "!define VERSION \"0.2.0\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "!define APP_ID \"dev.oriel.ReactNotes\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "!define ICON_PATH \"/path/to/icon.ico\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "!define WEBVIEW2_LOADER \"/path/to/WebView2Loader.dll\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "!define HOMEPAGE \"https://oriel.dev\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "!define ESTIMATED_SIZE 2048") != null);
+
+    // Verify per-user and MUI2 settings
+    try testing.expect(std.mem.indexOf(u8, script, "RequestExecutionLevel user") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "InstallDir \"$LOCALAPPDATA\\Programs\\${NAME}\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "!include \"MUI2.nsh\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "!include \"FileFunc.nsh\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "!insertmacro un.GetParameters") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "!insertmacro un.GetOptions") != null);
+
+    // Verify registry uninstall key including Publisher and EstimatedSize
+    try testing.expect(std.mem.indexOf(u8, script, "WriteRegStr HKCU \"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${APP_ID}\" \"Publisher\" \"${PUBLISHER}\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "WriteRegDWORD HKCU \"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${APP_ID}\" \"EstimatedSize\" ${ESTIMATED_SIZE}") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "DeleteRegKey HKCU \"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${APP_ID}\"") != null);
+
+    // Verify uninstall data prompt and /REMOVEDATA handling
+    try testing.expect(std.mem.indexOf(u8, script, "MessageBox MB_YESNO|MB_DEFBUTTON2|MB_ICONQUESTION") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "${un.GetOptions} $R0 \"/REMOVEDATA\" $R1") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "RMDir /r \"$LOCALAPPDATA\\${APP_ID}\"") != null);
+
+    // Verify both sections refuse to run while the app does
+    try testing.expect(std.mem.indexOf(u8, script, "!macro ORIEL_REQUIRE_NOT_RUNNING") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "Section \"Uninstall\"\n  !insertmacro ORIEL_REQUIRE_NOT_RUNNING") != null);
+
+    // Verify an install first checks our own files by name, then runs the
+    // installed version's uninstaller in place, without /REMOVEDATA, and
+    // gates on its exit code 2
+    const install = script[std.mem.indexOf(u8, script, "Section \"Install\"").?..];
+    const upgrade_at = std.mem.indexOf(u8, install, "ExecWait '\"$INSTDIR\\Uninstall.exe\" /S _?=$INSTDIR' $R7").?;
+    const check_at = std.mem.indexOf(u8, install, "!insertmacro ORIEL_REQUIRE_NOT_RUNNING").?;
+    try testing.expect(check_at < upgrade_at);
+    // Once per section: its labels must stay unique.
+    try testing.expectEqual(@as(usize, 1), std.mem.count(u8, install[0..std.mem.indexOf(u8, install, "SectionEnd").?], "!insertmacro ORIEL_REQUIRE_NOT_RUNNING"));
+    try testing.expect(std.mem.indexOf(u8, install, "ReadRegStr $R8 HKCU \"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${APP_ID}\" \"UninstallString\"").? < upgrade_at);
+    try testing.expect(std.mem.indexOf(u8, install[0 .. upgrade_at + 80], "/REMOVEDATA") == null);
+    try testing.expect(std.mem.indexOf(u8, install, "${ElseIf} $R7 == 2\n      IfSilent oriel_upgrade_abort") != null);
+    try testing.expect(std.mem.indexOf(u8, install, "Delete \"$INSTDIR\\Uninstall.exe\"\n  ${EndIf}") != null);
+
+    // Verify WebView2 detection
+    try testing.expect(std.mem.indexOf(u8, script, "Function CheckWebView2") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}") != null);
+    try testing.expect(std.mem.indexOf(u8, script, WEBVIEW2_BOOTSTRAPPER_URL) != null);
+}
+
+test "generateNsisScript strips .exe suffix from exe_name" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    const opts = NsisOptions{
+        .name = "My App",
+        .version = "1.0.0",
+        .publisher = "Publisher",
+        .id = "com.example.App",
+        .exe_name = "myapp.exe",
+        .binary_src = "bin/myapp.exe",
+        .out_file = "dist/setup.exe",
+    };
+
+    const script = try generateNsisScript(allocator, opts);
+    defer allocator.free(script);
+
+    try testing.expect(std.mem.indexOf(u8, script, "!define EXE_NAME \"myapp\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "!define EXE_NAME \"myapp.exe\"") == null);
+}
+
+test "generateNsisScript with url_schemes" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    const opts = NsisOptions{
+        .name = "My App",
+        .version = "1.0.0",
+        .publisher = "Publisher",
+        .id = "com.example.App",
+        .exe_name = "myapp",
+        .binary_src = "bin/myapp.exe",
+        .out_file = "dist/setup.exe",
+        .url_schemes = &.{ "myapp", "custom-scheme" },
+    };
+
+    const script = try generateNsisScript(allocator, opts);
+    defer allocator.free(script);
+
+    // Verify HKCU registration
+    try testing.expect(std.mem.indexOf(u8, script, "WriteRegStr HKCU \"Software\\Classes\\myapp\" \"\" \"URL:${NAME}\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "WriteRegStr HKCU \"Software\\Classes\\myapp\" \"URL Protocol\" \"\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "WriteRegStr HKCU \"Software\\Classes\\myapp\\shell\\open\\command\" \"\" \"$\\\"$INSTDIR\\${EXE_NAME}.exe$\\\" $\\\"%1$\\\"\"") != null);
+
+    try testing.expect(std.mem.indexOf(u8, script, "WriteRegStr HKCU \"Software\\Classes\\custom-scheme\" \"\" \"URL:${NAME}\"") != null);
+
+    // Verify uninstallation deletion
+    try testing.expect(std.mem.indexOf(u8, script, "DeleteRegKey HKCU \"Software\\Classes\\myapp\"") != null);
+    try testing.expect(std.mem.indexOf(u8, script, "DeleteRegKey HKCU \"Software\\Classes\\custom-scheme\"") != null);
+}
+
+test "generateNsisScript rejects invalid url_schemes and invalid id" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    // Scheme with newline injection
+    try testing.expectError(error.ContainsNewline, generateNsisScript(allocator, .{
+        .name = "My App",
+        .version = "1.0.0",
+        .publisher = "Publisher",
+        .id = "com.example.App",
+        .exe_name = "myapp",
+        .binary_src = "bin/myapp.exe",
+        .out_file = "dist/setup.exe",
+        .url_schemes = &.{"myapp\nWriteRegStr HKCU \"evil\""},
+    }));
+
+    // Scheme starting with digit
+    try testing.expectError(error.InvalidUrlScheme, generateNsisScript(allocator, .{
+        .name = "My App",
+        .version = "1.0.0",
+        .publisher = "Publisher",
+        .id = "com.example.App",
+        .exe_name = "myapp",
+        .binary_src = "bin/myapp.exe",
+        .out_file = "dist/setup.exe",
+        .url_schemes = &.{"1badscheme"},
+    }));
+
+    // Scheme with path traversal backslashes
+    try testing.expectError(error.InvalidUrlScheme, generateNsisScript(allocator, .{
+        .name = "My App",
+        .version = "1.0.0",
+        .publisher = "Publisher",
+        .id = "com.example.App",
+        .exe_name = "myapp",
+        .binary_src = "bin/myapp.exe",
+        .out_file = "dist/setup.exe",
+        .url_schemes = &.{"..\\evil"},
+    }));
+
+    // Invalid id (path traversal)
+    try testing.expectError(error.InvalidAppId, generateNsisScript(allocator, .{
+        .name = "My App",
+        .version = "1.0.0",
+        .publisher = "Publisher",
+        .id = "../../evil",
+        .exe_name = "myapp",
+        .binary_src = "bin/myapp.exe",
+        .out_file = "dist/setup.exe",
+    }));
+}
+
+test "generateNsisScript installs and uninstalls extra executables and files" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    const script = try generateNsisScript(allocator, .{
+        .name = "GhostPen",
+        .version = "0.1.0",
+        .publisher = "GhostPen",
+        .id = "dev.ghostpen.App",
+        .exe_name = "ghostpen",
+        .binary_src = "C:\\build\\ghostpen.exe",
+        .out_file = "C:\\out\\setup.exe",
+        .extra_exes = &.{.{ .src = "C:\\build\\ghostpen-cli.exe", .name = "ghostpen-cli.exe" }},
+        .extra_files = &.{
+            .{ .rel = "models/small/m$1.bin", .src = "C:\\m.bin" },
+            .{ .rel = "models/readme.txt", .src = "C:\\r.txt" },
+            .{ .rel = "top.dll", .src = "C:\\top.dll" },
+        },
+    });
+    defer allocator.free(script);
+
+    const install =
+        \\  File "/oname=$INSTDIR\ghostpen-cli.exe" "C:\build\ghostpen-cli.exe"
+        \\  CreateDirectory "$INSTDIR\models\small"
+        \\  File "/oname=$INSTDIR\models\small\m$$1.bin" "C:\m.bin"
+        \\  CreateDirectory "$INSTDIR\models"
+        \\  File "/oname=$INSTDIR\models\readme.txt" "C:\r.txt"
+        \\  File "/oname=$INSTDIR\top.dll" "C:\top.dll"
+        \\
+        \\  ; Generate uninstaller
+    ;
+    try testing.expect(std.mem.indexOf(u8, script, install) != null);
+    const uninstall =
+        \\  Delete "$INSTDIR\ghostpen-cli.exe"
+        \\  Delete "$INSTDIR\models\small\m$$1.bin"
+        \\  Delete "$INSTDIR\models\readme.txt"
+        \\  Delete "$INSTDIR\top.dll"
+        \\  RMDir "$INSTDIR\models\small"
+        \\  RMDir "$INSTDIR\models"
+        \\  Delete "$INSTDIR\Uninstall.exe"
+    ;
+    try testing.expect(std.mem.indexOf(u8, script, uninstall) != null);
+    // The running check covers the app and each extra executable, by name.
+    const macro = script[std.mem.indexOf(u8, script, "!macro ORIEL_REQUIRE_NOT_RUNNING").?..std.mem.indexOf(u8, script, "!macroend").?];
+    try testing.expect(std.mem.indexOf(u8, macro, "FileOpen $R9 \"$INSTDIR\\${EXE_NAME}.exe\" a") != null);
+    try testing.expect(std.mem.indexOf(u8, macro, "\"${NAME} is running. Close it (it may be in the notification area), then click Retry.\" IDRETRY oriel_check_running_0") != null);
+    try testing.expect(std.mem.indexOf(u8, macro, "${If} ${FileExists} \"$INSTDIR\\ghostpen-cli.exe\"\n  oriel_check_running_1:") != null);
+    try testing.expect(std.mem.indexOf(u8, macro, "FileOpen $R9 \"$INSTDIR\\ghostpen-cli.exe\" a") != null);
+    try testing.expect(std.mem.indexOf(u8, macro, "\"ghostpen-cli.exe is running. Close it, then click Retry.\" IDRETRY oriel_check_running_1") != null);
+    try testing.expect(std.mem.indexOf(u8, macro, "DetailPrint \"ghostpen-cli.exe is running: close it and try again.\"") != null);
+    try testing.expect(std.mem.indexOf(u8, macro, "oriel_check_running_2") == null);
+    // The install directory itself goes last.
+    try testing.expect(std.mem.indexOf(u8, script, "RMDir \"$INSTDIR\\models\"").? < std.mem.indexOf(u8, script, "RMDir \"$INSTDIR\"").?);
+
+    try testing.expectError(error.InvalidRelativePath, generateNsisScript(allocator, .{
+        .name = "GhostPen",
+        .version = "0.1.0",
+        .publisher = "GhostPen",
+        .id = "dev.ghostpen.App",
+        .exe_name = "ghostpen",
+        .binary_src = "b.exe",
+        .out_file = "s.exe",
+        .extra_files = &.{.{ .rel = "..\\..\\evil.dll", .src = "x" }},
+    }));
+    try testing.expectError(error.InvalidSourcePath, generateNsisScript(allocator, .{
+        .name = "GhostPen",
+        .version = "0.1.0",
+        .publisher = "GhostPen",
+        .id = "dev.ghostpen.App",
+        .exe_name = "ghostpen",
+        .binary_src = "b.exe",
+        .out_file = "s.exe",
+        .extra_files = &.{.{ .rel = "m.bin", .src = "C:\\$PROGRAMFILES\\m.bin" }},
+    }));
+}
+
+test "generateNsisScript with a share target: Send To and Open with" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+    const script = try generateNsisScript(allocator, .{
+        .name = "Ghost Share",
+        .version = "1.0.0",
+        .publisher = "P",
+        .id = "com.example.GhostShare",
+        .exe_name = "ghostshare",
+        .binary_src = "bin/ghostshare.exe",
+        .out_file = "dist/setup.exe",
+        .send_to = "Send with Ghost Share",
+        .open_with_extensions = &.{ "txt", ".PNG" },
+    });
+    defer allocator.free(script);
+    const uninstall = script[std.mem.indexOf(u8, script, "Section \"Uninstall\"").?..];
+    const install = script[0 .. script.len - uninstall.len];
+
+    const expectIn = struct {
+        fn f(hay: []const u8, needle: []const u8) !void {
+            if (std.mem.indexOf(u8, hay, needle) == null) {
+                std.debug.print("missing: {s}\n", .{needle});
+                return error.TestExpectedEqual;
+            }
+        }
+    }.f;
+    try expectIn(install, "CreateShortcut \"$SENDTO\\Send with Ghost Share.lnk\" \"$INSTDIR\\${EXE_NAME}.exe\" \"--oriel-send-to\"");
+    try expectIn(install, "WriteRegStr HKCU \"Software\\Classes\\${APP_ID}.share\\shell\\open\\command\" \"\" \"$\\\"$INSTDIR\\${EXE_NAME}.exe$\\\" --oriel-open-with $\\\"%1$\\\"\"");
+    try expectIn(install, "WriteRegStr HKCU \"Software\\Classes\\.txt\\OpenWithProgids\" \"${APP_ID}.share\" \"\"");
+    try expectIn(install, "WriteRegStr HKCU \"Software\\Classes\\.png\\OpenWithProgids\" \"${APP_ID}.share\" \"\"");
+    try expectIn(install, "WriteRegStr HKCU \"Software\\Classes\\Applications\\${EXE_NAME}.exe\\SupportedTypes\" \".txt\" \"\"");
+    try expectIn(uninstall, "Delete \"$SENDTO\\Send with Ghost Share.lnk\"");
+    try expectIn(uninstall, "DeleteRegValue HKCU \"Software\\Classes\\.png\\OpenWithProgids\" \"${APP_ID}.share\"");
+    try expectIn(uninstall, "DeleteRegKey HKCU \"Software\\Classes\\${APP_ID}.share\"");
+    // An extension's OpenWithProgids key may predate the app: only our value goes.
+    try testing.expect(std.mem.indexOf(u8, uninstall, "OpenWithProgids\"\n") == null);
+    try expectIn(uninstall, "DeleteRegKey HKCU \"Software\\Classes\\Applications\\${EXE_NAME}.exe\"");
+    // Without a share target: none of it.
+    const plain = try generateNsisScript(allocator, .{ .name = "A", .version = "1", .publisher = "P", .id = "com.example.A", .exe_name = "a", .binary_src = "a.exe", .out_file = "s.exe" });
+    defer allocator.free(plain);
+    try testing.expect(std.mem.indexOf(u8, plain, "SENDTO") == null);
+    try testing.expect(std.mem.indexOf(u8, plain, "OpenWithProgids") == null);
+}
+
+test "generateNsisScript rejects a bad Send To label or extension" {
+    const testing = std.testing;
+    const base: NsisOptions = .{ .name = "A", .version = "1", .publisher = "P", .id = "com.example.A", .exe_name = "a", .binary_src = "a.exe", .out_file = "s.exe" };
+    for ([_][]const u8{ "", "..\\evil", "a/b", "$PROFILE", "x\"y", "trailing.", "new\nline" }) |label| {
+        var o = base;
+        o.send_to = label;
+        try testing.expectError(error.InvalidSendToLabel, generateNsisScript(testing.allocator, o));
+    }
+    for ([_][]const u8{ "", ".", "t xt", "a\\b", "x\"", "$ext" }) |ext| {
+        var o = base;
+        o.open_with_extensions = &.{ext};
+        try testing.expectError(error.InvalidExtension, generateNsisScript(testing.allocator, o));
+    }
+}

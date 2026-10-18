@@ -1,0 +1,18 @@
+<style>
+  theme0: background=#eaeee4
+  theme1: color=#191d19
+  theme2: color=#2d6a4f
+  theme3: background=#2d6a4f
+  @media (prefers-color-scheme: dark) {
+    theme0: background=#1d211d
+    theme1: color=#e0e4dc
+    theme2: color=#9ad4ae
+    theme3: background=#9ad4ae
+  }
+</style>
+<column id="notice" position="absolute" top="0" left="0" width="100%" height="100%" background="#00000066" justify="center" align="center" z="2147483647">
+ <column class="theme0" width="320" padding="24" gap="16" radius="28">
+  <text class="theme1" id="message" font-size="16">{message}</text>
+  <row gap="12" justify="flex-end"><button class="theme2" id="cancel" width="88" height="44" justify="center" align="center" clickable="true"><text font-size="14" font-weight="500" text-align="center">Cancel</text></button><button class="theme3" id="confirm" width="100" height="44" color="#ffffff" radius="22" justify="center" align="center" clickable="true"><text font-size="14" font-weight="500" text-align="center">Continue</text></button></row>
+ </column>
+</column>

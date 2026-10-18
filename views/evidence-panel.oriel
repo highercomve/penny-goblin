@@ -1,0 +1,4 @@
+<column>
+  <column id="documents" />
+  <column id="statements" />
+</column>

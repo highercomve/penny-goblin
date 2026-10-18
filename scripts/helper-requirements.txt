@@ -1,0 +1,16 @@
+pdfplumber==0.11.10
+pyinstaller==6.16.0
+pdfminer.six==20260107
+Pillow==12.3.0
+pypdfium2==5.14.0
+altgraph==0.17.5
+packaging==26.3
+pyinstaller-hooks-contrib==2026.8
+setuptools==84.0.0
+charset-normalizer==3.5.2
+cryptography==50.0.2
+cffi==2.1.1
+pycparser==3.11
+qrcode==8.2
+zeroconf==0.147.0
+ifaddr==0.2.0

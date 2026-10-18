@@ -1,0 +1,33 @@
+# Generated projects and outputs (keep platform/android source tracked).
+/android/
+/.zig-cache/
+/zig-out*/
+/zig-pkg/
+/dist/
+/exports/
+/public/
+/.zine/
+/.helper-venv/
+__pycache__/
+*.pyc
+*.spec
+# Private ledgers, model weights, credentials and local configuration.
+*.sqlite3*
+*.db
+*.gguf
+*.private.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.jks
+*.keystore
+local.properties
+# Build/cache directories in vendored dependencies.
+**/.zig-cache/
+**/zig-out/
+**/node_modules/
+
+.zine.ziggy-schema
+.smd.ziggy-schema

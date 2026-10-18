@@ -1,0 +1,1375 @@
+//! Self-updater core: GTK/App-free module for update verification, download,
+//! atomic installation, and process replacement.
+//! Imports only std, builtin, update_manifest.zig, and platform backends (linux/windows/macos).
+
+const std = @import("std");
+const builtin = @import("builtin");
+const target = @import("core/target.zig");
+const Ed25519 = std.crypto.sign.Ed25519;
+const Sha256 = std.crypto.hash.sha2.Sha256;
+
+pub const backend = switch (target.os) {
+    .linux => @import("modules/updater/linux.zig"),
+    .windows => @import("modules/updater/windows.zig"),
+    .macos => @import("modules/updater/macos.zig"),
+    // The store updates the app (and self-updating Play apps isn't allowed):
+    // checking for a release works, installing it fails (docs/android.md).
+    .android => @import("modules/updater/android.zig"),
+    .ios => @compileError("the updater is not available on iOS: the App Store (or TestFlight) updates iOS apps"),
+    .other => @compileError("updater is not supported on " ++ target.name),
+};
+
+// Pure-std manifest parsing and verification module
+pub const update_manifest = @import("modules/update_manifest.zig");
+pub const Semver = update_manifest.Semver;
+pub const Manifest = update_manifest.Manifest;
+
+pub const DEFAULT_TARGET = @tagName(builtin.cpu.arch) ++ "-" ++ @tagName(builtin.os.tag);
+pub const DEFAULT_TIMEOUT_MS: u32 = 15_000;
+/// Overall deadline for the artifact download (an AppImage can be 100+ MiB).
+pub const DEFAULT_DOWNLOAD_TIMEOUT_MS: u32 = 10 * 60_000;
+pub const MAX_CMDLINE_LEN = 16 * 1024;
+/// Maximum expanded update payload, on disk and in memory.
+pub const MAX_UNPACKED_SIZE: usize = 512 * 1024 * 1024;
+pub const MAX_ARGV_COUNT = 256;
+
+// ---------------------------------------------------------------------------
+// Module Lifecycle & Environment Capture
+// ---------------------------------------------------------------------------
+
+var state_mutex: std.Io.Mutex = .init;
+var captured_appimage: ?[]const u8 = null;
+var captured_appdir: ?[]const u8 = null;
+var module_allocator: ?std.mem.Allocator = null;
+
+/// Hooks for Oriel's own tests (the updater's, the CLI's); ignored outside
+/// test builds. Not part of `oriel.updater`.
+pub const testing = struct {
+    /// Accept loopback `http://` manifest and artifact URLs.
+    pub var allow_loopback_http: bool = false;
+    /// Download target used instead of the running executable.
+    pub var dest_override: ?[]const u8 = null;
+    /// Replaces the exec in `restart`.
+    pub var exec_fn: ?*const fn (io: std.Io, exe_path: []const u8) anyerror!noreturn = null;
+    /// A local HTTP server for end-to-end update tests.
+    pub const MockServer = MockServerImpl;
+};
+
+fn allowTestHttp() bool {
+    return builtin.is_test and testing.allow_loopback_http;
+}
+
+/// Capture APPIMAGE and APPDIR on the main thread during app startup.
+pub fn init(io: std.Io, allocator: std.mem.Allocator, env_map: ?*const std.process.Environ.Map) !void {
+    state_mutex.lockUncancelable(io);
+    defer state_mutex.unlock(io);
+
+    module_allocator = allocator;
+
+    if (captured_appimage) |prev| {
+        allocator.free(prev);
+        captured_appimage = null;
+    }
+    if (captured_appdir) |prev| {
+        allocator.free(prev);
+        captured_appdir = null;
+    }
+
+    if (env_map) |m| {
+        if (m.get("APPIMAGE")) |ai| {
+            if (ai.len > 0) {
+                captured_appimage = try allocator.dupe(u8, ai);
+            }
+        }
+        if (m.get("APPDIR")) |ad| {
+            if (ad.len > 0) {
+                captured_appdir = try allocator.dupe(u8, ad);
+            }
+        }
+    }
+
+    backend.cleanupStale(io, allocator);
+}
+
+pub fn deinit(io: std.Io) void {
+    state_mutex.lockUncancelable(io);
+    defer state_mutex.unlock(io);
+
+    const alloc = module_allocator orelse std.heap.smp_allocator;
+
+    if (captured_appimage) |ai| {
+        alloc.free(ai);
+        captured_appimage = null;
+    }
+    if (captured_appdir) |ad| {
+        alloc.free(ad);
+        captured_appdir = null;
+    }
+    testing.allow_loopback_http = false;
+    testing.dest_override = null;
+    testing.exec_fn = null;
+    module_allocator = null;
+}
+
+// ---------------------------------------------------------------------------
+// Path Decision & Destination Resolution
+// ---------------------------------------------------------------------------
+
+/// Check if `path` is within `dir` on a path separator boundary.
+pub fn isUnderDir(path: []const u8, dir: []const u8) bool {
+    if (dir.len == 0 or path.len < dir.len) return false;
+    if (!std.mem.startsWith(u8, path, dir)) return false;
+    if (dir.len == path.len) return true;
+    if (dir[dir.len - 1] == '/') return true;
+    if (path[dir.len] == '/') return true;
+    return false;
+}
+
+/// Pure decision function determining destination path.
+/// Only uses `appimage` if `exe_path` resolves under `appdir` on a `/` boundary.
+pub fn decideDestPath(
+    dest_path: ?[]const u8,
+    appimage: ?[]const u8,
+    appdir: ?[]const u8,
+    exe_path: []const u8,
+) []const u8 {
+    if (dest_path) |p| {
+        if (p.len > 0) return p;
+    }
+    if (appimage) |ai| {
+        if (ai.len > 0) {
+            if (appdir) |ad| {
+                if (ad.len > 0 and isUnderDir(exe_path, ad)) {
+                    return ai;
+                }
+            }
+        }
+    }
+    return exe_path;
+}
+
+/// True when this process runs from a mounted AppImage: `$APPIMAGE` is set
+/// and `/proc/self/exe` resolves under `$APPDIR` (both captured by `init`).
+pub fn runningAsAppImage(io: std.Io, gpa: std.mem.Allocator) !bool {
+    // Copied under the lock: deinit may free the captured strings.
+    const has_ai, const ad = blk: {
+        state_mutex.lockUncancelable(io);
+        defer state_mutex.unlock(io);
+        break :blk .{ captured_appimage != null, if (captured_appdir) |d| try gpa.dupe(u8, d) else null };
+    };
+    defer if (ad) |d| gpa.free(d);
+    return backend.runningAsAppImage(io, gpa, has_ai, ad);
+}
+
+/// Determine the target binary path without calling getenv off the main thread.
+pub fn resolveDestPath(io: std.Io, gpa: std.mem.Allocator, dest_path: ?[]const u8) ![]u8 {
+    if (dest_path) |p| {
+        if (!std.fs.path.isAbsolute(p)) return error.DestinationPathNotAbsolute;
+        if (p.len > 0) return try gpa.dupe(u8, p);
+    }
+    // Copied under the lock: deinit may free the captured strings.
+    var ai: ?[]u8 = null;
+    defer if (ai) |v| gpa.free(v);
+    var ad: ?[]u8 = null;
+    defer if (ad) |v| gpa.free(v);
+    const override = blk: {
+        state_mutex.lockUncancelable(io);
+        defer state_mutex.unlock(io);
+        if (captured_appimage) |v| ai = try gpa.dupe(u8, v);
+        if (captured_appdir) |v| ad = try gpa.dupe(u8, v);
+        break :blk if (builtin.is_test) testing.dest_override else null;
+    };
+
+    if (override) |ov| {
+        return try gpa.dupe(u8, ov);
+    }
+
+    const exe_path = try std.process.executablePathAlloc(io, gpa);
+    defer gpa.free(exe_path);
+
+    const chosen = decideDestPath(dest_path, ai, ad, exe_path);
+    return try gpa.dupe(u8, chosen);
+}
+
+// ---------------------------------------------------------------------------
+// Update Check & Download API
+// ---------------------------------------------------------------------------
+
+pub const Update = struct {
+    app_id: []const u8,
+    version: []const u8,
+    target: []const u8,
+    format: []const u8,
+    size: u64,
+    sha256: []const u8,
+    url: []const u8,
+    expires: ?u64 = null,
+    signature: []const u8,
+    arena: std.heap.ArenaAllocator,
+
+    pub fn deinit(self: *Update) void {
+        self.arena.deinit();
+    }
+};
+
+pub const Config = struct {
+    app_id: []const u8,
+    manifest_url: []const u8,
+    current_version: []const u8,
+    public_key_b64: []const u8,
+    target: []const u8 = DEFAULT_TARGET,
+    timeout_ms: u32 = DEFAULT_TIMEOUT_MS,
+    download_timeout_ms: u32 = DEFAULT_DOWNLOAD_TIMEOUT_MS,
+    allocator: ?std.mem.Allocator = null,
+    /// Also offer the current version (a reinstall); an older one still isn't.
+    force: bool = false,
+    /// Offer whatever version the manifest names, older included: only for an
+    /// explicit request for one version, whose manifest the caller then checks
+    /// names exactly that version (else a replayed old manifest downgrades).
+    allow_downgrade: bool = false,
+};
+
+/// Waits before retrying a request the server answered with a 5xx: right
+/// after a release is published, GitHub's download URLs answer 500 for a
+/// few minutes (seen with GhostPen 0.2.10), which failed every update.
+const server_error_retries = [_]i64{ 2_000, 5_000 };
+
+/// Fetch manifest from `config.manifest_url`, verify Ed25519 signature against `config.public_key_b64`,
+/// enforce size limit (64 KiB), timeout deadline, and check compatibility with `config`.
+pub fn checkForUpdate(
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    config: Config,
+) !?Update {
+    // TLS only (loopback http only in test builds).
+    try update_manifest.validateUrl(config.manifest_url, allowTestHttp());
+
+    var manifest_buf: [64 * 1024]u8 = undefined;
+
+    const FetchResult = struct {
+        bytes: usize,
+        status: std.http.Status,
+    };
+
+    const Fetcher = struct {
+        fn fetchBody(
+            i: std.Io,
+            alloc: std.mem.Allocator,
+            url: []const u8,
+            buf: []u8,
+        ) anyerror!FetchResult {
+            var client: std.http.Client = .{ .allocator = alloc, .io = i };
+            defer client.deinit();
+
+            // A server error is retried (GitHub answers 5xx for a while
+            // right after a release is published).
+            var attempt: usize = 0;
+            while (true) : (attempt += 1) {
+                var fixed_writer = std.Io.Writer.fixed(buf);
+                const fetch_res = client.fetch(.{
+                    .location = .{ .url = url },
+                    .headers = .{
+                        .accept_encoding = .{ .override = "identity" },
+                    },
+                    .response_writer = &fixed_writer,
+                }) catch |err| switch (err) {
+                    error.WriteFailed => return error.ManifestTooLarge,
+                    else => |e| return e,
+                };
+                if (fetch_res.status.class() == .server_error and attempt < server_error_retries.len) {
+                    try i.sleep(.fromMilliseconds(server_error_retries[attempt]), .awake);
+                    continue;
+                }
+                return FetchResult{
+                    .bytes = fixed_writer.end,
+                    .status = fetch_res.status,
+                };
+            }
+        }
+
+        fn sleepTimeout(i: std.Io, ms: u32) void {
+            i.sleep(.fromMilliseconds(ms), .awake) catch {};
+        }
+    };
+
+    // Run manifest fetch with timeout deadline via std.Io.Select
+    const ResultUnion = union(enum) {
+        fetched: anyerror!FetchResult,
+        timeout: void,
+    };
+    var select_buf: [2]ResultUnion = undefined;
+    var sel = std.Io.Select(ResultUnion).init(io, &select_buf);
+
+    try sel.concurrent(.fetched, Fetcher.fetchBody, .{ io, gpa, config.manifest_url, &manifest_buf });
+    try sel.concurrent(.timeout, Fetcher.sleepTimeout, .{ io, config.timeout_ms });
+
+    const awaited = try sel.await();
+    sel.cancelDiscard();
+
+    const fetch_info = switch (awaited) {
+        .fetched => |res| try res,
+        .timeout => return error.Timeout,
+    };
+
+    if (fetch_info.status != .ok) return error.BadHttpStatus;
+
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    errdefer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    // A fixed writer never reports more than its buffer.
+    std.debug.assert(fetch_info.bytes <= manifest_buf.len);
+    const manifest_json = try arena.dupe(u8, manifest_buf[0..fetch_info.bytes]);
+
+    // A combined manifest (latest.json) or a single-platform one.
+    const manifest = try update_manifest.verifyForTarget(arena, manifest_json, config.public_key_b64, config.target, .{
+        .allow_test_http = allowTestHttp(),
+    });
+
+    // Validate app_id and target match config
+    if (!std.mem.eql(u8, manifest.app_id, config.app_id)) {
+        return error.AppIdMismatch;
+    }
+    if (!std.mem.eql(u8, manifest.target, config.target)) {
+        return error.TargetMismatch;
+    }
+
+    try validateExpiration(manifest.expires, std.Io.Timestamp.now(io, .real).toSeconds());
+
+    const remote_ver = try Semver.parse(manifest.version);
+    const local_ver = try Semver.parse(config.current_version);
+
+    const has_update = offersVersion(remote_ver, local_ver, config.force, config.allow_downgrade);
+
+    if (has_update) {
+        return Update{
+            .app_id = manifest.app_id,
+            .version = manifest.version,
+            .target = manifest.target,
+            .format = manifest.format,
+            .size = manifest.size,
+            .sha256 = manifest.sha256,
+            .url = manifest.url,
+            .expires = manifest.expires,
+            .signature = manifest.signature,
+            .arena = arena_state,
+        };
+    }
+
+    arena_state.deinit();
+    return null;
+}
+
+/// Whether `remote` is offered over `local`: newer, or also the same with
+/// `force`, or any version with `allow_downgrade`.
+pub fn offersVersion(remote: Semver, local: Semver, force: bool, allow_downgrade: bool) bool {
+    if (allow_downgrade) return true;
+    return switch (remote.order(local)) {
+        .gt => true,
+        .eq => force,
+        .lt => false,
+    };
+}
+
+test offersVersion {
+    const v1 = try Semver.parse("1.0.0");
+    const v2 = try Semver.parse("2.0.0");
+    try std.testing.expect(offersVersion(v2, v1, false, false));
+    try std.testing.expect(!offersVersion(v1, v1, false, false));
+    try std.testing.expect(offersVersion(v1, v1, true, false));
+    try std.testing.expect(!offersVersion(v1, v2, true, false));
+    try std.testing.expect(offersVersion(v1, v2, false, true));
+}
+
+pub const ProgressCallback = struct {
+    context: ?*anyopaque = null,
+    callback: *const fn (context: ?*anyopaque, downloaded: u64, total: ?u64) void,
+
+    pub fn call(self: ProgressCallback, downloaded: u64, total: ?u64) void {
+        self.callback(self.context, downloaded, total);
+    }
+};
+
+pub const DownloadOptions = struct {
+    /// The file to replace (absolute); null: the running executable, or
+    /// `$APPIMAGE` when running from one.
+    dest_path: ?[]const u8 = null,
+    /// Called as bytes arrive.
+    progress: ?ProgressCallback = null,
+    /// Deadline for the whole download.
+    timeout_ms: u32 = DEFAULT_DOWNLOAD_TIMEOUT_MS,
+};
+
+/// Download an update artifact to a temporary file next to the destination,
+/// stream and compute SHA-256 on the fly, enforce size bounds, verify the hash,
+/// fsync to disk, and atomically rename over destination. Returns the
+/// installed path (caller frees).
+pub fn download(
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    update: Update,
+    options: DownloadOptions,
+) ![]u8 {
+    const dest_path = options.dest_path;
+    const progress_callback = options.progress;
+    const timeout_ms = options.timeout_ms;
+    const Runner = struct {
+        fn run(
+            i: std.Io,
+            alloc: std.mem.Allocator,
+            u: Update,
+            dp: ?[]const u8,
+            pc: ?ProgressCallback,
+        ) ![]u8 {
+            // A server error comes before anything is written: retried.
+            for (server_error_retries) |delay_ms| {
+                return downloadInternal(i, alloc, u, dp, pc) catch |err| switch (err) {
+                    error.ServerError => {
+                        try i.sleep(.fromMilliseconds(delay_ms), .awake);
+                        continue;
+                    },
+                    else => err,
+                };
+            }
+            return downloadInternal(i, alloc, u, dp, pc) catch |err| switch (err) {
+                error.ServerError => error.BadHttpStatus,
+                else => err,
+            };
+        }
+
+        fn sleepTimeout(i: std.Io, ms: u32) void {
+            i.sleep(.fromMilliseconds(ms), .awake) catch {};
+        }
+    };
+
+    const ResultUnion = union(enum) {
+        downloaded: anyerror![]u8,
+        timeout: void,
+    };
+    var select_buf: [2]ResultUnion = undefined;
+    var sel = std.Io.Select(ResultUnion).init(io, &select_buf);
+
+    try sel.concurrent(.downloaded, Runner.run, .{ io, gpa, update, dest_path, progress_callback });
+    try sel.concurrent(.timeout, Runner.sleepTimeout, .{ io, timeout_ms });
+
+    // cancel, not cancelDiscard: the download returns an allocated path.
+    var awaited = sel.await() catch |err| {
+        while (sel.cancel()) |late| switch (late) {
+            .downloaded => |res| if (res) |p| gpa.free(p) else |_| {},
+            .timeout => {},
+        };
+        return err;
+    };
+    while (sel.cancel()) |late| switch (late) {
+        // Finished just as the timeout won: the binary is already
+        // replaced, so report that rather than a timeout.
+        .downloaded => awaited = late,
+        .timeout => {},
+    };
+
+    switch (awaited) {
+        .downloaded => |res| return res,
+        .timeout => return error.Timeout,
+    }
+}
+
+fn downloadInternal(
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    update: Update,
+    dest_path: ?[]const u8,
+    progress_callback: ?ProgressCallback,
+) ![]u8 {
+    // The signed size bounds what is written; past the unpacked cap it is refused.
+    if (update.size > MAX_UNPACKED_SIZE) return error.PayloadTooLarge;
+
+    // Replacing this copy: the signed format must match how it is installed
+    // (an AppImage only by an AppImage, a raw binary by a raw one). An
+    // explicit destination is the caller's choice.
+    if (dest_path == null and !update_manifest.isAppBundleFormat(update.format)) {
+        const as_appimage = try runningAsAppImage(io, gpa);
+        if (update_manifest.isAppImageFormat(update.format) != as_appimage) return error.FormatMismatch;
+    }
+
+    const target_path = try resolveDestPath(io, gpa, dest_path);
+    defer gpa.free(target_path);
+
+    if (!std.fs.path.isAbsolute(target_path)) {
+        return error.DestinationPathNotAbsolute;
+    }
+
+    const cwd = std.Io.Dir.cwd();
+
+    // Resolve destination symlinks first so we replace the real target
+    const real_dest_path: [:0]u8 = if (cwd.realPathFileAlloc(io, target_path, gpa)) |rd|
+        rd
+    else |_|
+        try gpa.dupeZ(u8, target_path);
+    defer gpa.free(real_dest_path);
+    // The OS resolves an absolute path to an absolute one: the parent
+    // directory below, and the path `restart` executes, come from it.
+    std.debug.assert(std.fs.path.isAbsolute(real_dest_path));
+
+    const parent_dir_path = std.fs.path.dirname(real_dest_path) orelse if (builtin.os.tag == .windows) "." else "/";
+    const target_file_name = std.fs.path.basename(real_dest_path);
+
+    // The replaced binary keeps its mode (0o755 when there is none yet).
+    const install_mode: std.posix.mode_t = if (builtin.os.tag == .windows) 0 else if (cwd.statFile(io, real_dest_path, .{})) |st|
+        st.permissions.toMode() & 0o777
+    else |_|
+        0o755;
+
+    // `.iterate` opens a real (non-O_PATH) descriptor, which fsync needs below.
+    var parent_dir = try cwd.openDir(io, parent_dir_path, .{ .iterate = true });
+    defer parent_dir.close(io);
+
+    // Connect and fetch update artifact over HTTP
+    var client: std.http.Client = .{ .allocator = gpa, .io = io };
+    defer client.deinit();
+
+    const uri = try std.Uri.parse(update.url);
+    var req = try client.request(.GET, uri, .{
+        .headers = .{
+            .accept_encoding = .{ .override = "identity" },
+        },
+        .redirect_behavior = std.http.Client.Request.RedirectBehavior.init(3),
+    });
+    defer req.deinit();
+    try req.sendBodiless();
+
+    var redirect_buf: [8192]u8 = undefined;
+    var response = try req.receiveHead(&redirect_buf);
+    if (response.head.status.class() == .server_error) return error.ServerError;
+    if (response.head.status != .ok) return error.BadHttpStatus;
+
+    const content_length = response.head.content_length;
+    var downloaded_bytes: u64 = 0;
+
+    // Create temporary download file inside parent dir with exclusive create
+    var rand_val: u64 = undefined;
+    io.random(std.mem.asBytes(&rand_val));
+    const temp_dl_name = try std.fmt.allocPrint(gpa, "{s}.tmp_dl.{d}.{x}", .{ target_file_name, backend.processId(), rand_val });
+    defer gpa.free(temp_dl_name);
+
+    const temp_file = try parent_dir.createFile(io, temp_dl_name, .{
+        .permissions = if (builtin.os.tag == .windows) .default_file else std.Io.File.Permissions.fromMode(install_mode),
+        .exclusive = true,
+    });
+    var temp_open: bool = true;
+    var temp_exists: bool = true;
+    defer {
+        if (temp_open) temp_file.close(io);
+        if (temp_exists) parent_dir.deleteFile(io, temp_dl_name) catch {};
+    }
+    // Explicit mode, independent of the umask.
+    if (builtin.os.tag != .windows) {
+        try temp_file.setPermissions(io, .fromMode(install_mode));
+    }
+
+    var file_writer_buf: [32768]u8 = undefined;
+    var temp_writer = temp_file.writerStreaming(io, &file_writer_buf);
+
+    var transfer_buf: [65536]u8 = undefined;
+    const reader = response.reader(&transfer_buf);
+
+    var sha = Sha256.init(.{});
+    var chunk_buf: [32768]u8 = undefined;
+
+    while (true) {
+        const n = try reader.readSliceShort(&chunk_buf);
+        if (n == 0) break;
+        const chunk = chunk_buf[0..n];
+        sha.update(chunk);
+        try temp_writer.interface.writeAll(chunk);
+        downloaded_bytes += n;
+
+        if (downloaded_bytes > update.size) {
+            return error.PayloadSizeExceeded;
+        }
+        if (content_length) |cl| {
+            if (downloaded_bytes > cl) {
+                return error.PayloadSizeExceeded;
+            }
+        }
+
+        if (progress_callback) |cb| cb.call(downloaded_bytes, update.size);
+    }
+
+    if (downloaded_bytes != update.size) {
+        return error.PayloadSizeMismatch;
+    }
+
+    try temp_writer.interface.flush();
+    try temp_file.sync(io);
+
+    // Verify SHA-256 of downloaded payload
+    var digest: [32]u8 = undefined;
+    sha.final(&digest);
+    const computed_hex = std.fmt.bytesToHex(digest, .lower);
+    if (!update_manifest.eqlSha256Hex(&computed_hex, update.sha256)) {
+        return error.PayloadHashMismatch;
+    }
+
+    // Close download file
+    temp_file.close(io);
+    temp_open = false;
+
+    // A macOS bundle update replaces the whole `.app` around this executable.
+    if (update_manifest.isAppBundleFormat(update.format)) {
+        if (comptime !@hasDecl(backend, "installBundle")) return error.UnsupportedFormat;
+        const bundle = backend.enclosingBundle(real_dest_path) orelse return error.NotInAppBundle;
+        try backend.installBundle(io, gpa, parent_dir, temp_dl_name, bundle);
+        // The executable's path (now inside the new bundle): `restart`
+        // finds the bundle from it and relaunches that.
+        return try gpa.dupe(u8, real_dest_path);
+    }
+
+    // Decompression decided strictly by signed format field
+    const is_gzip = update_manifest.isGzipFormat(update.format);
+    if (is_gzip) {
+        const temp_decomp_name = try std.fmt.allocPrint(gpa, "{s}.tmp_decomp.{d}.{x}", .{ target_file_name, backend.processId(), rand_val });
+        defer gpa.free(temp_decomp_name);
+
+        const gz_file = try parent_dir.openFile(io, temp_dl_name, .{});
+        defer gz_file.close(io);
+
+        const decomp_file = try parent_dir.createFile(io, temp_decomp_name, .{
+            .permissions = if (builtin.os.tag == .windows) .default_file else std.Io.File.Permissions.fromMode(install_mode),
+            .exclusive = true,
+        });
+        var decomp_open: bool = true;
+        var decomp_exists: bool = true;
+        defer {
+            if (decomp_open) decomp_file.close(io);
+            if (decomp_exists) parent_dir.deleteFile(io, temp_decomp_name) catch {};
+        }
+        if (builtin.os.tag != .windows) {
+            try decomp_file.setPermissions(io, .fromMode(install_mode));
+        }
+
+        var gz_read_buf: [65536]u8 = undefined;
+        var gz_reader = gz_file.readerStreaming(io, &gz_read_buf);
+
+        var window: [std.compress.flate.max_window_len]u8 = undefined;
+        var decompress = std.compress.flate.Decompress.init(&gz_reader.interface, .gzip, &window);
+
+        var out_writer_buf: [32768]u8 = undefined;
+        var out_writer = decomp_file.writerStreaming(io, &out_writer_buf);
+        try writeExpanded(&decompress.reader, &out_writer.interface, MAX_UNPACKED_SIZE);
+        try out_writer.interface.flush();
+        try decomp_file.sync(io);
+
+        decomp_file.close(io);
+        decomp_open = false;
+
+        // Clean up compressed download file
+        parent_dir.deleteFile(io, temp_dl_name) catch {};
+        temp_exists = false;
+
+        // Atomically install decompressed binary over target
+        try backend.installFile(io, gpa, parent_dir, temp_decomp_name, real_dest_path);
+        decomp_exists = false;
+    } else {
+        // Atomically install download file over target
+        try backend.installFile(io, gpa, parent_dir, temp_dl_name, real_dest_path);
+        temp_exists = false;
+    }
+
+    try backend.syncDir(parent_dir);
+
+    return try gpa.dupe(u8, real_dest_path);
+}
+
+// ---------------------------------------------------------------------------
+// Process Restart & Cmdline Splitting
+// ---------------------------------------------------------------------------
+
+/// Pure function to split /proc/self/cmdline on exact NUL delimiters,
+/// replacing argv[0] with exe_path, keeping empty arguments, and enforcing bounds.
+pub fn splitCmdline(
+    cmdline_bytes: []const u8,
+    exe_path: []const u8,
+    out_argv: [][]const u8,
+) ![]const []const u8 {
+    if (cmdline_bytes.len == 0) return error.CannotReadCmdline;
+    if (cmdline_bytes.len > MAX_CMDLINE_LEN) return error.CmdlineTooLarge;
+
+    // Trailing NUL terminates the last argument
+    const data = if (cmdline_bytes[cmdline_bytes.len - 1] == 0)
+        cmdline_bytes[0 .. cmdline_bytes.len - 1]
+    else
+        cmdline_bytes;
+
+    var it = std.mem.splitScalar(u8, data, 0);
+    const first = it.next() orelse return error.CannotReadCmdline;
+    _ = first; // Replaced by exe_path
+
+    const out_slice = out_argv;
+    if (out_slice.len == 0) return error.TooManyArguments;
+    out_slice[0] = exe_path;
+    var argc: usize = 1;
+
+    while (it.next()) |arg| {
+        if (argc >= out_slice.len) return error.TooManyArguments;
+        out_slice[argc] = arg;
+        argc += 1;
+    }
+
+    return out_slice[0..argc];
+}
+
+/// Re-exec the updated binary using std.process.replace with original arguments.
+pub fn restart(io: std.Io, exe_path: []const u8) !noreturn {
+    if (builtin.is_test) {
+        if (testing.exec_fn) |f| return f(io, exe_path);
+    }
+    return backend.restart(io, exe_path);
+}
+
+/// Unpack gzip payload and verify sha256.
+pub fn unpack(gpa: std.mem.Allocator, manifest: Manifest, payload_gz: []const u8) ![]u8 {
+    var digest: [32]u8 = undefined;
+    Sha256.hash(payload_gz, &digest, .{});
+    const hex = std.fmt.bytesToHex(digest, .lower);
+    if (!update_manifest.eqlSha256Hex(&hex, manifest.sha256)) return error.PayloadHashMismatch;
+
+    var in: std.Io.Reader = .fixed(payload_gz);
+    var window: [std.compress.flate.max_window_len]u8 = undefined;
+    var decompress: std.compress.flate.Decompress = .init(&in, .gzip, &window);
+    const out = try decompress.reader.allocRemaining(gpa, .limited(MAX_UNPACKED_SIZE));
+    std.debug.assert(out.len <= MAX_UNPACKED_SIZE);
+    return out;
+}
+
+pub const test_payload_gz = [_]u8{
+    0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcb, 0x2f, 0xca, 0x4c, 0xcd, 0x51,
+    0x28, 0x2d, 0x48, 0x49, 0x2c, 0x49, 0x55, 0x28, 0x48, 0xac, 0xcc, 0xc9, 0x4f, 0x4c, 0x51, 0x28,
+    0x33, 0xd0, 0x33, 0xd0, 0x33, 0xe4, 0xca, 0x1f, 0x06, 0x72, 0x00, 0x2d, 0x20, 0xe4, 0xcb, 0xe0,
+    0x00, 0x00, 0x00,
+};
+
+/// Local mock HTTP server for end-to-end update tests (`testing.MockServer`).
+const MockServerImpl = struct {
+    server: std.Io.net.Server,
+    thread: std.Thread,
+    port: u16,
+    io: std.Io,
+    mutex: std.Io.Mutex = .init,
+    manifest_json: []const u8,
+    payload: []const u8,
+    gzip_payload: ?[]const u8 = null,
+    /// Served for `.../latest.json`; null answers 404 (a release without one).
+    combined_json: ?[]const u8 = null,
+    /// Requests left to answer with 500 (a server error the client retries).
+    fail_next: std.atomic.Value(u32) = .init(0),
+    running: std.atomic.Value(bool) = .init(true),
+
+    pub fn start(io: std.Io, port: u16, manifest_json: []const u8, payload: []const u8, gzip_payload: ?[]const u8) !*MockServerImpl {
+        const allocator = std.testing.allocator;
+        const self = try allocator.create(MockServerImpl);
+        errdefer allocator.destroy(self);
+
+        const addr: std.Io.net.IpAddress = .{ .ip4 = .loopback(port) };
+        self.server = try addr.listen(io, .{ .reuse_address = true });
+        errdefer self.server.deinit(io);
+        self.port = self.server.socket.address.ip4.port;
+        self.io = io;
+        self.manifest_json = manifest_json;
+        self.payload = payload;
+        self.gzip_payload = gzip_payload;
+        self.combined_json = null;
+        self.fail_next = .init(0);
+        self.mutex = .init;
+        self.running = .init(true);
+        self.thread = try std.Thread.spawn(.{}, run, .{self});
+        return self;
+    }
+
+    pub fn setManifest(self: *MockServerImpl, io: std.Io, json: []const u8) void {
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
+        self.manifest_json = json;
+    }
+
+    pub fn setCombined(self: *MockServerImpl, io: std.Io, json: ?[]const u8) void {
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
+        self.combined_json = json;
+    }
+
+    fn run(self: *MockServerImpl) void {
+        while (self.running.load(.acquire)) {
+            var stream = self.server.accept(self.io) catch break;
+            defer stream.close(self.io);
+
+            if (!self.running.load(.acquire)) break;
+
+            // Set receive timeout so socket read never hangs
+            const tv = std.posix.timeval{ .sec = 2, .usec = 0 };
+            _ = std.posix.system.setsockopt(stream.socket.handle, std.posix.SOL.SOCKET, std.posix.SO.RCVTIMEO, @as([*]const u8, @ptrCast(&tv)), @sizeOf(@TypeOf(tv)));
+
+            var read_buf: [2048]u8 = undefined;
+            var reader = stream.reader(self.io, &read_buf);
+
+            var req_buf: [2048]u8 = undefined;
+            var req_len: usize = 0;
+            while (req_len < req_buf.len) {
+                var single_byte: [1]u8 = undefined;
+                const n = reader.interface.readSliceShort(&single_byte) catch break;
+                if (n == 0) break;
+                req_buf[req_len] = single_byte[0];
+                req_len += 1;
+                if (req_len >= 4 and std.mem.eql(u8, req_buf[req_len - 4 .. req_len], "\r\n\r\n")) {
+                    break;
+                }
+            }
+            if (req_len == 0) continue;
+            const req = req_buf[0..req_len];
+
+            if (std.mem.indexOf(u8, req, "GET /quit") == null and self.fail_next.load(.acquire) > 0) {
+                _ = self.fail_next.fetchSub(1, .acq_rel);
+                var w_buf: [256]u8 = undefined;
+                var writer = stream.writer(self.io, &w_buf);
+                writer.interface.writeAll("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n") catch {};
+                writer.interface.flush() catch {};
+                continue;
+            }
+
+            if (std.mem.indexOf(u8, req, "/latest.json ") != null) {
+                self.mutex.lockUncancelable(self.io);
+                const combined = self.combined_json;
+                self.mutex.unlock(self.io);
+                var w_buf: [4096]u8 = undefined;
+                var writer = stream.writer(self.io, &w_buf);
+                if (combined) |body| {
+                    writer.interface.print("HTTP/1.1 200 OK\r\nContent-Length: {d}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{s}", .{ body.len, body }) catch {};
+                } else {
+                    writer.interface.writeAll("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n") catch {};
+                }
+                writer.interface.flush() catch {};
+            } else if (std.mem.indexOf(u8, req, "GET /manifest.json") != null or std.mem.indexOf(u8, req, "oriel-update-") != null) {
+                self.mutex.lockUncancelable(self.io);
+                const cur_manifest = self.manifest_json;
+                self.mutex.unlock(self.io);
+
+                var w_buf: [4096]u8 = undefined;
+                var writer = stream.writer(self.io, &w_buf);
+                writer.interface.print("HTTP/1.1 200 OK\r\nContent-Length: {d}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{s}", .{ cur_manifest.len, cur_manifest }) catch {};
+                writer.interface.flush() catch {};
+            } else if (std.mem.indexOf(u8, req, "GET /payload.gz") != null) {
+                if (self.gzip_payload) |gz_data| {
+                    var w_buf: [4096]u8 = undefined;
+                    var writer = stream.writer(self.io, &w_buf);
+                    writer.interface.print("HTTP/1.1 200 OK\r\nContent-Length: {d}\r\nContent-Type: application/gzip\r\nConnection: close\r\n\r\n{s}", .{ gz_data.len, gz_data }) catch {};
+                    writer.interface.flush() catch {};
+                }
+            } else if (std.mem.indexOf(u8, req, "GET /payload") != null) {
+                var w_buf: [4096]u8 = undefined;
+                var writer = stream.writer(self.io, &w_buf);
+                writer.interface.print("HTTP/1.1 200 OK\r\nContent-Length: {d}\r\nContent-Type: application/octet-stream\r\nConnection: close\r\n\r\n{s}", .{ self.payload.len, self.payload }) catch {};
+                writer.interface.flush() catch {};
+            } else if (std.mem.indexOf(u8, req, "GET /quit") != null) {
+                break;
+            }
+        }
+    }
+
+    pub fn stop(self: *MockServerImpl) void {
+        self.running.store(false, .release);
+        _ = std.posix.system.shutdown(self.server.socket.handle, std.posix.SHUT.RDWR);
+        const addr: std.Io.net.IpAddress = .{ .ip4 = .loopback(self.port) };
+        if (addr.connect(self.io, .{ .mode = .stream })) |stream| {
+            var w_buf: [64]u8 = undefined;
+            var writer = stream.writer(self.io, &w_buf);
+            _ = writer.interface.writeAll("GET /quit HTTP/1.1\r\n\r\n") catch {};
+            _ = writer.interface.flush() catch {};
+            stream.close(self.io);
+        } else |_| {}
+        self.thread.join();
+        self.server.deinit(self.io);
+        std.testing.allocator.destroy(self);
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Unit Tests
+// ---------------------------------------------------------------------------
+
+test "core end-to-end update flow" {
+    // POSIX-only: stages the fake update binary with Permissions.fromMode (exec bits).
+    if (builtin.os.tag != .linux and builtin.os.tag != .macos) return error.SkipZigTest;
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+
+    try init(io, allocator, null);
+    defer deinit(io);
+    testing.allow_loopback_http = true;
+
+    // Generate test Ed25519 keypair
+    const kp = try Ed25519.KeyPair.generateDeterministic([_]u8{77} ** 32);
+    var pk_b64: [update_manifest.PUBLIC_KEY_B64_LEN]u8 = undefined;
+    _ = update_manifest.encodePublicKey(kp.public_key.toBytes(), &pk_b64);
+
+    const wrong_kp = try Ed25519.KeyPair.generateDeterministic([_]u8{88} ** 32);
+    var wrong_pk_b64: [update_manifest.PUBLIC_KEY_B64_LEN]u8 = undefined;
+    _ = update_manifest.encodePublicKey(wrong_kp.public_key.toBytes(), &wrong_pk_b64);
+
+    // Raw payload content
+    const new_payload = "oriel updated executable binary content v2.0.0!";
+    var digest: [32]u8 = undefined;
+    Sha256.hash(new_payload, &digest, .{});
+    const payload_sha256 = std.fmt.bytesToHex(digest, .lower);
+
+    // Gzip payload content
+    var gz_digest: [32]u8 = undefined;
+    Sha256.hash(&test_payload_gz, &gz_digest, .{});
+    const gz_payload_sha256 = std.fmt.bytesToHex(gz_digest, .lower);
+
+    // Start mock server first to obtain ephemeral port
+    var server = try testing.MockServer.start(io, 0, "", new_payload, &test_payload_gz);
+    defer server.stop();
+
+    const payload_url = try std.fmt.allocPrint(allocator, "http://127.0.0.1:{d}/payload", .{server.port});
+    defer allocator.free(payload_url);
+
+    const sign_params = update_manifest.SignParameters{
+        .app_id = "dev.oriel.test",
+        .version = "2.0.0",
+        .target = DEFAULT_TARGET,
+        .format = "raw",
+        .size = new_payload.len,
+        .sha256 = &payload_sha256,
+        .url = payload_url,
+        .allow_test_http = true,
+    };
+
+    const sig_b64 = try update_manifest.sign(allocator, kp, sign_params);
+    defer allocator.free(sig_b64);
+
+    const manifest_json = try update_manifest.formatManifest(allocator, sign_params, sig_b64);
+    defer allocator.free(manifest_json);
+    server.setManifest(io, manifest_json);
+
+    const manifest_url = try std.fmt.allocPrint(allocator, "http://127.0.0.1:{d}/manifest.json", .{server.port});
+    defer allocator.free(manifest_url);
+
+    const base_cfg = Config{
+        .app_id = "dev.oriel.test",
+        .manifest_url = manifest_url,
+        .current_version = "2.0.0",
+        .public_key_b64 = &pk_b64,
+        .target = DEFAULT_TARGET,
+    };
+
+    // 1. Version checks:
+    // Same version returns null
+    const no_update_same = try checkForUpdate(io, allocator, base_cfg);
+    try std.testing.expect(no_update_same == null);
+
+    // Older remote version returns null
+    var older_cfg = base_cfg;
+    older_cfg.current_version = "3.0.0";
+    const no_update_older = try checkForUpdate(io, allocator, older_cfg);
+    try std.testing.expect(no_update_older == null);
+
+    // force reinstalls the same version but still refuses an older one
+    var force_same_cfg = base_cfg;
+    force_same_cfg.force = true;
+    var reinstall = (try checkForUpdate(io, allocator, force_same_cfg)).?;
+    reinstall.deinit();
+    var force_older_cfg = older_cfg;
+    force_older_cfg.force = true;
+    try std.testing.expect(try checkForUpdate(io, allocator, force_older_cfg) == null);
+    // allow_downgrade (an explicitly requested version) offers the older one
+    force_older_cfg.allow_downgrade = true;
+    var downgrade = (try checkForUpdate(io, allocator, force_older_cfg)).?;
+    downgrade.deinit();
+
+    // A plain http:// manifest URL needs testing.allow_loopback_http (test builds only)
+    testing.allow_loopback_http = false;
+    try std.testing.expectError(error.InsecureUrl, checkForUpdate(io, allocator, base_cfg));
+    testing.allow_loopback_http = true;
+
+    // Manifest signed with another key is rejected
+    var wrong_key_cfg = base_cfg;
+    wrong_key_cfg.current_version = "1.0.0";
+    wrong_key_cfg.public_key_b64 = &wrong_pk_b64;
+    try std.testing.expectError(error.SignatureVerificationFailed, checkForUpdate(io, allocator, wrong_key_cfg));
+
+    // Mismatched app_id rejected
+    var wrong_app_cfg = base_cfg;
+    wrong_app_cfg.current_version = "1.0.0";
+    wrong_app_cfg.app_id = "other.app";
+    try std.testing.expectError(error.AppIdMismatch, checkForUpdate(io, allocator, wrong_app_cfg));
+
+    // Valid check: 1.0.0 -> 2.0.0 available
+    var valid_cfg = base_cfg;
+    valid_cfg.current_version = "1.0.0";
+    // A server error first (GitHub right after a release): retried.
+    server.fail_next.store(1, .release);
+    const update_opt = try checkForUpdate(io, allocator, valid_cfg);
+    try std.testing.expectEqual(@as(u32, 0), server.fail_next.load(.acquire));
+    try std.testing.expect(update_opt != null);
+    var update = update_opt.?;
+    defer update.deinit();
+
+    try std.testing.expectEqualStrings("2.0.0", update.version);
+    try std.testing.expect(update_manifest.eqlSha256Hex(&payload_sha256, update.sha256));
+
+    // Setup test temporary directory for target binary
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+
+    const dir_path = try tmp.dir.realPathFileAlloc(io, ".", allocator);
+    defer allocator.free(dir_path);
+
+    const dummy_app_path = try std.fs.path.join(allocator, &.{ dir_path, "dummy_app" });
+    defer allocator.free(dummy_app_path);
+
+    // Create initial dummy binary with executable mode
+    const initial_content = "original binary v1.0.0";
+    {
+        const f = try std.Io.Dir.cwd().createFile(io, dummy_app_path, .{
+            .permissions = std.Io.File.Permissions.fromMode(0o755),
+        });
+        defer f.close(io);
+        try f.writeStreamingAll(io, initial_content);
+    }
+
+    // 2. Download and verify replacement
+    const ProgressContext = struct {
+        called: bool = false,
+        fn onProgress(ctx: ?*anyopaque, downloaded: u64, total: ?u64) void {
+            _ = downloaded;
+            _ = total;
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            self.called = true;
+        }
+    };
+    var progress_ctx = ProgressContext{};
+    const progress_cb = ProgressCallback{
+        .context = &progress_ctx,
+        .callback = &ProgressContext.onProgress,
+    };
+
+    server.fail_next.store(1, .release); // retried, as for the manifest
+    const returned_path = try download(io, allocator, update, .{ .dest_path = dummy_app_path, .progress = progress_cb });
+    try std.testing.expectEqual(@as(u32, 0), server.fail_next.load(.acquire));
+    defer allocator.free(returned_path);
+    try std.testing.expectEqualStrings(dummy_app_path, returned_path);
+    try std.testing.expect(progress_ctx.called);
+
+    // Verify file content was replaced
+    const updated_content = try std.Io.Dir.cwd().readFileAlloc(io, dummy_app_path, allocator, .limited(1024));
+    defer allocator.free(updated_content);
+    try std.testing.expectEqualStrings(new_payload, updated_content);
+
+    // Verify mode is still executable
+    {
+        const f = try std.Io.Dir.cwd().openFile(io, dummy_app_path, .{});
+        defer f.close(io);
+        const st = try f.stat(io);
+        try std.testing.expect(st.permissions.toMode() & 0o111 != 0);
+    }
+
+    // 3. Test bad SHA-256 leaves original binary intact and leaves no temp files
+    var bad_update = update;
+    bad_update.sha256 = "0000000000000000000000000000000000000000000000000000000000000000";
+
+    const err = download(io, allocator, bad_update, .{ .dest_path = dummy_app_path });
+    try std.testing.expectError(error.PayloadHashMismatch, err);
+
+    const intact_content = try std.Io.Dir.cwd().readFileAlloc(io, dummy_app_path, allocator, .limited(1024));
+    defer allocator.free(intact_content);
+    try std.testing.expectEqualStrings(new_payload, intact_content);
+
+    // 4. Test gzip-compressed payload variant (format = raw.gz)
+    const gz_payload_url = try std.fmt.allocPrint(allocator, "http://127.0.0.1:{d}/payload.gz", .{server.port});
+    defer allocator.free(gz_payload_url);
+
+    const gz_sign_params = update_manifest.SignParameters{
+        .app_id = "dev.oriel.test",
+        .version = "2.1.0",
+        .target = DEFAULT_TARGET,
+        .format = "raw.gz",
+        .size = test_payload_gz.len,
+        .sha256 = &gz_payload_sha256,
+        .url = gz_payload_url,
+        .allow_test_http = true,
+    };
+
+    const gz_sig_b64 = try update_manifest.sign(allocator, kp, gz_sign_params);
+    defer allocator.free(gz_sig_b64);
+
+    const gz_manifest_json = try update_manifest.formatManifest(allocator, gz_sign_params, gz_sig_b64);
+    defer allocator.free(gz_manifest_json);
+    server.setManifest(io, gz_manifest_json);
+
+    var gz_cfg = base_cfg;
+    gz_cfg.current_version = "2.0.0";
+    const gz_update_opt = try checkForUpdate(io, allocator, gz_cfg);
+    try std.testing.expect(gz_update_opt != null);
+    var gz_update = gz_update_opt.?;
+    defer gz_update.deinit();
+
+    const gz_returned_path = try download(io, allocator, gz_update, .{ .dest_path = dummy_app_path });
+    defer allocator.free(gz_returned_path);
+
+    const gz_decompressed_content = try std.Io.Dir.cwd().readFileAlloc(io, dummy_app_path, allocator, .limited(2048));
+    defer allocator.free(gz_decompressed_content);
+    try std.testing.expect(std.mem.startsWith(u8, gz_decompressed_content, "oriel update payload"));
+}
+
+test "core end-to-end update flow on Windows: replace the running exe" {
+    // Windows' own path: the installed exe is running, so its image is locked
+    // against replacement and installFile renames it to <exe>.old first.
+    if (builtin.os.tag != .windows) return error.SkipZigTest;
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+
+    try init(io, allocator, null);
+    defer deinit(io);
+    testing.allow_loopback_http = true;
+
+    // Two real executables: PING.EXE as the installed app (it keeps running),
+    // HOSTNAME.EXE as the update (it prints the host name and exits 0).
+    const system_root = try std.testing.environ.getAlloc(allocator, "SystemRoot");
+    defer allocator.free(system_root);
+    const ping_path = try std.fs.path.join(allocator, &.{ system_root, "System32", "PING.EXE" });
+    defer allocator.free(ping_path);
+    const hostname_path = try std.fs.path.join(allocator, &.{ system_root, "System32", "HOSTNAME.EXE" });
+    defer allocator.free(hostname_path);
+
+    const new_payload = try std.Io.Dir.cwd().readFileAlloc(io, hostname_path, allocator, .limited(1 << 20));
+    defer allocator.free(new_payload);
+    var digest: [32]u8 = undefined;
+    Sha256.hash(new_payload, &digest, .{});
+    const payload_sha256 = std.fmt.bytesToHex(digest, .lower);
+
+    const kp = try Ed25519.KeyPair.generateDeterministic([_]u8{77} ** 32);
+    var pk_b64: [update_manifest.PUBLIC_KEY_B64_LEN]u8 = undefined;
+    _ = update_manifest.encodePublicKey(kp.public_key.toBytes(), &pk_b64);
+    const wrong_kp = try Ed25519.KeyPair.generateDeterministic([_]u8{88} ** 32);
+    var wrong_pk_b64: [update_manifest.PUBLIC_KEY_B64_LEN]u8 = undefined;
+    _ = update_manifest.encodePublicKey(wrong_kp.public_key.toBytes(), &wrong_pk_b64);
+
+    var server = try testing.MockServer.start(io, 0, "", new_payload, null);
+    defer server.stop();
+
+    const payload_url = try std.fmt.allocPrint(allocator, "http://127.0.0.1:{d}/payload", .{server.port});
+    defer allocator.free(payload_url);
+    const sign_params = update_manifest.SignParameters{
+        .app_id = "dev.oriel.test",
+        .version = "2.0.0",
+        .target = DEFAULT_TARGET,
+        .format = "raw",
+        .size = new_payload.len,
+        .sha256 = &payload_sha256,
+        .url = payload_url,
+        .allow_test_http = true,
+    };
+    const sig_b64 = try update_manifest.sign(allocator, kp, sign_params);
+    defer allocator.free(sig_b64);
+    const manifest_json = try update_manifest.formatManifest(allocator, sign_params, sig_b64);
+    defer allocator.free(manifest_json);
+    server.setManifest(io, manifest_json);
+
+    const manifest_url = try std.fmt.allocPrint(allocator, "http://127.0.0.1:{d}/manifest.json", .{server.port});
+    defer allocator.free(manifest_url);
+    const cfg = Config{
+        .app_id = "dev.oriel.test",
+        .manifest_url = manifest_url,
+        .current_version = "1.0.0",
+        .public_key_b64 = &pk_b64,
+        .target = DEFAULT_TARGET,
+    };
+
+    // A manifest signed with another key is rejected.
+    var wrong_key_cfg = cfg;
+    wrong_key_cfg.public_key_b64 = &wrong_pk_b64;
+    try std.testing.expectError(error.SignatureVerificationFailed, checkForUpdate(io, allocator, wrong_key_cfg));
+
+    var update = (try checkForUpdate(io, allocator, cfg)).?;
+    defer update.deinit();
+
+    // The installed app, staged in a temp dir and running.
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    const dir_path = try tmp.dir.realPathFileAlloc(io, ".", allocator);
+    defer allocator.free(dir_path);
+    const app_path = try std.fs.path.join(allocator, &.{ dir_path, "app.exe" });
+    defer allocator.free(app_path);
+    const old_path = try backend.buildOldPath(allocator, app_path);
+    defer allocator.free(old_path);
+    try std.Io.Dir.cwd().copyFile(ping_path, std.Io.Dir.cwd(), app_path, io, .{});
+    const original = try std.Io.Dir.cwd().readFileAlloc(io, app_path, allocator, .limited(1 << 20));
+    defer allocator.free(original);
+
+    var app = try std.process.spawn(io, .{
+        .argv = &.{ app_path, "-n", "60", "127.0.0.1" },
+        .stdin = .ignore,
+        .stdout = .ignore,
+        .stderr = .ignore,
+    });
+    var app_running = true;
+    defer if (app_running) app.kill(io);
+
+    // Tampered payloads (hash or size not what the manifest signed) are
+    // rejected before install: the running app stays, with no .old and no
+    // temp files next to it.
+    var bad_hash = update;
+    bad_hash.sha256 = "0000000000000000000000000000000000000000000000000000000000000000";
+    try std.testing.expectError(error.PayloadHashMismatch, download(io, allocator, bad_hash, .{ .dest_path = app_path }));
+    var bad_size = update;
+    bad_size.size = update.size - 1;
+    try std.testing.expectError(error.PayloadSizeExceeded, download(io, allocator, bad_size, .{ .dest_path = app_path }));
+    {
+        const content = try std.Io.Dir.cwd().readFileAlloc(io, app_path, allocator, .limited(1 << 20));
+        defer allocator.free(content);
+        try std.testing.expectEqualSlices(u8, original, content);
+        try std.testing.expectError(error.FileNotFound, std.Io.Dir.cwd().access(io, old_path, .{}));
+        var entries: usize = 0;
+        var it = tmp.dir.iterate();
+        while (try it.next(io)) |_| entries += 1;
+        try std.testing.expectEqual(1, entries);
+    }
+
+    // The verified update replaces the running exe, which moves to <exe>.old.
+    const returned_path = try download(io, allocator, update, .{ .dest_path = app_path });
+    defer allocator.free(returned_path);
+    try std.testing.expectEqualStrings(app_path, returned_path);
+    {
+        const content = try std.Io.Dir.cwd().readFileAlloc(io, app_path, allocator, .limited(1 << 20));
+        defer allocator.free(content);
+        try std.testing.expectEqualSlices(u8, new_payload, content);
+        const old_content = try std.Io.Dir.cwd().readFileAlloc(io, old_path, allocator, .limited(1 << 20));
+        defer allocator.free(old_content);
+        try std.testing.expectEqualSlices(u8, original, old_content);
+    }
+
+    // What `restart` launches: the new exe starts and runs (restart itself
+    // ends the calling process, so it can't run inside the test runner).
+    const result = try std.process.run(allocator, io, .{ .argv = &.{app_path} });
+    defer allocator.free(result.stdout);
+    defer allocator.free(result.stderr);
+    try std.testing.expect(result.term == .exited and result.term.exited == 0);
+    try std.testing.expect(std.mem.trim(u8, result.stdout, " \r\n").len > 0);
+
+    // cleanupStale on the next start: while the old process still runs, its
+    // image can't be deleted and <exe>.old stays for a later start...
+    backend.cleanupStaleFor(allocator, app_path);
+    try std.Io.Dir.cwd().access(io, old_path, .{});
+    // ...once it has exited, it goes.
+    app.kill(io);
+    app_running = false;
+    backend.cleanupStaleFor(allocator, app_path);
+    try std.testing.expectError(error.FileNotFound, std.Io.Dir.cwd().access(io, old_path, .{}));
+    // Nothing left to clean up is not an error.
+    backend.cleanupStaleFor(allocator, app_path);
+}
+
+test "pure decideDestPath logic" {
+    // 1. Explicit dest_path always wins
+    const custom = decideDestPath("/opt/app/my_bin", "/tmp/app.AppImage", "/tmp/mount", "/tmp/mount/usr/bin/app");
+    try std.testing.expectEqualStrings("/opt/app/my_bin", custom);
+
+    // 2. AppImage matches when exe_path is under appdir
+    const ai1 = decideDestPath(null, "/home/user/app.AppImage", "/tmp/.mount_123", "/tmp/.mount_123/usr/bin/app");
+    try std.testing.expectEqualStrings("/home/user/app.AppImage", ai1);
+
+    // Boundary with trailing slash in appdir
+    const ai2 = decideDestPath(null, "/home/user/app.AppImage", "/tmp/.mount_123/", "/tmp/.mount_123/usr/bin/app");
+    try std.testing.expectEqualStrings("/home/user/app.AppImage", ai2);
+
+    // Exe exactly matches appdir
+    const ai3 = decideDestPath(null, "/home/user/app.AppImage", "/tmp/mount", "/tmp/mount");
+    try std.testing.expectEqualStrings("/home/user/app.AppImage", ai3);
+
+    // 3. Prefix matches string but NOT slash boundary: rejected!
+    const outside1 = decideDestPath(null, "/home/user/app.AppImage", "/tmp/mount", "/tmp/mountain/app");
+    try std.testing.expectEqualStrings("/tmp/mountain/app", outside1);
+
+    // 4. Exe completely outside appdir
+    const outside2 = decideDestPath(null, "/home/user/app.AppImage", "/tmp/.mount_123", "/usr/bin/malicious");
+    try std.testing.expectEqualStrings("/usr/bin/malicious", outside2);
+
+    // 5. AppImage or AppDir missing/empty
+    const no_ai = decideDestPath(null, null, "/tmp/mount", "/usr/bin/app");
+    try std.testing.expectEqualStrings("/usr/bin/app", no_ai);
+
+    const no_dir = decideDestPath(null, "/home/user/app.AppImage", null, "/usr/bin/app");
+    try std.testing.expectEqualStrings("/usr/bin/app", no_dir);
+}
+
+test "pure splitCmdline logic" {
+    var storage: [16][]const u8 = undefined;
+
+    // Normal command line with trailing NUL
+    const res1 = try splitCmdline("old_exe\x00arg1\x00arg2\x00", "/new/target", &storage);
+    try std.testing.expectEqual(@as(usize, 3), res1.len);
+    try std.testing.expectEqualStrings("/new/target", res1[0]);
+    try std.testing.expectEqualStrings("arg1", res1[1]);
+    try std.testing.expectEqualStrings("arg2", res1[2]);
+
+    // Keeps empty arguments
+    const res2 = try splitCmdline("old_exe\x00\x00arg2\x00", "/new/target", &storage);
+    try std.testing.expectEqual(@as(usize, 3), res2.len);
+    try std.testing.expectEqualStrings("/new/target", res2[0]);
+    try std.testing.expectEqualStrings("", res2[1]);
+    try std.testing.expectEqualStrings("arg2", res2[2]);
+
+    // Empty argument at end
+    const res3 = try splitCmdline("old_exe\x00arg1\x00\x00", "/new/target", &storage);
+    try std.testing.expectEqual(@as(usize, 3), res3.len);
+    try std.testing.expectEqualStrings("/new/target", res3[0]);
+    try std.testing.expectEqualStrings("arg1", res3[1]);
+    try std.testing.expectEqualStrings("", res3[2]);
+
+    // Empty cmdline returns error
+    try std.testing.expectError(error.CannotReadCmdline, splitCmdline("", "/new/target", &storage));
+
+    // Exceeding storage limit returns error
+    var small_storage: [2][]const u8 = undefined;
+    try std.testing.expectError(error.TooManyArguments, splitCmdline("a\x00b\x00c\x00", "/new/target", &small_storage));
+}
+
+test {
+    std.testing.refAllDecls(@This());
+    std.testing.refAllDecls(backend);
+}
+
+fn writeExpanded(reader: *std.Io.Reader, writer: *std.Io.Writer, max_size: usize) !void {
+    var buf: [32768]u8 = undefined;
+    var expanded: usize = 0;
+    while (true) {
+        const n = try reader.readSliceShort(&buf);
+        if (n == 0) return;
+        if (n > max_size - expanded) return error.UpdateTooLarge;
+        expanded += n;
+        try writer.writeAll(buf[0..n]);
+    }
+}
+
+test "gzip expansion stops before writing beyond its limit" {
+    var input: std.Io.Reader = .fixed(&test_payload_gz);
+    var window: [std.compress.flate.max_window_len]u8 = undefined;
+    var decompress: std.compress.flate.Decompress = .init(&input, .gzip, &window);
+    var output: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer output.deinit();
+    try std.testing.expectError(error.UpdateTooLarge, writeExpanded(&decompress.reader, &output.writer, 8));
+    try std.testing.expect(output.written().len <= 8);
+}
+
+fn validateExpiration(expires: ?u64, now_ts: i64) !void {
+    const exp = expires orelse return;
+    if (now_ts <= 0) return error.InvalidSystemTime;
+    if (@as(u64, @intCast(now_ts)) > exp) return error.ManifestExpired;
+}
+
+test "manifest expiry fails closed on invalid clocks" {
+    try validateExpiration(null, 0);
+    try validateExpiration(100, 100);
+    try std.testing.expectError(error.InvalidSystemTime, validateExpiration(100, 0));
+    try std.testing.expectError(error.InvalidSystemTime, validateExpiration(100, -1));
+    try std.testing.expectError(error.ManifestExpired, validateExpiration(100, 101));
+}

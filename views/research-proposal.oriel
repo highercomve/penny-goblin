@@ -1,0 +1,21 @@
+<style>
+ sheet: background=#f6f8f1 color=#191d19
+ card: background=#f0f3eb
+ primary: color=#2d6a4f
+ filled: background=#2d6a4f color=#ffffff
+ field: color=#191d19 border-color=#737a72 color-scheme=light
+ @media (prefers-color-scheme: dark) {
+  sheet: background=#111511 color=#e0e4dc
+  card: background=#191d19
+  primary: color=#9ad4ae
+  filled: background=#9ad4ae color=#003920
+  field: color=#e0e4dc border-color=#8c938a color-scheme=dark
+ }
+</style>
+<column class="card" padding="16" gap="12" radius="16" shrink="0">
+ <text id="merchant" font-size="16" font-weight="700">{merchant}</text>
+ <text id="reason" font-size="14">{reason}</text>
+ <text font-size="14">Apply category</text>
+ <select id="category" class="field" height="48" width="100%" padding="8,12,8,12" border-width="1" radius="8" label="Apply category"><option value="">Leave unchanged</option></select>
+ <column id="sources" gap="8" />
+</column>

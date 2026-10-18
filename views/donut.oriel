@@ -1,0 +1,10 @@
+<style>
+  ink: color=#191d19
+  @media (prefers-color-scheme: dark) { ink: color=#e0e4dc }
+</style>
+<column width="168" height="168" margin="0,auto,12,auto" shrink="0">
+  <canvas id="chart" width="168" height="168" />
+  <column position="absolute" top="24" left="24" width="120" height="120" padding="8" align="center" justify="center">
+    <text id="total" class="ink" font-size="14" font-weight="500" text-align="center" width="100%" />
+  </column>
+</column>

@@ -1,0 +1,15 @@
+<style>
+  comparison: background=#eaeee4
+  n2: color=#191d19
+  n3: color=#434a43
+  @media (prefers-color-scheme: dark) {
+    comparison: background=#1d211d
+    n2: color=#e0e4dc
+    n3: color=#c2c9c0
+  }
+</style>
+<view id="comparison" class="comparison" grow="1" shrink="1" basis="240" min-width="0" padding="12" radius="12" unset="color font-size">
+  <text class="n2" shrink="0" font-size="15" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">{title}</text>
+  <text class="n3" shrink="0" margin="0,0,4,0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">{detail}</text>
+  <view id="rows" margin="0" />
+</view>

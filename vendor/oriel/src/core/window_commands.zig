@@ -1,0 +1,346 @@
+//! Built-in window IPC commands for Oriel.
+//!
+//! Provides backend command dispatch for `oriel.window` API from JavaScript:
+//!   - open: create and show a new window (App.openWindow)
+//!   - close: request window closure (queued to the main loop)
+//!   - show/hide/focus: manipulate window visibility and focus (show creates
+//!     a window declared with App.registerWindow)
+//!   - setTitle/setSize/maximize/fullscreen: update window geometry & state
+//!   - startDragging: move the window with the pointer (button held down)
+//!   - setThemeColor: the page's `<meta name="theme-color">` (or null), for
+//!     the window's caption where the platform draws one
+//!   - get/all/current: query window information
+//!   - emitTo: send events targeted to a specific window
+//!
+//! Enforces security policies (validation of labels, URLs, window limits,
+//! and per-window modification permissions).
+
+const std = @import("std");
+const App = @import("App.zig");
+const internal = @import("internal.zig");
+const security = @import("security.zig");
+const platform = @import("../platform/platform.zig");
+
+const log = std.log.scoped(.oriel);
+
+/// The page's `oriel.window.open` options: camelCase, like the rest of the
+/// page API (the TypeScript `WindowOptions`).
+pub const OpenArgs = struct {
+    label: []const u8,
+    url: ?[]const u8 = null,
+    title: ?[]const u8 = null,
+    width: ?c_int = null,
+    height: ?c_int = null,
+    minWidth: ?c_int = null,
+    minHeight: ?c_int = null,
+    maxWidth: ?c_int = null,
+    maxHeight: ?c_int = null,
+    resizable: ?bool = null,
+    decorations: ?bool = null,
+    fullscreen: ?bool = null,
+    maximized: ?bool = null,
+};
+
+pub const WindowInfo = struct {
+    label: []const u8,
+    title: []const u8,
+};
+
+/// Watches the page's `<meta name="theme-color">` (the first one whose
+/// `media` matches) and reports it as [r, g, b, a] (0-255), or null when
+/// there is none, through `oriel:window:setThemeColor`. Spliced into every
+/// WebView bridge, inside its closure (`invoke`; the label is `window.__oriel_window_label`). The native
+/// renderer does the same in main.js.
+pub const theme_color_js =
+    \\  {
+    \\    let sent = "unset";
+    \\    const pick = () => {
+    \\      const meta = [...document.querySelectorAll('meta[name="theme-color"]')].find((m) => !m.media || matchMedia(m.media).matches);
+    \\      const value = meta?.content?.trim();
+    \\      if (!value) return null;
+    \\      // A canvas normalizes any CSS colour to #rrggbb or rgba(...); an
+    \\      // invalid one leaves the previous value (checked with two).
+    \\      const c = document.createElement("canvas").getContext("2d");
+    \\      if (!c) return null;
+    \\      c.fillStyle = "#010203"; c.fillStyle = value; const a = c.fillStyle;
+    \\      c.fillStyle = "#040506"; c.fillStyle = value;
+    \\      if (a !== c.fillStyle) return null;
+    \\      if (a.startsWith("#")) return [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16)).concat(255);
+    \\      const n = a.match(/[\d.]+/g)?.map(Number);
+    \\      return n && n.length >= 3 ? [n[0], n[1], n[2], Math.round((n[3] ?? 1) * 255)] : null;
+    \\    };
+    \\    const update = () => {
+    \\      const color = pick();
+    \\      const key = JSON.stringify(color);
+    \\      if (key === sent) return;
+    \\      sent = key;
+    \\      Promise.resolve(invoke("oriel:window:setThemeColor", { label: window.__oriel_window_label, color })).catch(() => {});
+    \\    };
+    \\    const start = () => {
+    \\      update();
+    \\      new MutationObserver(update).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ["content", "name", "media"] });
+    \\      matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", update);
+    \\    };
+    \\    if (window === window.top) {
+    \\      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
+    \\      else start();
+    \\    }
+    \\  }
+    \\
+;
+
+/// The largest window dimension a page may ask for (px).
+const max_dim = 32767;
+
+/// A page-supplied width or height: 1..max_dim, else InvalidArgs (zero,
+/// negative or huge sizes would reach the platforms' size arithmetic).
+fn dim(v: c_int) error{InvalidArgs}!c_int {
+    if (v < 1 or v > max_dim) return error.InvalidArgs;
+    return v;
+}
+
+fn optDim(v: ?c_int) error{InvalidArgs}!?c_int {
+    return if (v) |x| try dim(x) else null;
+}
+
+pub fn isWindowCommand(cmd: []const u8) bool {
+    return std.mem.startsWith(u8, cmd, "oriel:window:");
+}
+
+pub fn dispatch(
+    sec: security.Security,
+    local: security.Local,
+    arena: std.mem.Allocator,
+    page_url: []const u8,
+    caller_win_label: ?[]const u8,
+    cmd: []const u8,
+    args_val: std.json.Value,
+) ![]u8 {
+    if (!isWindowCommand(cmd)) return error.UnknownCommand;
+
+    if (!security.isWindowApiAllowed(sec, local, page_url, caller_win_label)) {
+        log.debug("blocked window command '{s}' from {s} (window: {?s})", .{ cmd, page_url, caller_win_label });
+        return error.Forbidden;
+    }
+
+    const action = cmd["oriel:window:".len..];
+
+    if (std.mem.eql(u8, action, "open")) {
+        const args = try std.json.parseFromValueLeaky(OpenArgs, arena, args_val, .{
+            .ignore_unknown_fields = true,
+        });
+        try security.validateLabel(args.label);
+        try security.validateWindowUrl(sec, local, args.url);
+        try security.validateWindowCount(sec, internal.getWindowCount());
+
+        const label_z = try arena.dupeZ(u8, args.label);
+        const title_z = if (args.title) |t| try arena.dupeZ(u8, t) else try arena.dupeZ(u8, "");
+        const url_z = if (args.url) |u| try arena.dupeZ(u8, u) else null;
+
+        const win = try App.openWindow(.{
+            .label = label_z,
+            .title = title_z,
+            .url = url_z,
+            .width = try dim(args.width orelse 800),
+            .height = try dim(args.height orelse 600),
+            .min_width = try optDim(args.minWidth),
+            .min_height = try optDim(args.minHeight),
+            .max_width = try optDim(args.maxWidth),
+            .max_height = try optDim(args.maxHeight),
+            .resizable = args.resizable orelse true,
+            .decorations = args.decorations orelse true,
+            .fullscreen = args.fullscreen orelse false,
+            .maximized = args.maximized orelse false,
+        });
+
+        return std.json.Stringify.valueAlloc(arena, struct { label: []const u8 }{ .label = win.label }, .{});
+    } else if (std.mem.eql(u8, action, "close")) {
+        const args = try std.json.parseFromValueLeaky(struct { label: []const u8 }, arena, args_val, .{
+            .ignore_unknown_fields = true,
+        });
+        try security.validateLabel(args.label);
+        try security.validateWindowModification(sec, caller_win_label, args.label);
+        // Queued to the main loop: the page may close its own window from
+        // this call.
+        const win = App.getWindow(args.label) orelse return error.WindowNotFound;
+        platform.postCloseWindow(win.handle);
+        return arena.dupe(u8, "null");
+    } else if (std.mem.eql(u8, action, "show")) {
+        const args = try std.json.parseFromValueLeaky(struct { label: []const u8 }, arena, args_val, .{
+            .ignore_unknown_fields = true,
+        });
+        try security.validateLabel(args.label);
+        try security.validateWindowModification(sec, caller_win_label, args.label);
+        // A window declared with App.registerWindow is created on first show.
+        const win = try App.ensureWindow(args.label);
+        win.show();
+        return arena.dupe(u8, "null");
+    } else if (std.mem.eql(u8, action, "hide")) {
+        const args = try std.json.parseFromValueLeaky(struct { label: []const u8 }, arena, args_val, .{
+            .ignore_unknown_fields = true,
+        });
+        try security.validateLabel(args.label);
+        try security.validateWindowModification(sec, caller_win_label, args.label);
+        const win = App.getWindow(args.label) orelse return error.WindowNotFound;
+        win.hide();
+        return arena.dupe(u8, "null");
+    } else if (std.mem.eql(u8, action, "focus")) {
+        const args = try std.json.parseFromValueLeaky(struct { label: []const u8 }, arena, args_val, .{
+            .ignore_unknown_fields = true,
+        });
+        try security.validateLabel(args.label);
+        try security.validateWindowModification(sec, caller_win_label, args.label);
+        const win = App.getWindow(args.label) orelse return error.WindowNotFound;
+        win.focus();
+        return arena.dupe(u8, "null");
+    } else if (std.mem.eql(u8, action, "setTitle")) {
+        const args = try std.json.parseFromValueLeaky(struct { label: []const u8, title: []const u8 }, arena, args_val, .{
+            .ignore_unknown_fields = true,
+        });
+        try security.validateLabel(args.label);
+        try security.validateWindowModification(sec, caller_win_label, args.label);
+        const win = App.getWindow(args.label) orelse return error.WindowNotFound;
+        const title_z = try arena.dupeZ(u8, args.title);
+        win.setTitle(title_z);
+        return arena.dupe(u8, "null");
+    } else if (std.mem.eql(u8, action, "setThemeColor")) {
+        const args = try std.json.parseFromValueLeaky(struct { label: []const u8, color: ?[4]u8 = null }, arena, args_val, .{
+            .ignore_unknown_fields = true,
+        });
+        try security.validateLabel(args.label);
+        try security.validateWindowModification(sec, caller_win_label, args.label);
+        const win = App.getWindow(args.label) orelse {
+            // The native renderer's page sends it while its window is being made.
+            internal.setPendingThemeColor(args.label, args.color);
+            return arena.dupe(u8, "null");
+        };
+        win.setThemeColor(args.color);
+        return arena.dupe(u8, "null");
+    } else if (std.mem.eql(u8, action, "startDragging")) {
+        const args = try std.json.parseFromValueLeaky(struct { label: []const u8 }, arena, args_val, .{
+            .ignore_unknown_fields = true,
+        });
+        try security.validateLabel(args.label);
+        try security.validateWindowModification(sec, caller_win_label, args.label);
+        const win = App.getWindow(args.label) orelse return error.WindowNotFound;
+        win.startDragging();
+        return arena.dupe(u8, "null");
+    } else if (std.mem.eql(u8, action, "setSize")) {
+        const args = try std.json.parseFromValueLeaky(struct { label: []const u8, width: c_int, height: c_int }, arena, args_val, .{
+            .ignore_unknown_fields = true,
+        });
+        try security.validateLabel(args.label);
+        try security.validateWindowModification(sec, caller_win_label, args.label);
+        const win = App.getWindow(args.label) orelse return error.WindowNotFound;
+        win.setSize(try dim(args.width), try dim(args.height));
+        return arena.dupe(u8, "null");
+    } else if (std.mem.eql(u8, action, "maximize")) {
+        const args = try std.json.parseFromValueLeaky(struct { label: []const u8, maximized: ?bool = null }, arena, args_val, .{
+            .ignore_unknown_fields = true,
+        });
+        try security.validateLabel(args.label);
+        try security.validateWindowModification(sec, caller_win_label, args.label);
+        const win = App.getWindow(args.label) orelse return error.WindowNotFound;
+        win.setMaximized(args.maximized orelse true);
+        return arena.dupe(u8, "null");
+    } else if (std.mem.eql(u8, action, "fullscreen")) {
+        const args = try std.json.parseFromValueLeaky(struct { label: []const u8, fullscreen: ?bool = null }, arena, args_val, .{
+            .ignore_unknown_fields = true,
+        });
+        try security.validateLabel(args.label);
+        try security.validateWindowModification(sec, caller_win_label, args.label);
+        const win = App.getWindow(args.label) orelse return error.WindowNotFound;
+        win.setFullscreen(args.fullscreen orelse true);
+        return arena.dupe(u8, "null");
+    } else if (std.mem.eql(u8, action, "get")) {
+        const args = try std.json.parseFromValueLeaky(struct { label: []const u8 }, arena, args_val, .{
+            .ignore_unknown_fields = true,
+        });
+        try security.validateLabel(args.label);
+        internal.ensureWindowsMutex();
+        internal.windows_mutex.lock();
+        defer internal.windows_mutex.unlock();
+        for (internal.windows_list.items) |w| {
+            if (std.mem.eql(u8, w.label, args.label)) {
+                return std.json.Stringify.valueAlloc(arena, WindowInfo{ .label = w.label, .title = w.options.title }, .{});
+            }
+        }
+        return arena.dupe(u8, "null");
+    } else if (std.mem.eql(u8, action, "all")) {
+        internal.ensureWindowsMutex();
+        internal.windows_mutex.lock();
+        defer internal.windows_mutex.unlock();
+        var list: std.ArrayList(WindowInfo) = .empty;
+        for (internal.windows_list.items) |w| {
+            try list.append(arena, .{ .label = w.label, .title = w.options.title });
+        }
+        return std.json.Stringify.valueAlloc(arena, list.items, .{});
+    } else if (std.mem.eql(u8, action, "current")) {
+        const label = caller_win_label orelse "main";
+        internal.ensureWindowsMutex();
+        internal.windows_mutex.lock();
+        defer internal.windows_mutex.unlock();
+        for (internal.windows_list.items) |w| {
+            if (std.mem.eql(u8, w.label, label)) {
+                return std.json.Stringify.valueAlloc(arena, WindowInfo{ .label = w.label, .title = w.options.title }, .{});
+            }
+        }
+        return std.json.Stringify.valueAlloc(arena, WindowInfo{ .label = label, .title = "" }, .{});
+    } else if (std.mem.eql(u8, action, "emitTo")) {
+        const args = try std.json.parseFromValueLeaky(struct { label: []const u8, event: []const u8, payload: std.json.Value = .null }, arena, args_val, .{
+            .ignore_unknown_fields = true,
+        });
+        try security.validateLabel(args.label);
+        try security.validateWindowModification(sec, caller_win_label, args.label);
+        try internal.emitTo(args.label, args.event, args.payload);
+        return arena.dupe(u8, "null");
+    }
+
+    return error.UnknownCommand;
+}
+
+test "isWindowCommand recognises window commands" {
+    try std.testing.expect(isWindowCommand("oriel:window:open"));
+    try std.testing.expect(isWindowCommand("oriel:window:close"));
+    try std.testing.expect(isWindowCommand("oriel:window:emitTo"));
+    try std.testing.expect(!isWindowCommand("greet"));
+    try std.testing.expect(!isWindowCommand("window:open"));
+}
+
+test "dispatch rejects forbidden origins and invalid commands" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    const sec: security.Security = .{};
+    const local: security.Local = .{};
+
+    // Remote origin without window capability is Forbidden
+    try std.testing.expectError(error.Forbidden, dispatch(sec, local, arena, "https://unknown.com", null, "oriel:window:open", .null));
+
+    // Unknown action
+    try std.testing.expectError(error.UnknownCommand, dispatch(sec, local, arena, security.app_origin, null, "oriel:window:nonexistent", .null));
+}
+
+test "window sizes from the page are bounded" {
+    try std.testing.expectEqual(@as(c_int, 800), try dim(800));
+    try std.testing.expectError(error.InvalidArgs, dim(0));
+    try std.testing.expectError(error.InvalidArgs, dim(-5));
+    try std.testing.expectError(error.InvalidArgs, dim(max_dim + 1));
+    try std.testing.expectEqual(@as(?c_int, null), try optDim(null));
+}
+
+test "emitTo rejects cross-window events without modification permission" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const args = try std.json.parseFromSliceLeaky(std.json.Value, a, "{\"label\":\"main\",\"event\":\"deep-link\"}", .{});
+    try std.testing.expectError(error.PermissionDenied, dispatch(.{}, .{}, a, security.app_origin, "child", "oriel:window:emitTo", args));
+}
+
+test "theme_color_js uses only what the bridge's closure has" {
+    // The page API (windowApi, ...) lives inside orielApi() in bridge_api.js,
+    // not in the bridge closure this is spliced into.
+    try std.testing.expect(std.mem.indexOf(u8, theme_color_js, "windowApi") == null);
+    try std.testing.expect(std.mem.indexOf(u8, theme_color_js, "window.__oriel_window_label") != null);
+}

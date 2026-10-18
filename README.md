@@ -1,0 +1,130 @@
+# Penny Goblin
+
+<img src="brand/tray.svg" width="88" alt="Penny Goblin mascot">
+
+A private household ledger for Linux and Android. Scan a receipt or transfer
+voucher, review the extracted fields, and save the payment. Your ledger lives
+on your devices; there is no hosted account or cloud ledger.
+
+Built with **Zig 0.16.0** and **Oriel**, with two Linux interfaces: WebKit and
+compiled `.oriel` views. Android uses the compiled Oriel renderer. Application
+ID: `com.pennygoblin.app`. Current development version: **0.2.5**.
+
+## What it does
+
+- Receipt and transfer-voucher scanning, manual correction and explicit Save.
+- On-device Android OCR, optional local vision models, and paired desktop scans.
+- Monthly spending, categories, accounts, merchant rules and receipt evidence.
+- PDF statement ingestion and reconciliation against reviewed payments.
+- Secure desktop/phone pairing and synchronization over LAN or Tailscale.
+- Desktop-assisted category research with a separate local model, live activity,
+  source evidence and explicit reviewed Apply. Only merchant names and country
+  context are searched online; amounts, accounts and receipt images stay private.
+
+Extraction and research can be wrong. Review suggestions before saving or applying.
+The compiled renderer is under active development; see [parity notes](WEB_PARITY.md).
+Model weights are downloaded separately and are not included in this repository.
+
+## Build on Linux
+
+Install Zig **0.16.0**, Python 3 with venv/pip, pkg-config, GTK4, WebKitGTK 6,
+Wayland development libraries, libxkbcommon, X11/XTest and DejaVu fonts.
+The pre-generated bindings target GNOME 50; CI uses current Arch Linux.
+For Ubuntu LTS, use the same Arch container or supply compatible bindings.
+
+```sh
+zig build -Drenderer=webview -Doptimize=ReleaseSafe
+zig build run -Drenderer=oriel
+bash scripts/build-linux.sh oriel
+bash scripts/build-linux.sh webview
+```
+
+The scripts write Linux executables, AppImages and SHA-256 checksums to `dist/`.
+AppImages still require compatible system GTK/WebKit libraries; they are not
+universal bundles for every Linux distribution. The build freezes the PDF/sync
+helper with PyInstaller; the optional research browser additionally needs system
+Python, PyGObject, GTK4 and WebKitGTK 6 at runtime.
+
+For local installation, `./install-local.sh` installs the launcher/icons and
+restarts the desktop app. It retains `~/.local/share/com.pennygoblin.app/`.
+Do not run the installer while scanning, researching or editing an unsaved entry.
+
+## Build Android
+
+Required: Zig **0.16.0**, JDK **17**, Gradle **8.14.3**, Android platform **36**,
+build-tools **35.0.0**, and NDK **28.2.13676358**. Set `ANDROID_HOME` to the SDK.
+
+```sh
+sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'ndk;28.2.13676358'
+python3 scripts/build-android.py
+```
+
+The script uses Oriel's `android-project` generator, compiles the arm64 library,
+builds the APK and verifies its package identity/signature. Outputs are in `dist/`.
+`android/` is generated; Kotlin and app resource sources live in `platform/android/`.
+CI APKs are **debug-signed**. A clean runner generates its own debug key, so these
+are test artifacts, not a stable release signing channel. Android only permits
+an in-place update when the installed app has the same signing certificate.
+Never commit a keystore or uninstall a populated app just to try a CI artifact;
+export/sync first or use an isolated test device/profile.
+
+## Continuous integration
+
+[Build and test](https://github.com/highercomve/penny-goblin/actions/workflows/build.yml)
+runs on pushes, pull requests, version tags and manual dispatch. Download the
+Linux Oriel/WebKit, Android arm64 and website artifacts from a successful run.
+The repository and its artifacts require collaborator access. CI does not
+publish releases, models or user data and does not need private dependency tokens.
+
+## Website
+
+The project site is built with **Zine 0.14.0**. Content and layouts are in `site/`.
+It uses local assets and system fonts, without analytics or a JavaScript framework.
+
+```sh
+zine                       # local preview: http://localhost:1990
+bash scripts/build-site.sh # clean static website in public/
+```
+
+CI builds the site as an artifact and publishes main-branch builds to
+https://highercomve.github.io/penny-goblin-site/. Only generated public HTML/CSS
+and brand assets are mirrored to `highercomve/penny-goblin-site`; application
+source and build artifacts stay private. The website job uses a deploy key scoped
+only to the public site repository. Pull requests never publish.
+
+## Development and tests
+
+```sh
+python3 scripts/check-vendor.py
+zig build test -Dvision=false
+zig build test-ui -Drenderer=oriel -Dvision=false
+node --test scripts/reports.test.cjs
+.helper-venv/bin/python scripts/research_jobs_test.py
+.helper-venv/bin/python scripts/research_network_test.py
+```
+
+The Python test environment uses `scripts/helper-requirements.txt`. WebKit UI tests
+run with system Python + PyGObject under Xvfb and a private D-Bus session. They
+use synthetic fixtures and do not touch a real ledger.
+
+## Repository map
+
+| Path | Responsibility |
+| --- | --- |
+| `src/core/` | Ledger, validation, reports, reconciliation and OCR rules |
+| `src/` | App commands, scanner, sync, research harness and view controllers |
+| `views/` | Compiled `.oriel` UI and exported layout fixtures |
+| `frontend/` | Matching WebKit HTML/CSS/JavaScript UI |
+| `platform/android/` | OCR, secure sync and Android integration sources |
+| `vendor/oriel/` | Pinned source snapshot with upstream revision and file hashes |
+| `scripts/` | Reproducible builds and acceptance fixtures |
+| `site/` | Zine website source |
+
+The Oriel snapshot includes unreleased renderer features required by this app.
+See [vendor provenance](vendor/README.md), [contributing](CONTRIBUTING.md),
+[security](SECURITY.md), [sync](SYNC.md), [changelog](CHANGELOG.md), and the
+[implementation plan](PLAN.md). App data, receipts, models, keys and legacy
+financial exports are excluded from version control.
+
+This is a private project; no open-source license is assigned to the application.
+Third-party source retains its own licenses; see [notices](THIRD_PARTY_NOTICES.md).

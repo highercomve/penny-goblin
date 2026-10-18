@@ -1,0 +1,46 @@
+// The runtime's DOM as the native one (docs/design/native-dom.md):
+// the engine installs the store and its bindings (__nuiDom, the Node…
+// interfaces) and hands over the document as __host.document. Same exports
+// as ./linkedom.js.
+import { installNativeDom } from "./native.js";
+
+export const NATIVE = true;
+const nd = globalThis.__nuiDom;
+// Taken as the bundle loads: main.js then hides __host from the page.
+const hostDocument = globalThis.__host?.document;
+
+export function openDocument(html) {
+  const document = hostDocument;
+  const out = installNativeDom(globalThis, document);
+  document.__writePage(html);
+  return out;
+}
+
+export const classStyle = (el, allowStyle) => nd.classStyle(el, allowStyle);
+
+// Compiled once in the store, kept for the engine's life (a style sheet's
+// rules), matched natively.
+// One store selector per selector text: the renderer drops its :has()
+// matchers every render (linkedom's cache descendants) and compiles them
+// again, and the store keeps what it compiles for good.
+const kept = new Map();
+export function compileMatch(_el, sel) {
+  let id = kept.get(sel);
+  if (id === undefined) { id = nd.keepSelector(sel); kept.set(sel, id); }
+  return (el) => nd.matchKept(el, id);
+}
+
+// Frees the detached trees nothing holds; called where no DOM operation is
+// under way (the engine's render).
+export const collect = () => nd.collect();
+
+// Style writes are attribute writes: the store reports them.
+export const STYLE_RECORDS = true;
+
+// A node's store index (the renderer's node ids come from it, so the tree
+// can stamp rows from the DOM itself), and the node at one (events).
+export const nodeIndex = (node) => nd.index(node);
+export const nodeAt = (index) => nd.nodeAt(index);
+
+// The page listens for clicks on it: the tree won't stamp it as a plain leaf.
+export const markListens = (node) => nd.listens(node);

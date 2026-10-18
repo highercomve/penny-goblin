@@ -1,0 +1,10 @@
+const records = @import("sync_records.zig");
+pub const Key = records.Key;
+pub const Kind = records.Kind;
+pub const Operation = struct { operation_id: []const u8, kind: Kind, id: []const u8, base_revision: i64, payload: []const u8 };
+pub const Request = struct { version: u32 = 1, device_id: []const u8, cursor: i64, operations: []const Operation };
+pub const Ack = struct { operation_id: []const u8, kind: Kind, id: []const u8, accepted: bool, revision: i64, payload: []const u8, reason: []const u8 = "" };
+pub const Change = struct { sequence: i64, kind: Kind, id: []const u8, revision: i64, payload: []const u8 };
+pub const Reply = struct { version: u32 = 1, server_id: []const u8, from_cursor: i64, cursor: i64, more: bool, acknowledgements: []const Ack, changes: []const Change };
+pub const Entry = struct { revision: i64, payload: []const u8 };
+pub const Conflict = struct { kind: Kind, id: []const u8, local_payload: []const u8, remote_payload: []const u8, remote_revision: i64, reason: []const u8 };

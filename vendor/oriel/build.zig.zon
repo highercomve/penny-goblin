@@ -1,0 +1,98 @@
+.{
+    .name = .oriel,
+    .version = "0.18.0",
+    .fingerprint = 0x7fe3da8e54e532b,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        // zig-gobject v0.3.2 prebuilt bindings (GNOME 50: GTK 4, WebKit 6, JSC 6, Soup 3).
+        // For bindings generated from this machine's GIR files instead, run
+        // scripts/gen-bindings.sh and build with --fork=deps/gobject/bindings.
+        .gobject = .{
+            .url = "https://github.com/ianprime0509/zig-gobject/releases/download/v0.3.2/bindings-gnome50.tar.zst",
+            .hash = "gobject-0.3.2-Skun7LD1fwF1wmLVmZnH0Qx_Bhkmfau25skjhPLoljHj",
+            .lazy = true,
+        },
+        .zigimg = .{
+            .url = "git+https://github.com/zigimg/zigimg#b99b9d48899e90ef330f143b096e31cc245ea70a",
+            .hash = "zigimg-0.1.0-8_eo2qgrGADPGfefrNQ9fHU7Xy_5oXEHC7tv3eXDZtc_",
+        },
+        .httpz = .{
+            .url = "git+https://github.com/karlseguin/http.zig?ref=master#9b14af98fde5e98abb9a8376fe02b42003e835bf",
+            .hash = "httpz-0.0.0-PNVzrMgTCQDhzfBLRRebTx9LU056Ph2erdN9-42rFbhj",
+        },
+        .wayland = .{
+            .url = "git+https://codeberg.org/ifreund/zig-wayland#23839e41161de025d71ce082561ecba1c5331281",
+            .hash = "wayland-0.7.0-dev-lQa1kl38AQC-kQolS5D4jV1GJ2rH2jv1VWHr14YLVnyn",
+        },
+        .sqlite = .{
+            // The autoconf tarball has the same amalgamation (sqlite3.c/.h) at its
+            // root; a .zip fails in Zig 0.16 with an empty global cache.
+            .url = "https://sqlite.org/2026/sqlite-autoconf-3530400.tar.gz",
+            .hash = "N-V-__8AAKJCwwDXnRHqzy_PjrI_Ss94kfSd-T7vNxQ-b3xA",
+            .lazy = true,
+        },
+        .sqlite_vec = .{
+            .url = "https://github.com/asg017/sqlite-vec/releases/download/v0.1.9/sqlite-vec-0.1.9-amalgamation.tar.gz",
+            .hash = "N-V-__8AAFjlBACTHqSZPx-m0Y-NHDBK6_c28UfnIp9rxqgX",
+            .lazy = true,
+        },
+        .llama = .{
+            .url = "https://github.com/ggml-org/llama.cpp/archive/d1d3c3396aa13a5f239109a822666c4870490ad5.tar.gz",
+            .hash = "N-V-__8AAJ9VPwoqxzSel7-NmUNw6D4Vi_RmMI8DOxVCYWAP",
+            .lazy = true,
+        },
+        .whisper = .{
+            .url = "https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v1.9.4.tar.gz",
+            .hash = "N-V-__8AAA3uSwK9mB79KfGlAs0n70EoYdSvFYRb8782-6Ce",
+            .lazy = true,
+        },
+        // -Dnative_ui (experimental, docs/native-renderer.md): Yoga lays out
+        // the native views; the page's JavaScript runs on QuickJS-ng, kept in
+        // src/native_ui/vendor/quickjs-ng.
+        .yoga = .{
+            .url = "https://github.com/facebook/yoga/archive/refs/tags/v3.2.1.tar.gz",
+            .hash = "N-V-__8AAOYl0gAU76B1VRPFD9AWvy2VkOef2jN0B3sISTeO",
+            .lazy = true,
+        },
+        // Android GPU backends (-Dggml_vulkan, -Dggml_opencl): the Khronos
+        // headers, which the NDK lacks (vulkan.hpp, spirv/) or doesn't ship (OpenCL).
+        .vulkan_headers = .{
+            .url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/vulkan-sdk-1.4.363.0.tar.gz",
+            .hash = "N-V-__8AAGluhwIkfWs_S_i5ctSYH58cXuq_SYTNZ0nVUUlN",
+            .lazy = true,
+        },
+        .spirv_headers = .{
+            .url = "https://github.com/KhronosGroup/SPIRV-Headers/archive/refs/tags/vulkan-sdk-1.4.363.0.tar.gz",
+            .hash = "N-V-__8AAGbTPwCpO5RqFsSkao-YQrp4sYtjDvquqfjmh9pW",
+            .lazy = true,
+        },
+        .opencl_headers = .{
+            .url = "https://github.com/KhronosGroup/OpenCL-Headers/archive/refs/tags/v2026.05.29.tar.gz",
+            .hash = "N-V-__8AAEm0CAAEW33nP9aCUOvVMpgTvV3LxivhVTPQUD-T",
+            .lazy = true,
+        },
+        .kokoro = .{
+            .url = "https://github.com/simonfxr/kokoro.cpp/archive/a9e31430838c8bdc3d4beaaab62753681b9f7839.tar.gz",
+            .hash = "N-V-__8AAM9KCAAqFdC_LKX4-mlNf_snnwVFI3Kv8nfrXB8L",
+            .lazy = true,
+        },
+        // -Dspeakers: speaker embeddings (ECAPA-TDNN, WeSpeaker), compiled
+        // against the shared ggml tree; its own ggml submodule is not used.
+        .voice_detect = .{
+            .url = "https://github.com/localai-org/voice-detect.cpp/archive/cf9e1d5641c710bf7d6fc9642f9b4cf7d2bde9b6.tar.gz",
+            .hash = "N-V-__8AALtHTgBGSwGBd4VDY6LGop4ZQZIebDnzyViSrzoB",
+            .lazy = true,
+        },
+        .highway = .{
+            .url = "https://github.com/google/highway/archive/2607d3b5b0113992fe84d3848859eae13b3b52c1.tar.gz",
+            .hash = "N-V-__8AAD_MkACxo3rELIYCI7ap_7GsxHN1WH6AsMLDYp6L",
+            .lazy = true,
+        },
+        .espeak_ng = .{
+            .url = "https://github.com/espeak-ng/espeak-ng/archive/refs/tags/1.52.0.tar.gz",
+            .hash = "N-V-__8AACwimgOHy4hKeXBdrIu-hBGDy6Bmw5NjWwB6tEkc",
+            .lazy = true,
+        },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "build", "src", "tools", "protocols", "assets/brand", "android/template", "LICENSE", "NOTICE", "licenses", "README.md" },
+}

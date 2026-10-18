@@ -1,0 +1,514 @@
+//! Linux GTK4 and WebKitGTK window creation and manipulation.
+//!
+//! Handles native GtkApplicationWindow and WebKitWebView instantiation,
+//! window properties (size, fullscreen, maximized, title), navigation policy decisions,
+//! and close requests.
+
+const std = @import("std");
+const gtk = @import("gtk");
+const build_opts = @import("build_options");
+/// -Dnative_ui links no WebKitGTK: a window's `web_view` is always null
+/// there, so its type only needs a name.
+const webkit = if (build_opts.native_ui) @import("no_webkit.zig") else @import("webkit");
+const glib = @import("glib");
+const gio = @import("gio");
+const App = @import("../../core/App.zig");
+const internal = @import("../../core/internal.zig");
+const security = @import("../../core/security.zig");
+const isolation = @import("../../core/isolation.zig");
+const dev_server = @import("dev_server.zig");
+const permissions = @import("../../core/permissions/gate.zig");
+const overlay = @import("overlay.zig");
+const build_target = @import("../../core/target.zig");
+const hooks = @import("../../core/hooks.zig");
+/// -Dnative_ui: pages drawn with native views instead of WebKit (docs/native-renderer.md).
+const native_gtk = if (build_opts.native_ui) @import("../../native_ui/gtk.zig") else struct {};
+
+extern fn g_type_check_instance_is_a(instance: *anyopaque, iface_type: usize) c_int;
+extern fn webkit_user_media_permission_is_for_audio_device(req: *webkit.UserMediaPermissionRequest) c_int;
+extern fn webkit_user_media_permission_is_for_video_device(req: *webkit.UserMediaPermissionRequest) c_int;
+extern fn webkit_user_media_permission_is_for_display_device(req: *webkit.UserMediaPermissionRequest) c_int;
+extern fn webkit_permission_request_allow(req: *webkit.PermissionRequest) void;
+extern fn webkit_permission_request_deny(req: *webkit.PermissionRequest) void;
+extern fn webkit_web_view_get_uri(view: *webkit.WebView) ?[*:0]const u8;
+extern fn webkit_settings_set_user_agent(settings: *webkit.Settings, user_agent: ?[*:0]const u8) void;
+
+/// The permissions a WebKit permission request needs (null: a request type
+/// Oriel leaves to WebKit's default, which denies).
+fn requestKinds(req: *webkit.PermissionRequest, out: *[3]permissions.Kind) ?[]const permissions.Kind {
+    if (g_type_check_instance_is_a(req, webkit.UserMediaPermissionRequest.getGObjectType()) != 0) {
+        const um: *webkit.UserMediaPermissionRequest = @ptrCast(req);
+        var n: usize = 0;
+        if (webkit_user_media_permission_is_for_audio_device(um) != 0) {
+            out[n] = .microphone;
+            n += 1;
+        }
+        if (webkit_user_media_permission_is_for_video_device(um) != 0) {
+            out[n] = .camera;
+            n += 1;
+        }
+        if (webkit_user_media_permission_is_for_display_device(um) != 0) {
+            out[n] = .screen_capture;
+            n += 1;
+        }
+        return out[0..n];
+    }
+    if (g_type_check_instance_is_a(req, webkit.GeolocationPermissionRequest.getGObjectType()) != 0) {
+        out[0] = .location;
+        return out[0..1];
+    }
+    if (g_type_check_instance_is_a(req, webkit.NotificationPermissionRequest.getGObjectType()) != 0) {
+        out[0] = .notifications;
+        return out[0..1];
+    }
+    return null;
+}
+
+const log = std.log.scoped(.oriel);
+
+pub const WindowHandle = struct {
+    gtk_window: *gtk.Window,
+    app_window: *gtk.ApplicationWindow,
+    /// Null for a native window (-Dnative_ui).
+    web_view: ?*webkit.WebView,
+    /// The native renderer's engine (-Dnative_ui), else null.
+    native: ?*anyopaque = null,
+    /// Never reused, unlike the GtkWindow's address: a handle queued for a
+    /// window that closed must not match a new window allocated there.
+    serial: u64 = 0,
+    /// The window's label, owned by its `App.Window` (for the destroyed
+    /// hooks of `destroyWindow`).
+    label: []const u8 = "",
+
+    pub fn eql(self: WindowHandle, other: WindowHandle) bool {
+        return self.gtk_window == other.gtk_window and self.serial == other.serial;
+    }
+};
+
+var next_serial = std.atomic.Value(u64).init(1);
+
+test "WindowHandle.eql: a reused GtkWindow address is a different window" {
+    const a: WindowHandle = .{ .gtk_window = @ptrFromInt(0x1000), .app_window = @ptrFromInt(0x1000), .web_view = null, .serial = 1 };
+    var b = a;
+    try std.testing.expect(a.eql(b));
+    b.serial = 2;
+    try std.testing.expect(!a.eql(b));
+}
+
+pub fn showWindow(handle: WindowHandle) void {
+    handle.gtk_window.present();
+}
+
+pub fn hideWindow(handle: WindowHandle) void {
+    handle.gtk_window.as(gtk.Widget).setVisible(0);
+}
+
+pub fn toggleWindow(handle: WindowHandle) void {
+    if (handle.gtk_window.as(gtk.Widget).getVisible() != 0 and handle.gtk_window.isActive() != 0) {
+        hideWindow(handle);
+    } else {
+        showWindow(handle);
+    }
+}
+
+pub fn closeWindow(handle: WindowHandle) void {
+    handle.gtk_window.close();
+}
+
+pub fn postCloseWindow(handle: WindowHandle) void {
+    internal.ensureWindowsMutex();
+    internal.windows_mutex.lock();
+    const label_copy = for (internal.windows_list.items) |w| {
+        if (w.handle.eql(handle)) {
+            break std.heap.smp_allocator.dupeZ(u8, w.label) catch {
+                internal.windows_mutex.unlock();
+                return;
+            };
+        }
+    } else {
+        internal.windows_mutex.unlock();
+        return;
+    };
+    internal.windows_mutex.unlock();
+
+    if (glib.idleAdd(&idleCloseWindow, label_copy.ptr) == 0) {
+        std.heap.smp_allocator.free(label_copy);
+    }
+}
+
+fn idleCloseWindow(data: ?*anyopaque) callconv(.c) c_int {
+    const label_ptr: [*:0]const u8 = @ptrCast(@alignCast(data orelse return 0));
+    const label = std.mem.span(label_ptr);
+    defer std.heap.smp_allocator.free(label_ptr[0 .. label.len + 1]);
+
+    internal.ensureWindowsMutex();
+    internal.windows_mutex.lock();
+    const gtk_win = for (internal.windows_list.items) |w| {
+        if (std.mem.eql(u8, w.label, label)) break w.handle.gtk_window;
+    } else null;
+    internal.windows_mutex.unlock();
+
+    if (gtk_win) |win| {
+        win.close();
+    }
+    return 0;
+}
+
+pub fn focusWindow(handle: WindowHandle) void {
+    handle.gtk_window.present();
+}
+
+/// The platform hooks' view of a window (hooks.zig).
+fn hookWindow(handle: WindowHandle) hooks.NativeWindow {
+    return .{ .gtk = handle.gtk_window };
+}
+
+fn hookView(handle: WindowHandle) ?hooks.NativeWebView {
+    const v = handle.web_view orelse return null;
+    return .{ .webkitgtk = v };
+}
+
+pub fn destroyWindow(handle: WindowHandle) void {
+    hooks.destroyed(handle.label, hookWindow(handle), hookView(handle));
+    overlay.forget(handle.gtk_window);
+    if (handle.web_view) |v| isolation.forget(@intFromPtr(v));
+    if (comptime build_opts.native_ui) if (handle.native) |e| native_gtk.Surface.destroyFor(e);
+    handle.gtk_window.destroy();
+}
+
+/// Free the core's `App.Window` (already off `windows_list`).
+fn freeWindow(win: *App.Window) void {
+    const gpa = @import("../../core/heap.zig").gpa;
+    gpa.free(win.label);
+    gpa.free(win.options.title);
+    if (win.options.url) |u| gpa.free(u);
+    gpa.destroy(win);
+}
+
+/// After the main loop returned: tear down the windows still open (or
+/// hidden) at quit, which never got a close request.
+pub fn destroyRemainingWindows() void {
+    while (true) {
+        internal.ensureWindowsMutex();
+        internal.windows_mutex.lock();
+        const win = internal.windows_list.pop();
+        internal.windows_mutex.unlock();
+        const w = win orelse break;
+        destroyWindow(w.handle);
+        freeWindow(w);
+    }
+    internal.main_window = null;
+}
+
+pub fn setWindowTitle(handle: WindowHandle, title: [:0]const u8) void {
+    handle.gtk_window.setTitle(title);
+}
+
+pub fn setWindowFullscreen(handle: WindowHandle, fullscreen: bool) void {
+    if (fullscreen) handle.gtk_window.fullscreen() else handle.gtk_window.unfullscreen();
+}
+
+pub fn isWindowFullscreen(handle: WindowHandle) bool {
+    return handle.gtk_window.isFullscreen() != 0;
+}
+
+pub fn setWindowMaximized(handle: WindowHandle, maximized: bool) void {
+    if (maximized) handle.gtk_window.maximize() else handle.gtk_window.unmaximize();
+}
+
+pub fn isWindowMaximized(handle: WindowHandle) bool {
+    return handle.gtk_window.isMaximized() != 0;
+}
+
+pub fn setWindowSize(handle: WindowHandle, width: c_int, height: c_int) void {
+    handle.gtk_window.setDefaultSize(width, height);
+}
+
+pub const WindowSize = struct {
+    width: c_int,
+    height: c_int,
+};
+
+pub fn getWindowSize(handle: WindowHandle) WindowSize {
+    var w: c_int = 0;
+    var h: c_int = 0;
+    handle.gtk_window.getDefaultSize(&w, &h);
+    return .{ .width = w, .height = h };
+}
+
+pub fn openExternal(uri: [*:0]const u8) void {
+    var err: ?*glib.Error = null;
+    if (gio.AppInfo.launchDefaultForUri(uri, null, &err) == 0) {
+        if (err) |e| {
+            log.err("could not open {s}: {s}", .{ uri, e.f_message orelse "unknown error" });
+            e.free();
+        }
+    }
+}
+
+pub fn getWindowByView(view: *webkit.WebView) ?*App.Window {
+    internal.ensureWindowsMutex();
+    internal.windows_mutex.lock();
+    defer internal.windows_mutex.unlock();
+    for (internal.windows_list.items) |w| {
+        if (w.handle.web_view == view) return w;
+    }
+    return null;
+}
+
+pub fn WindowCreator(
+    comptime api: App.Api,
+    comptime config: App.Config,
+    comptime local: security.Local,
+    comptime bridge_patterns: anytype,
+    comptime csp_z: ?[:0]const u8,
+) type {
+    const SchemeImpl = @import("scheme.zig").Scheme(config, local, csp_z);
+    const BridgeImpl = @import("bridge.zig").Bridge(api, config, local, bridge_patterns);
+
+    return struct {
+        fn devUrl() [:0]const u8 {
+            const url = config.app.dev.?.url;
+            return (url ++ "\x00")[0..url.len :0];
+        }
+
+        const DevRetry = dev_server.DevRetryContext(&devUrl);
+
+        pub fn createWindow(options: App.WindowOptions, win_inst: *App.Window) anyerror!WindowHandle {
+            const app = internal.gtk_app orelse return error.AppNotRunning;
+            const gpa = std.heap.smp_allocator;
+
+            // Resolve before any GTK object exists: a rejected URL must not
+            // leave a window behind with a close handler on a freed win_inst.
+            const target_uri = if (comptime build_opts.native_ui) "" else try security.resolveWindowUrl(
+                gpa,
+                config.security,
+                local,
+                if (config.app.dev) |d| d.url else null,
+                options.url,
+                config.start,
+            );
+            defer if (comptime !build_opts.native_ui) gpa.free(target_uri);
+
+            const app_window = gtk.ApplicationWindow.new(app);
+            const window = app_window.as(gtk.Window);
+            errdefer window.destroy();
+            window.setTitle(options.title);
+            const id_z = (config.app.id ++ "\x00")[0..config.app.id.len :0];
+            window.setIconName(id_z);
+            window.setDefaultSize(options.width, options.height);
+            window.setResizable(@intFromBool(options.resizable));
+            window.setDecorated(@intFromBool(options.decorations));
+
+            if (options.min_width != null or options.min_height != null) {
+                window.as(gtk.Widget).setSizeRequest(options.min_width orelse -1, options.min_height orelse -1);
+            }
+
+            if (comptime build_opts.native_ui) return createNativeWindow(window, app_window, options, win_inst);
+
+            const view = webkit.WebView.new();
+            SchemeImpl.register(view);
+
+            const settings = view.getSettings();
+            settings.setEnableDeveloperExtras(@intFromBool(config.devtools));
+            settings.setEnableWriteConsoleMessagesToStdout(@intFromBool(config.devtools));
+            settings.setJavascriptCanOpenWindowsAutomatically(0);
+            settings.setAllowFileAccessFromFileUrls(0);
+            settings.setAllowUniversalAccessFromFileUrls(0);
+            // getUserMedia exists only when the app may use a microphone or camera.
+            settings.setEnableMediaStream(@intFromBool(config.app.permissions.has(.microphone) or config.app.permissions.has(.camera) or config.app.permissions.has(.screen_capture)));
+            if (config.user_agent) |ua| {
+                webkit_settings_set_user_agent(settings, ua.ptr);
+            }
+
+            BridgeImpl.setupUserContent(view, options.label);
+
+            _ = webkit.WebView.signals.decide_policy.connect(view, ?*anyopaque, &onDecidePolicy, null, .{});
+            _ = webkit.WebView.signals.permission_request.connect(view, ?*anyopaque, &onPermissionRequest, null, .{});
+            window.setChild(view.as(gtk.Widget));
+
+            _ = gtk.Window.signals.close_request.connect(window, *App.Window, &onWindowCloseRequest, win_inst, .{});
+
+            if (config.app.dev) |dev| {
+                DevRetry.initRetries(dev.timeout_ms);
+                _ = webkit.WebView.signals.load_failed.connect(view, ?*anyopaque, &DevRetry.onLoadFailed, null, .{});
+            }
+
+            const handle = WindowHandle{
+                .gtk_window = window,
+                .app_window = app_window,
+                .web_view = view,
+                .serial = next_serial.fetchAdd(1, .monotonic),
+                .label = options.label,
+            };
+            // Nothing fails past this point: every window the hooks saw
+            // created is seen destroyed.
+            hooks.created(options.label, hookWindow(handle), hookView(handle));
+
+            view.loadUri(target_uri);
+
+            overlay.setup(window, view, options, (config.app.id ++ "\x00")[0..config.app.id.len :0]);
+            if (options.visible) window.present();
+
+            return handle;
+        }
+
+        /// -Dnative_ui: the page's HTML, CSS and JS run on the native renderer
+        /// (QuickJS, Yoga, Cairo/Pango and GTK fields), no WebKit.
+        fn createNativeWindow(window: *gtk.Window, app_window: *gtk.ApplicationWindow, options: App.WindowOptions, win_inst: *App.Window) anyerror!WindowHandle {
+            // malloc, not smp_allocator: freed tree/text memory goes back to
+            // the system (Surface trims after big removals); smp_allocator
+            // keeps every page it ever had.
+            const surface = try native_gtk.Surface.create(
+                std.heap.c_allocator,
+                config.app.assets,
+                @import("../../core/features.zig").platform_json,
+                options.label,
+                options.url orelse "index.html",
+                @floatFromInt(options.width),
+                @floatFromInt(options.height),
+                BridgeImpl.nativeInvoke,
+                win_inst,
+            );
+            surface.transparent = options.transparent;
+            window.setChild(surface.widget());
+            // Transparency and overlay placement (layer-shell, always on top),
+            // as for a web view window.
+            overlay.setup(window, null, options, (config.app.id ++ "\x00")[0..config.app.id.len :0]);
+            _ = gtk.Window.signals.close_request.connect(window, *App.Window, &onWindowCloseRequest, win_inst, .{});
+            const handle = WindowHandle{
+                .gtk_window = window,
+                .app_window = app_window,
+                .web_view = null,
+                .native = surface.engine,
+                .serial = next_serial.fetchAdd(1, .monotonic),
+                .label = options.label,
+            };
+            hooks.created(options.label, hookWindow(handle), null);
+            if (options.visible) window.present();
+            return handle;
+        }
+
+        fn onWindowCloseRequest(window: *gtk.Window, win: *App.Window) callconv(.c) c_int {
+            if (win.options.hide_on_close) {
+                window.as(gtk.Widget).setVisible(0);
+                return 1;
+            }
+            if (comptime build_opts.native_ui) if (win.handle.native) |e| {
+                // Not from inside the page's own call: again once it ended.
+                if (native_gtk.Surface.busy(e)) {
+                    postCloseWindow(win.handle);
+                    return 1;
+                }
+            };
+            hooks.destroyed(win.label, hookWindow(win.handle), hookView(win.handle));
+            overlay.forget(window);
+            if (win.handle.web_view) |v| isolation.forget(@intFromPtr(v));
+
+            win.saveGeometry();
+
+            internal.emit("window:closed", .{ .label = win.label });
+
+            internal.ensureWindowsMutex();
+            internal.windows_mutex.lock();
+            for (internal.windows_list.items, 0..) |w, i| {
+                if (w == win) {
+                    _ = internal.windows_list.swapRemove(i);
+                    break;
+                }
+            }
+            const remaining = internal.windows_list.items.len;
+            internal.windows_mutex.unlock();
+
+            if (internal.main_window == window) {
+                internal.main_window = null;
+            }
+
+            // The native page goes with its window (its timers too), once
+            // it's off the list that events and answers are sent through.
+            if (comptime build_opts.native_ui) if (win.handle.native) |e| native_gtk.Surface.destroyFor(e);
+
+            freeWindow(win);
+
+            if (remaining == 0) {
+                App.quit(0);
+            }
+            return 0;
+        }
+
+        var window_open_counter = std.atomic.Value(u32).init(1);
+
+        /// The page asks for the microphone, camera, screen, location or
+        /// notifications: allowed only if the app declares it and the page's
+        /// origin is trusted (permissions.allowForPage).
+        fn onPermissionRequest(view: *webkit.WebView, req: *webkit.PermissionRequest, _: ?*anyopaque) callconv(.c) c_int {
+            var buf: [3]permissions.Kind = undefined;
+            const kinds = requestKinds(req, &buf) orelse return 0;
+            const page = if (webkit_web_view_get_uri(view)) |u| std.mem.span(u) else "";
+            var allow = kinds.len > 0;
+            for (kinds) |k| {
+                if (!permissions.allowForPage(k, local, page)) allow = false;
+            }
+            if (allow) webkit_permission_request_allow(req) else webkit_permission_request_deny(req);
+            return 1;
+        }
+
+        fn onDecidePolicy(
+            _: *webkit.WebView,
+            decision: *webkit.PolicyDecision,
+            decision_type: webkit.PolicyDecisionType,
+            _: ?*anyopaque,
+        ) callconv(.c) c_int {
+            switch (decision_type) {
+                .navigation_action, .new_window_action => {},
+                else => return 0, // default handling for responses
+            }
+            const nav_decision: *webkit.NavigationPolicyDecision = @ptrCast(decision);
+            const action = nav_decision.getNavigationAction();
+            const uri = action.getRequest().getUri();
+            // The bridge's isolation frame. WebKitGTK doesn't say which frame
+            // navigates; a top-level isolation page is inert (it only runs
+            // as a direct child of the app's page, and gets no IPC token).
+            if (comptime config.app.isolation != null) {
+                var obuf: [512]u8 = undefined;
+                if (decision_type == .navigation_action) if (security.origin(&obuf, std.mem.span(uri))) |o| if (std.mem.eql(u8, o, isolation.origin)) {
+                    decision.use();
+                    return 1;
+                };
+            }
+            const verdict = security.navigation(config.security, local, std.mem.span(uri), action.isUserGesture() != 0);
+            switch (verdict) {
+                .allow => if (decision_type == .new_window_action) {
+                    decision.ignore();
+                    var obuf: [512]u8 = undefined;
+                    const o = security.origin(&obuf, std.mem.span(uri));
+                    if (config.window_open == .new_window and o != null and local.contains(o.?)) {
+                        const id = window_open_counter.fetchAdd(1, .monotonic);
+                        var label_buf: [32]u8 = undefined;
+                        const label = std.fmt.bufPrint(&label_buf, "win-{d}", .{id}) catch return 1;
+                        const uri_span = std.mem.span(uri);
+                        const label_z = std.heap.smp_allocator.dupeZ(u8, label) catch return 1;
+                        defer std.heap.smp_allocator.free(label_z);
+                        const uri_z = std.heap.smp_allocator.dupeZ(u8, uri_span) catch return 1;
+                        defer std.heap.smp_allocator.free(uri_z);
+                        _ = App.openWindow(.{
+                            .label = label_z,
+                            .url = uri_z,
+                        }) catch |err| log.err("window.open failed: {s}", .{@errorName(err)});
+                    } else if (App.getWindow("main")) |mw| {
+                        if (mw.handle.web_view) |v| v.loadUri(uri);
+                    }
+                } else decision.use(),
+                .open_external => {
+                    decision.ignore();
+                    App.openExternal(uri);
+                },
+                .block => {
+                    decision.ignore();
+                    log.warn("blocked navigation to {s}", .{uri});
+                },
+            }
+            return 1;
+        }
+    };
+}

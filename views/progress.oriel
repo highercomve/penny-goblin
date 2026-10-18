@@ -1,0 +1,23 @@
+<style>
+  track: background=#2d6a4f38
+  primary: background=#2d6a4f
+  pill: background=#e3e8df color=#191d19
+  percent: color=#2d6a4f
+  @media (prefers-color-scheme: dark) {
+    track: background=#9ad4ae38
+    primary: background=#9ad4ae
+    pill: background=#282e28 color=#e0e4dc
+    percent: color=#9ad4ae
+  }
+</style>
+<view pointer-events="none" id="progress" position="absolute" top="60" left="0" right="0" z="2147483647">
+  <view class="track" height="4" clip="true">
+    <view id="bar" class="primary" width="2%" height="4" />
+  </view>
+  <row justify="center" margin="10,16,0,16">
+    <row class="pill" padding="8,16,8,16" gap="10" align="center" radius="18" max-width="100%" shadow="0,2,8,0,rgba(0,0,0,0.2)">
+      <text id="message" font-size="13" font-weight="500" shrink="1">Preparing the image</text>
+      <text id="percent" class="percent" font-size="13" font-weight="500" shrink="0">0%</text>
+    </row>
+  </row>
+</view>

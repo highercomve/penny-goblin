@@ -1,0 +1,236 @@
+<style>
+  sync-dialog: grow=1 basis=0 width=640 height=auto min-height=0 max-width=1180 max-height=772 padding=0,24,24,24 color-scheme=light background=#eaeee4 radius=28 unset="position inset z"
+  n2: margin=0,-24,8,-24 padding=8,16,0,8 background=#eaeee4
+  n4: icon-color=#434a43 viewbox=0,0,24,24
+  n6: color=#191d19
+  n8: background=#e4e9de
+  n9: icon-color=#17241a viewbox=0,0,24,24
+  sync-message: color=#434a43
+  sync-pairing: background=#2d6a4f
+  n14: color=#ffffff
+  sync-qr: width=280
+  sync-expiry: color=#434a43
+  sync-link-details-toggle: color=#2d6a4f
+  sync-link: border-color=#737a72 color-scheme=light color=#191d19
+  n22: color=#2d6a4f
+  sync-devices: background=#e4e9de
+  sync-service-toggle: color=#2d6a4f
+  sync-start: background=#dce7d6
+  n30: color=#17241a
+  sync-restart: background=#dce7d6
+  n32: color=#17241a
+  n34: color=#2d6a4f
+  sync-scan: background=#2d6a4f
+  n37: icon-color=#ffffff viewbox=0,0,24,24
+  n38: color=#ffffff
+  sync-now: background=#dce7d6
+  n41: color=#17241a
+  n43: color=#ba1a1a
+  sync-paste-toggle: color=#2d6a4f
+  sync-paste: border-color=#737a72 color-scheme=light color=#191d19
+  sync-connect: background=#dce7d6
+  n49: color=#17241a
+  sync-replace: border-color=#737a72 color-scheme=light background="rgba(172.2152, 176.92004, 167.98615, 1)"
+  n52: background="rgba(122.378944, 129.37894, 121.083786, 1)"
+  n53: color=#191d19
+  n54: color=#2d6a4f
+  n58: width=50%-6px
+  n59: color=#434a43
+  sync-local: color-scheme=light background=#eaeee4
+  n61: width=50%-6px
+  n62: color=#434a43
+  sync-remote: color-scheme=light background=#eaeee4
+  sync-use-local: background=#dce7d6
+  n66: color=#17241a
+  sync-use-remote: background=#2d6a4f
+  n68: color=#ffffff
+  @media (prefers-color-scheme: dark) {
+    sync-dialog: color-scheme=dark background=#1d211d
+    n2: background=#1d211d
+    n4: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n6: color=#e0e4dc
+    n8: background=#272b27
+    n9: icon-color=#d6e8d6 viewbox=0,0,24,24
+    sync-message: color=#c2c9c0
+    sync-pairing: background=#9ad4ae
+    n14: color=#003920
+    sync-expiry: color=#c2c9c0
+    sync-link-details-toggle: color=#9ad4ae
+    sync-link: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    n22: color=#9ad4ae
+    sync-devices: background=#272b27
+    sync-service-toggle: color=#9ad4ae
+    sync-start: background=#384a3b
+    n30: color=#d6e8d6
+    sync-restart: background=#384a3b
+    n32: color=#d6e8d6
+    n34: color=#9ad4ae
+    sync-scan: background=#9ad4ae
+    n37: icon-color=#003920 viewbox=0,0,24,24
+    n38: color=#003920
+    sync-now: background=#384a3b
+    n41: color=#d6e8d6
+    n43: color=#ffb4ab
+    sync-paste-toggle: color=#9ad4ae
+    sync-paste: border-color=#8c938a color-scheme=dark color=#e0e4dc
+    sync-connect: background=#384a3b
+    n49: color=#d6e8d6
+    sync-replace: border-color=#8c938a color-scheme=dark background="rgba(98.075806, 102.38838, 96.200386, 1)"
+    n52: background="rgba(132.18575, 139.18575, 130.4983, 1)"
+    n53: color=#e0e4dc
+    n54: color=#9ad4ae
+    n59: color=#c2c9c0
+    sync-local: color-scheme=dark background=#1d211d
+    n62: color=#c2c9c0
+    sync-remote: color-scheme=dark background=#1d211d
+    sync-use-local: background=#384a3b
+    n66: color=#d6e8d6
+    sync-use-remote: background=#9ad4ae
+    n68: color=#003920
+  }
+  @media (max-width: 839px) {
+    sync-dialog: width=393 height=820 max-width=393 max-height=820 padding=0,16,24,16 position=absolute top=0 right=0 bottom=0 left=0 background=#f6f8f1 z=2147483647 unset="grow basis min-height radius"
+    n2: margin=0,-16,8,-16 padding=0,12,0,4 background=#f6f8f1
+    n8: background=#dce7d6
+    sync-devices: background=#f0f3eb
+    sync-replace: background="rgba(168.07825, 172.7612, 163.98051, 1)"
+    n52: background="rgba(122.926155, 129.92616, 121.609116, 1)"
+    n58: width=100%
+    n61: width=100%
+  }
+  @media (max-width: 839px) and (prefers-color-scheme: dark) {
+    sync-dialog: background=#111511
+    n2: background=#111511
+    n8: background=#384a3b
+    sync-devices: background=#191d19
+    sync-replace: background="rgba(105.29342, 109.64417, 103.188866, 1)"
+    n52: background="rgba(131.23103, 138.23103, 129.58179, 1)"
+  }
+  @media (max-width: 380px) {
+    sync-dialog: width=320 height=820 max-width=320 max-height=820 padding=0,16,24,16 position=absolute top=0 right=0 bottom=0 left=0 background=#f6f8f1 z=2147483647 unset="grow basis min-height radius"
+    n2: margin=0,-16,8,-16 padding=0,12,0,4 background=#f6f8f1
+    n8: background=#dce7d6
+    sync-qr: width=256
+    sync-devices: background=#f0f3eb
+    sync-replace: background="rgba(159.6963, 164.3349, 155.86467, 1)"
+    n52: background="rgba(124.03488, 131.03488, 122.673485, 1)"
+    n58: width=100%
+    n61: width=100%
+  }
+  @media (max-width: 380px) and (prefers-color-scheme: dark) {
+    sync-dialog: background=#111511
+    n2: background=#111511
+    n8: background=#384a3b
+    sync-devices: background=#191d19
+    sync-replace: background="rgba(93.77614, 98.065956, 92.03721, 1)"
+    n52: background="rgba(132.75449, 139.75449, 131.0443, 1)"
+  }
+</style>
+<view id="sync-dialog" class="sync-dialog" scroll="true" scroll-x="true" unset="shrink color font-size">
+  <row class="n2" align="center" min-height="64" row-gap="4" column-gap="4" sticky="0,auto,auto,auto" z="2">
+    <row id="close-sync" justify="center" align="center" width="48" height="48" min-height="40" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
+      <icon class="n4" grow="0" shrink="0" width="24" height="24" clickable="true">
+        <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+      </icon>
+    </row>
+    <view id="sync-title" grow="1" shrink="1" basis="0%" clip="true">
+      <text class="n6" shrink="0" font-size="22" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Pairing &amp; sync</text>
+    </view>
+    <view grow="0" />
+  </row>
+  <row class="n8" align="center" min-width="0" margin="0,0,4,0" padding="16" row-gap="16" column-gap="16" radius="16">
+    <icon class="n9" grow="0" shrink="0" width="24" height="24">
+      <path d="M5 9a7 7 0 0 1 12.5-2.5L19 8M19 4v4h-4M19 15a7 7 0 0 1-12.5 2.5L5 16M5 20v-4h4" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+    </icon>
+    <view id="sync-summary" unset="shrink" />
+  </row>
+  <text id="sync-message" class="sync-message" shrink="0" margin="0,0,8,0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">Status</text>
+  <view id="sync-desktop" margin="0,0,8,0" row-gap="8" column-gap="8">
+    <row id="sync-pairing" class="sync-pairing" justify="center" align="center" width="100%" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+      <text class="n14" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Pair a phone</text>
+    </row>
+    <view id="sync-code">
+      <image id="sync-qr" class="sync-qr" shrink="0" height="auto" margin="16,auto,4,auto" padding="12" background="#ffffff" radius="16" src="logo.png" />
+      <text id="sync-expiry" class="sync-expiry" shrink="0" margin="0,0,8,0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85" text-align="center">Expires</text>
+      <view margin="0,0,8,0">
+        <text id="sync-link-details-toggle" class="sync-link-details-toggle" shrink="0" padding="10,0,10,0" clickable="true" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif"><span>Pairing link</span><span> ▴</span></text>
+        <view id="sync-link-details-body">
+          <textarea id="sync-link" class="sync-link" align-self="flex-start" width="100%" min-height="80" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" rows="3" readonly="true" autocapitalize="sentences" />
+        </view>
+      </view>
+    </view>
+    <text class="n22" shrink="0" padding="16,4,4,4" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Paired phones</text>
+    <view id="sync-devices" class="sync-devices" min-width="0" padding="16" radius="16" />
+    <view margin="8,0,8,0">
+      <text id="sync-service-toggle" class="sync-service-toggle" shrink="0" padding="10,0,10,0" clickable="true" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif"><span>Service</span><span> ▴</span></text>
+      <view id="sync-service-body">
+        <view id="sync-routes" margin="0,0,12,0" padding="0,0,0,4" />
+        <row wrap="wrap" align="center" margin="0" row-gap="8" column-gap="8">
+          <row id="sync-start" class="sync-start" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+            <text class="n30" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Start</text>
+          </row>
+          <row id="sync-restart" class="sync-restart" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+            <text class="n32" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Restart</text>
+          </row>
+          <row id="sync-stop" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+            <text class="n34" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Stop</text>
+          </row>
+        </row>
+      </view>
+    </view>
+  </view>
+  <view id="sync-mobile" margin="0,0,8,0" row-gap="8" column-gap="8">
+    <row id="sync-scan" class="sync-scan" justify="center" align="center" width="100%" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+      <icon class="n37" grow="0" shrink="0" width="18" height="18" clickable="true">
+        <path d="M4 8a1 1 0 0 1 1-1h3l1.5-2h5L16 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+        <path d="M8.5 13a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+      </icon>
+      <text class="n38" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Scan desktop QR</text>
+    </row>
+    <row wrap="wrap" align="center" margin="12,0,0,0" row-gap="8" column-gap="8">
+      <row id="sync-now" class="sync-now" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+        <text class="n41" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Sync now</text>
+      </row>
+      <row id="sync-unpair" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+        <text class="n43" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Disconnect</text>
+      </row>
+    </row>
+    <view margin="8,0,8,0">
+      <text id="sync-paste-toggle" class="sync-paste-toggle" shrink="0" padding="10,0,10,0" clickable="true" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif"><span>Paste link instead</span><span> ▴</span></text>
+      <row id="sync-paste-body" wrap="wrap" align="baseline">
+        <textarea id="sync-paste" class="sync-paste" width="100%" min-height="80" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" rows="3" autocapitalize="none" autocorrect="false" spellcheck="false" label="Pairing link" />
+        <row id="sync-connect" class="sync-connect" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
+          <text class="n49" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Pair</text>
+        </row>
+      </row>
+    </view>
+    <row align="center" min-height="44" row-gap="12" column-gap="12" clickable="true" unset="shrink">
+      <view id="sync-replace" class="sync-replace" grow="0" width="52" height="32" margin="3,2,3,2" padding="1" border-width="2" radius="16" clickable="true" label="Replace paired desktop">
+        <view class="n52" width="16" height="16" position="absolute" top="6" left="6" radius="50%" clickable="true" unset="shrink right bottom" />
+      </view>
+      <text class="n53" clickable="true" font-size="14" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Replace paired desktop</text>
+    </row>
+  </view>
+  <text class="n54" shrink="0" margin="0" padding="16,4,4,4" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Conflicts</text>
+  <view id="sync-conflicts" margin="0" />
+  <view id="sync-review">
+    <row wrap="wrap" margin="0,0,12,0" row-gap="12" column-gap="12">
+      <view class="n58" unset="shrink">
+        <text class="n59" shrink="0" margin="0,0,12,0" font-size="13" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">This device</text>
+        <view id="sync-local" class="sync-local" max-height="260" margin="0,0,12,0" padding="12" scroll="true" scroll-x="true" radius="8" />
+      </view>
+      <view class="n61" unset="shrink">
+        <text class="n62" shrink="0" margin="0,0,12,0" font-size="13" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Desktop</text>
+        <view id="sync-remote" class="sync-remote" max-height="260" margin="0,0,12,0" padding="12" scroll="true" scroll-x="true" radius="8" />
+      </view>
+    </row>
+    <row wrap="wrap" align="center" margin="0" row-gap="8" column-gap="8">
+      <row id="sync-use-local" class="sync-use-local" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+        <text class="n66" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Keep mine</text>
+      </row>
+      <row id="sync-use-remote" class="sync-use-remote" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+        <text class="n68" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Use desktop</text>
+      </row>
+    </row>
+  </view>
+</view>

@@ -1,0 +1,853 @@
+//! Dev runner for oriel apps.
+//! Runs the frontend dev server (e.g. Vite) and keeps it alive while watching
+//! `src/` for Zig file changes, rebuilding the app, and restarting it.
+//!
+//! Linux watches with inotify and ties its lifetime to `zig` (PDEATHSIG,
+//! pidfd). macOS and Windows poll the Zig files' modification times and
+//! the `zig` process instead. On POSIX every child runs in its own process
+//! group so its helpers stop with it; Windows has no process groups, so
+//! dev_runner runs in a kill-on-close job object that takes every child
+//! and helper with it when it exits.
+
+const std = @import("std");
+const builtin = @import("builtin");
+const linux = std.os.linux;
+const posix = std.posix;
+const Io = std.Io;
+
+const native_os = builtin.os.tag;
+const is_linux = native_os == .linux;
+const is_windows = native_os == .windows;
+/// A POSIX pid (unused placeholder on Windows).
+const Pid = if (is_windows) i32 else posix.pid_t;
+
+var global_dev_child: ?std.process.Child = null;
+var global_app_child: ?std.process.Child = null;
+var global_should_exit: std.atomic.Value(bool) = .init(false);
+
+fn onSignal(_: posix.SIG) callconv(.c) void {
+    global_should_exit.store(true, .release);
+}
+
+fn sleepMs(io: Io, ms: u32) void {
+    const to: Io.Timeout = .{ .duration = .{
+        .raw = .{ .nanoseconds = @as(i96, ms) * std.time.ns_per_ms },
+        .clock = .awake,
+    } };
+    to.sleep(io) catch {};
+}
+
+// ---------------------------------------------------------------------------
+// POSIX process groups (Linux: raw syscalls, no libc; macOS: libc)
+// ---------------------------------------------------------------------------
+
+/// POSIX only (on Windows `pid_t` is a HANDLE and there are no process
+/// groups): empty there, and only referenced behind `!is_windows`.
+const pgroup = if (is_windows) struct {} else struct {
+    pub fn isProcessGroupAlive(pgid: posix.pid_t) bool {
+        if (pgid <= 0) return false;
+        if (is_linux) {
+            const rc = linux.syscall2(.kill, @as(usize, @bitCast(@as(isize, -pgid))), 0);
+            return linux.errno(rc) != .SRCH;
+        }
+        posix.kill(-pgid, @enumFromInt(0)) catch |err| return err != error.ProcessNotFound;
+        return true;
+    }
+
+    /// `waitpid(pid, WNOHANG or 0)`: the reaped pid and its raw status, or null.
+    pub fn waitPid(pid: posix.pid_t, block: bool) ?struct { pid: posix.pid_t, status: u32 } {
+        if (is_linux) {
+            var status: u32 = 0;
+            const res = linux.waitpid(pid, &status, if (block) 0 else linux.W.NOHANG);
+            if (linux.errno(res) != .SUCCESS or @as(isize, @bitCast(res)) <= 0) return null;
+            return .{ .pid = @intCast(res), .status = status };
+        }
+        var status: c_int = 0;
+        const res = std.c.waitpid(pid, &status, if (block) 0 else std.c.W.NOHANG);
+        if (res <= 0) return null;
+        return .{ .pid = res, .status = @bitCast(status) };
+    }
+
+    pub fn reapZombies() void {
+        while (waitPid(-1, false)) |r| {
+            // The dev server reaped here: forget its pid, which may be
+            // recycled, so shutdown doesn't signal someone else's group.
+            if (global_dev_child) |*dc| if (dc.id == r.pid) {
+                dc.id = null;
+            };
+        }
+    }
+
+    pub fn checkChildExit(pid: posix.pid_t) ?u8 {
+        const r = waitPid(pid, false) orelse return null;
+        if (r.pid != pid) return null;
+        return if ((r.status & 0x7f) == 0) @truncate((r.status >> 8) & 0xff) else 1;
+    }
+
+    pub fn signalPid(pid: posix.pid_t, sig: posix.SIG) error{ProcessNotFound}!void {
+        if (is_linux) {
+            if (linux.errno(linux.kill(pid, sig)) == .SRCH) return error.ProcessNotFound;
+            return;
+        }
+        posix.kill(pid, sig) catch |err| if (err == error.ProcessNotFound) return error.ProcessNotFound;
+    }
+
+    pub fn killProcessGroup(io: Io, pgid: posix.pid_t, direct_pid: ?posix.pid_t) void {
+        if (pgid <= 0) return;
+
+        // Send SIGTERM to the entire process group.
+        // Using a negative pgid signals every process in that process group.
+        signalPid(-pgid, posix.SIG.TERM) catch {
+            if (direct_pid) |p| _ = checkChildExit(p);
+            reapZombies();
+            return;
+        };
+
+        if (direct_pid) |p| {
+            if (p > 0 and p != pgid) signalPid(p, posix.SIG.TERM) catch {};
+        }
+
+        // Grace period: wait up to ~500ms (10 * 50ms) for graceful exit
+        var still_alive = true;
+        for (0..10) |_| {
+            reapZombies();
+            if (direct_pid) |p| _ = checkChildExit(p);
+
+            if (!isProcessGroupAlive(pgid)) {
+                still_alive = false;
+                break;
+            }
+            sleepMs(io, 50);
+        }
+
+        // Escalate to SIGKILL if processes remain alive
+        if (still_alive) {
+            signalPid(-pgid, posix.SIG.KILL) catch {};
+            if (direct_pid) |p| {
+                if (p > 0 and p != pgid) signalPid(p, posix.SIG.KILL) catch {};
+            }
+
+            for (0..10) |_| {
+                reapZombies();
+                if (direct_pid) |p| _ = checkChildExit(p);
+                if (!isProcessGroupAlive(pgid)) break;
+                sleepMs(io, 20);
+            }
+        }
+
+        if (direct_pid) |p| _ = checkChildExit(p);
+        reapZombies();
+    }
+
+    /// Whether the process `pid` (the `zig` that runs `zig build dev`) is gone.
+    /// macOS: kill(pid, 0). (Linux uses a pidfd; Windows doesn't pass one.)
+    pub fn processGone(pid: posix.pid_t) bool {
+        posix.kill(pid, @enumFromInt(0)) catch |err| return err == error.ProcessNotFound;
+        return false;
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Children, per OS
+// ---------------------------------------------------------------------------
+
+const windows = struct {
+    const HANDLE = std.os.windows.HANDLE;
+    extern "kernel32" fn WaitForSingleObject(handle: HANDLE, ms: u32) callconv(.winapi) u32;
+    const WAIT_OBJECT_0 = 0;
+
+    extern "kernel32" fn GetCurrentProcess() callconv(.winapi) HANDLE;
+    extern "kernel32" fn CreateJobObjectW(attributes: ?*anyopaque, name: ?[*:0]const u16) callconv(.winapi) ?HANDLE;
+    extern "kernel32" fn SetInformationJobObject(job: HANDLE, class: c_int, info: *const anyopaque, len: u32) callconv(.winapi) c_int;
+    extern "kernel32" fn AssignProcessToJobObject(job: HANDLE, process: HANDLE) callconv(.winapi) c_int;
+    const JobObjectExtendedLimitInformation = 9;
+    const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000;
+    const JOBOBJECT_EXTENDED_LIMIT_INFORMATION = extern struct {
+        PerProcessUserTimeLimit: i64 = 0,
+        PerJobUserTimeLimit: i64 = 0,
+        LimitFlags: u32 = 0,
+        MinimumWorkingSetSize: usize = 0,
+        MaximumWorkingSetSize: usize = 0,
+        ActiveProcessLimit: u32 = 0,
+        Affinity: usize = 0,
+        PriorityClass: u32 = 0,
+        SchedulingClass: u32 = 0,
+        IoInfo: [6]u64 = @splat(0),
+        ProcessMemoryLimit: usize = 0,
+        JobMemoryLimit: usize = 0,
+        PeakProcessMemoryUsed: usize = 0,
+        PeakJobMemoryUsed: usize = 0,
+    };
+
+    /// Put this process in a job that kills everything in it when its last
+    /// handle closes, i.e. when dev_runner exits for any reason (Ctrl-C, the
+    /// console closing, a crash). Children spawned afterwards (the dev
+    /// server, the app and their helpers) join the job, so none outlives
+    /// dev_runner. Ctrl-C alone doesn't reach the app: it is a GUI program
+    /// without a console. Best effort: on failure children are only stopped
+    /// by `cleanupChildren`.
+    fn killChildrenWithUs() void {
+        const job = CreateJobObjectW(null, null) orelse return;
+        const info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = .{ .LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE };
+        if (SetInformationJobObject(job, JobObjectExtendedLimitInformation, &info, @sizeOf(JOBOBJECT_EXTENDED_LIMIT_INFORMATION)) == 0) return;
+        // The job handle is deliberately never closed: the OS closes it
+        // when this process ends, which is what kills the job.
+        _ = AssignProcessToJobObject(job, GetCurrentProcess());
+    }
+};
+
+/// Exit code if `child` has exited (it is reaped then), else null.
+fn childExited(io: Io, child: *std.process.Child) ?u8 {
+    const id = child.id orelse return null;
+    if (is_windows) {
+        if (windows.WaitForSingleObject(id, 0) != windows.WAIT_OBJECT_0) return null;
+        const term = child.wait(io) catch return 1; // returns at once: it has exited
+        return switch (term) {
+            .exited => |code| code,
+            else => 1,
+        };
+    }
+    const code = pgroup.checkChildExit(id) orelse return null;
+    child.id = null;
+    return code;
+}
+
+/// Stop `child` (and, on POSIX, its process group) and reap it.
+fn stopChild(io: Io, child: *std.process.Child) void {
+    const id = child.id orelse return;
+    if (is_windows) {
+        child.kill(io); // TerminateProcess + wait
+        return;
+    }
+    pgroup.killProcessGroup(io, id, id); // spawned with .pgid = 0: its pgid is its pid
+    child.id = null;
+}
+
+fn spawnInGroup(io: Io, argv: []const []const u8, cwd: []const u8, env: *const std.process.Environ.Map) std.process.SpawnError!std.process.Child {
+    return std.process.spawn(io, .{
+        .argv = argv,
+        .cwd = .{ .path = cwd },
+        .environ_map = env,
+        .pgid = if (is_windows) null else 0,
+    });
+}
+
+fn getPid() i64 {
+    return switch (native_os) {
+        .linux => linux.getpid(),
+        .windows => std.os.windows.GetCurrentProcessId(),
+        else => std.c.getpid(),
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Watching
+// ---------------------------------------------------------------------------
+
+fn skipDir(basename: []const u8) bool {
+    return std.mem.startsWith(u8, basename, ".") or
+        std.mem.eql(u8, basename, "node_modules") or
+        std.mem.eql(u8, basename, "dist") or
+        std.mem.eql(u8, basename, "zig-out") or
+        std.mem.eql(u8, basename, "zig-pkg");
+}
+
+/// Portable watcher (macOS, Windows): a fingerprint of every `.zig` file's
+/// path, size and modification time under the watched directories,
+/// compared every poll. Cheap for an app's `src/`.
+const PollWatcher = struct {
+    dirs: []const []const u8,
+    last: u64,
+    /// Name of a changed file seen by the last `changed` call (for the log).
+    name_buf: [256]u8 = undefined,
+    name_len: usize = 0,
+
+    fn init(gpa: std.mem.Allocator, io: Io, dirs: []const []const u8) PollWatcher {
+        var w: PollWatcher = .{ .dirs = dirs, .last = 0 };
+        w.last = w.fingerprint(gpa, io, null);
+        return w;
+    }
+
+    /// Whether any .zig file changed since the last call.
+    fn changed(self: *PollWatcher, gpa: std.mem.Allocator, io: Io) bool {
+        const now = self.fingerprint(gpa, io, self);
+        if (now == self.last) return false;
+        self.last = now;
+        return true;
+    }
+
+    fn changedName(self: *const PollWatcher) []const u8 {
+        return self.name_buf[0..self.name_len];
+    }
+
+    fn fingerprint(self: *const PollWatcher, gpa: std.mem.Allocator, io: Io, record: ?*PollWatcher) u64 {
+        var hasher = std.hash.Wyhash.init(0);
+        var newest: i128 = std.math.minInt(i128);
+        for (self.dirs) |dir_path| {
+            var dir = Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch continue;
+            defer dir.close(io);
+            var walker = dir.walk(gpa) catch continue;
+            defer walker.deinit();
+            while (walker.next(io) catch null) |entry| {
+                if (entry.kind == .directory) {
+                    if (skipDir(entry.basename)) walker.leave(io);
+                    continue;
+                }
+                if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+                const st = dir.statFile(io, entry.path, .{}) catch continue;
+                hasher.update(dir_path);
+                hasher.update(entry.path);
+                hasher.update(std.mem.asBytes(&st.size));
+                // i96 has 4 undefined padding bytes in memory: hash a fully
+                // defined i128, or the fingerprint changes on its own.
+                const mtime: i128 = st.mtime.nanoseconds;
+                hasher.update(std.mem.asBytes(&mtime));
+                if (record) |r| if (mtime > newest) {
+                    newest = mtime;
+                    r.name_len = @min(entry.basename.len, r.name_buf.len);
+                    @memcpy(r.name_buf[0..r.name_len], entry.basename[0..r.name_len]);
+                };
+            }
+        }
+        return hasher.final();
+    }
+};
+
+pub fn main(init: std.process.Init) !u8 {
+    const io = init.io;
+    const gpa = init.gpa;
+    // macOS: no PDEATHSIG; the loop exits when we are re-parented instead.
+    const initial_parent: Pid = if (is_windows) 0 else posix.getppid();
+
+    if (is_linux and !tieToParentLinux()) return 0;
+    installShutdownHandlers();
+
+    var opts: Options = .{};
+    defer opts.deinit(gpa);
+    var build_argv: std.ArrayList([]const u8) = .empty;
+    defer build_argv.deinit(gpa);
+
+    // Portable argv (WTF-16 on Windows, so not `args.vector`).
+    const all_args = try init.minimal.args.toSlice(init.arena.allocator());
+    if (!try opts.parse(gpa, all_args[1..])) return 1;
+    try takeZigArgs(init, gpa, &opts.build_args);
+
+    const bin_path = opts.app_bin orelse {
+        std.debug.print("dev_runner: error: --app-bin required\n", .{});
+        return 1;
+    };
+    const zig = opts.zig_exe orelse "zig";
+
+    const watch_fd = openWatchFd(opts.watch_pid) catch |err| return switch (err) {
+        error.ZigGone => 0,
+        error.PidfdFailed => 1,
+    };
+    defer if (watch_fd) |fd| {
+        _ = linux.close(fd);
+    };
+
+    try exportDevEnv(init.environ_map);
+    try startDevServer(io, &opts, init.environ_map);
+    defer cleanupChildren(io);
+
+    // Linux: inotify. Elsewhere: poll modification times.
+    const inotify_fd: i32 = if (!is_linux) -1 else initInotify() orelse return 1;
+    defer if (is_linux) {
+        _ = linux.close(inotify_fd);
+    };
+    if (is_linux) try addWatches(gpa, io, inotify_fd, &opts);
+    const watched = [_][]const u8{ opts.watch_dir, opts.project_dir };
+    const poller: ?PollWatcher = if (is_linux) null else PollWatcher.init(gpa, io, &watched);
+
+    var full_app_argv: std.ArrayList([]const u8) = .empty;
+    defer full_app_argv.deinit(gpa);
+    try launchApp(gpa, io, bin_path, &opts, init.environ_map, &full_app_argv);
+    std.debug.print("\x1b[36m[oriel dev]\x1b[0m Watching for changes in {s}...\n", .{opts.watch_dir});
+
+    var session: Session = .{
+        .io = io,
+        .gpa = gpa,
+        .env = init.environ_map,
+        .opts = &opts,
+        .zig = zig,
+        .build_argv = &build_argv,
+        .app_argv = full_app_argv.items,
+        .inotify_fd = inotify_fd,
+        .watch_fd = watch_fd,
+        .initial_parent = initial_parent,
+        .poller = poller,
+    };
+    return session.run();
+}
+
+/// Linux: have the kernel stop us when our parent dies, and adopt orphaned
+/// grandchildren. False if the parent is already gone.
+fn tieToParentLinux() bool {
+    // Capture parent pid before setting PDEATHSIG to close the race where the
+    // parent already died before prctl is called.
+    const initial_ppid = linux.getppid();
+
+    // Ask Linux kernel to send SIGTERM if our parent process/thread dies.
+    //
+    // Note on PDEATHSIG and Zig build runner worker threads:
+    // PDEATHSIG fires when the parent THREAD (not just the process/thread group leader) exits.
+    // Zig's build runner (build_runner.zig) runs steps concurrently via Io.Group.async on worker
+    // threads (std.Io.Threaded). For a Step.Run (such as dev_runner), the step's make function
+    // calls evalGeneric, which spawns the child and then synchronously calls child.wait(io),
+    // which blocks in wait4 on POSIX until dev_runner exits.
+    // Because the worker thread remains blocked waiting for dev_runner for its entire run,
+    // the parent thread does not exit prematurely. Thus, PDEATHSIG will only fire when the
+    // worker thread terminates (i.e. when the zig build process terminates).
+    const prctl_res = linux.prctl(@intFromEnum(linux.PR.SET_PDEATHSIG), @intFromEnum(posix.SIG.TERM), 0, 0, 0);
+    if (linux.errno(prctl_res) != .SUCCESS) {
+        std.debug.print("dev_runner: warning: prctl(PR_SET_PDEATHSIG) failed: {d}\n", .{prctl_res});
+    }
+
+    // Re-check getppid() against initial_ppid to close the race where the parent
+    // died before prctl was registered. If the parent died, getppid() returns the
+    // reaper/init PID (different from initial_ppid), so exit immediately.
+    if (linux.getppid() != initial_ppid) {
+        return false;
+    }
+
+    // Become a child subreaper: any orphaned grandchild processes (spawned e.g. by Vite/npm/node)
+    // whose direct parent exits are re-parented to dev_runner rather than init, enabling us to
+    // reap them and prevent zombie leakage.
+    const subreaper_res = linux.prctl(@intFromEnum(linux.PR.SET_CHILD_SUBREAPER), 1, 0, 0, 0);
+    if (linux.errno(subreaper_res) != .SUCCESS) {
+        // Not fatal (e.g. restricted containers), but keep error surfaced.
+        std.debug.print("dev_runner: warning: prctl(PR_SET_CHILD_SUBREAPER) failed: {d}\n", .{subreaper_res});
+    }
+    return true;
+}
+
+fn installShutdownHandlers() void {
+    // Register SIGINT / SIGTERM handler for clean shutdown of child processes.
+    // (Windows: a kill-on-close job object takes every child down with us.)
+    if (is_windows) {
+        windows.killChildrenWithUs();
+    } else {
+        const sa = posix.Sigaction{
+            .handler = .{ .handler = onSignal },
+            .mask = posix.sigemptyset(),
+            .flags = 0,
+        };
+        posix.sigaction(posix.SIG.INT, &sa, null);
+        posix.sigaction(posix.SIG.TERM, &sa, null);
+    }
+}
+
+/// Command line options (slices point into the argv).
+const Options = struct {
+    zig_exe: ?[]const u8 = null,
+    project_dir: []const u8 = ".",
+    watch_dir: []const u8 = "src",
+    frontend_dir: ?[]const u8 = null,
+    app_bin: ?[]const u8 = null,
+    watch_pid: ?Pid = null,
+    dev_cmd: std.ArrayList([]const u8) = .empty,
+    app_args: std.ArrayList([]const u8) = .empty,
+    // -D options for the rebuild (`--build-arg=-Dname=value`).
+    build_args: std.ArrayList([]const u8) = .empty,
+
+    fn deinit(self: *Options, gpa: std.mem.Allocator) void {
+        self.dev_cmd.deinit(gpa);
+        self.app_args.deinit(gpa);
+        self.build_args.deinit(gpa);
+    }
+
+    /// False on an invalid argument (already reported).
+    fn parse(self: *Options, gpa: std.mem.Allocator, args: []const [:0]const u8) !bool {
+        var in_dev_cmd = false;
+        var in_app_args = false;
+        for (args) |arg| {
+            if (in_dev_cmd) {
+                if (std.mem.eql(u8, arg, "--dev-cmd-end")) {
+                    in_dev_cmd = false;
+                } else {
+                    try self.dev_cmd.append(gpa, arg);
+                }
+                continue;
+            }
+            if (in_app_args) {
+                if (std.mem.eql(u8, arg, "--app-args-end")) {
+                    in_app_args = false;
+                } else {
+                    try self.app_args.append(gpa, arg);
+                }
+                continue;
+            }
+
+            if (std.mem.eql(u8, arg, "--dev-cmd")) {
+                in_dev_cmd = true;
+            } else if (std.mem.eql(u8, arg, "--app-args")) {
+                in_app_args = true;
+            } else if (!try self.parseOption(gpa, arg)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    fn parseOption(self: *Options, gpa: std.mem.Allocator, arg: []const u8) !bool {
+        if (std.mem.eql(u8, arg, "--zig")) {
+            // next arg handled below or via index
+        } else if (std.mem.startsWith(u8, arg, "--zig=")) {
+            self.zig_exe = arg["--zig=".len..];
+        } else if (std.mem.startsWith(u8, arg, "--project-dir=")) {
+            self.project_dir = arg["--project-dir=".len..];
+        } else if (std.mem.startsWith(u8, arg, "--watch-dir=")) {
+            self.watch_dir = arg["--watch-dir=".len..];
+        } else if (std.mem.startsWith(u8, arg, "--frontend-dir=")) {
+            self.frontend_dir = arg["--frontend-dir=".len..];
+        } else if (std.mem.startsWith(u8, arg, "--watch-pid=")) {
+            if (is_windows) return true; // not passed on Windows
+            self.watch_pid = std.fmt.parseInt(Pid, arg["--watch-pid=".len..], 10) catch {
+                std.debug.print("dev_runner: error: invalid {s}\n", .{arg});
+                return false;
+            };
+        } else if (std.mem.startsWith(u8, arg, "--app-bin=")) {
+            self.app_bin = arg["--app-bin=".len..];
+        } else if (std.mem.startsWith(u8, arg, "--build-arg=")) {
+            try self.build_args.append(gpa, arg["--build-arg=".len..]);
+        }
+        return true;
+    }
+};
+
+/// Zig's own flags `oriel dev` got (--fork=<path>), which build.zig never
+/// sees: without them the rebuild would use the pinned dependencies.
+/// Our own copy: the variable is removed, so the app and the frontend dev
+/// server don't inherit it.
+fn takeZigArgs(init: std.process.Init, gpa: std.mem.Allocator, build_args: *std.ArrayList([]const u8)) !void {
+    const zig_args = init.environ_map.get("ORIEL_DEV_ZIG_ARGS") orelse return;
+    const owned = try init.arena.allocator().dupe(u8, zig_args);
+    _ = init.environ_map.orderedRemove("ORIEL_DEV_ZIG_ARGS");
+    var it = std.mem.tokenizeScalar(u8, owned, '\n');
+    while (it.next()) |a| try build_args.append(gpa, a);
+}
+
+/// `zig build dev` runs us from the build runner, a child of `zig`. A
+/// SIGTERM/SIGKILL to `zig` alone doesn't reach the build runner, so
+/// PR_SET_PDEATHSIG never fires: watch `zig` through a pidfd, which
+/// becomes readable when it exits (build.zig passes its pid). Other POSIX
+/// systems poll it with kill(pid, 0) in the watch loop.
+fn openWatchFd(watch_pid: ?Pid) error{ ZigGone, PidfdFailed }!?i32 {
+    if (!is_linux) return null;
+    const pid = watch_pid orelse return null;
+    const rc = linux.pidfd_open(pid, 0);
+    switch (linux.errno(rc)) {
+        .SUCCESS => return @intCast(rc),
+        .SRCH => return error.ZigGone,
+        else => |e| {
+            std.debug.print("dev_runner: error: pidfd_open({d}): {s}\n", .{ pid, @tagName(e) });
+            return error.PidfdFailed;
+        },
+    }
+}
+
+/// Start the frontend dev server if specified.
+///
+/// Note on pre-exec hooks in Zig 0.16 std.process.spawn:
+/// std.process.SpawnOptions does not provide a pre-exec callback (such as GSubprocessLauncher's
+/// child_setup). Therefore, dev_runner cannot directly execute prctl(PR_SET_PDEATHSIG) inside
+/// arbitrary external binaries (like Vite / npm / node) before exec.
+/// Instead:
+/// 1) dev_runner spawns the dev command in a separate process group (.pgid = 0), making
+///    the child a group leader.
+/// 2) On shutdown or receipt of SIGTERM/SIGINT, dev_runner sends SIGTERM to the entire group
+///    via kill(-pgid, SIGTERM), followed by SIGKILL escalation if processes remain alive.
+/// 3) dev_runner has PDEATHSIG set from its parent (zig build dev), so any abrupt termination
+///    of the parent causes dev_runner to receive SIGTERM and clean up the child group.
+fn startDevServer(io: Io, opts: *const Options, env: *const std.process.Environ.Map) !void {
+    if (opts.dev_cmd.items.len == 0) return;
+    const frontend_dir = opts.frontend_dir orelse return;
+    std.debug.print("\x1b[36m[oriel dev]\x1b[0m Starting frontend dev server: {s}...\n", .{opts.dev_cmd.items[0]});
+    global_dev_child = try spawnInGroup(io, opts.dev_cmd.items, frontend_dir, env);
+}
+
+fn exportDevEnv(env: *std.process.Environ.Map) !void {
+    // Set ORIEL_DEV_EXTERNAL=1 so the app knows Vite is managed by us
+    try env.put("ORIEL_DEV_EXTERNAL", "1");
+    // The app exits when dev_runner is gone: on Linux through PR_SET_PDEATHSIG
+    // plus a getppid() check against this pid, on macOS by watching this pid.
+    var pid_buf: [24]u8 = undefined;
+    try env.put("ORIEL_DEV_RUNNER_PID", try std.fmt.bufPrint(&pid_buf, "{d}", .{getPid()}));
+}
+
+fn addWatches(gpa: std.mem.Allocator, io: Io, inotify_fd: i32, opts: *const Options) !void {
+    try addWatchesRecursively(gpa, io, inotify_fd, opts.watch_dir);
+    try addWatchesRecursively(gpa, io, inotify_fd, opts.project_dir);
+}
+
+/// Initial app launch: start in its own process group (.pgid = 0) so helper processes
+/// are cleanly tracked and killed when reloading or exiting. `argv` keeps the
+/// command line for restarts.
+fn launchApp(
+    gpa: std.mem.Allocator,
+    io: Io,
+    bin_path: []const u8,
+    opts: *const Options,
+    env: *const std.process.Environ.Map,
+    argv: *std.ArrayList([]const u8),
+) !void {
+    std.debug.print("\x1b[36m[oriel dev]\x1b[0m Launching application: {s}\n", .{bin_path});
+    try argv.append(gpa, bin_path);
+    try argv.appendSlice(gpa, opts.app_args.items);
+
+    global_app_child = try spawnInGroup(io, argv.items, opts.project_dir, env);
+}
+
+/// The inotify instance, or null (reported) if it can't be created.
+fn initInotify() ?i32 {
+    const res = linux.inotify_init1(linux.IN.NONBLOCK | linux.IN.CLOEXEC);
+    if (linux.errno(res) != .SUCCESS) {
+        std.debug.print("dev_runner: inotify_init1 failed\n", .{});
+        return null;
+    }
+    return @intCast(res);
+}
+
+/// The watch loop and what it needs: wait for a `.zig` change, rebuild,
+/// restart the app; stop when `zig`, our parent or the app goes away.
+const Session = struct {
+    io: Io,
+    gpa: std.mem.Allocator,
+    env: *std.process.Environ.Map,
+    opts: *const Options,
+    zig: []const u8,
+    build_argv: *std.ArrayList([]const u8),
+    app_argv: []const []const u8,
+    inotify_fd: i32,
+    watch_fd: ?i32,
+    initial_parent: Pid,
+    poller: ?PollWatcher,
+    event_buf: [4096]u8 align(@alignOf(linux.inotify_event)) = undefined,
+    changed_name_buf: [256]u8 = undefined,
+
+    fn run(self: *Session) !u8 {
+        while (!global_should_exit.load(.acquire)) {
+            if (!self.waitTick()) break;
+            if (self.appClosed()) return 0;
+
+            const changed_name = self.readChange() orelse continue;
+
+            // The debounce below overwrites the buffer the name points into.
+            const name_len = @min(changed_name.len, self.changed_name_buf.len);
+            @memcpy(self.changed_name_buf[0..name_len], changed_name[0..name_len]);
+
+            // Debounce: sleep 100ms and drain any remaining events
+            sleepMs(self.io, 100);
+            if (global_should_exit.load(.acquire)) break;
+            if (is_linux) {
+                _ = linux.read(self.inotify_fd, &self.event_buf, self.event_buf.len);
+            } else {
+                _ = self.poller.?.changed(self.gpa, self.io); // absorb writes that landed during the debounce
+            }
+
+            std.debug.print("\x1b[36m[oriel dev]\x1b[0m Change detected ({s}). Recompiling...\n", .{self.changed_name_buf[0..name_len]});
+            try self.rebuildAndRestart();
+        }
+        return 0;
+    }
+
+    /// Wait for the next poll; false when it is time to stop.
+    fn waitTick(self: *Session) bool {
+        if (is_linux) {
+            // Poll inotify (and the watched `zig` pidfd; fd -1 is ignored by
+            // poll) with a 200ms timeout.
+            var pfd = [_]posix.pollfd{
+                .{ .fd = self.inotify_fd, .events = posix.POLL.IN, .revents = 0 },
+                .{ .fd = self.watch_fd orelse -1, .events = posix.POLL.IN, .revents = 0 },
+            };
+            _ = posix.poll(&pfd, 200) catch 0;
+
+            if (global_should_exit.load(.acquire)) return false;
+            if (pfd[1].revents != 0) {
+                std.debug.print("\x1b[36m[oriel dev]\x1b[0m zig exited. Stopping.\n", .{});
+                return false;
+            }
+        } else {
+            sleepMs(self.io, 300);
+            if (global_should_exit.load(.acquire)) return false;
+            if (!is_windows) {
+                if (self.opts.watch_pid) |pid| if (pgroup.processGone(pid)) {
+                    std.debug.print("\x1b[36m[oriel dev]\x1b[0m zig exited. Stopping.\n", .{});
+                    return false;
+                };
+                if (posix.getppid() != self.initial_parent) return false; // our parent died
+            }
+        }
+        return true;
+    }
+
+    /// Whether the app closed cleanly (dev mode ends then). A crash only
+    /// waits for the next change.
+    fn appClosed(self: *Session) bool {
+        const ac = if (global_app_child) |*c| c else return false;
+        const app_id = ac.id; // cleared by childExited
+        const exit_code = childExited(self.io, ac) orelse return false;
+        // Its helpers (same process group; pgid == its pid) go too.
+        if (!is_windows) if (app_id) |pgid| pgroup.killProcessGroup(self.io, pgid, null);
+        global_app_child = null;
+        if (exit_code == 0) {
+            std.debug.print("\x1b[36m[oriel dev]\x1b[0m App closed. Exiting dev mode.\n", .{});
+            return true;
+        }
+        std.debug.print("\x1b[33m[oriel dev]\x1b[0m App exited with code {d}. Waiting for changes to restart...\n", .{exit_code});
+        return false;
+    }
+
+    /// The name of a changed `.zig` file, or null if none changed.
+    fn readChange(self: *Session) ?[]const u8 {
+        if (!is_linux) {
+            if (!self.poller.?.changed(self.gpa, self.io)) return null;
+            return self.poller.?.changedName();
+        }
+        // Check if there are inotify events
+        const rc = linux.read(self.inotify_fd, &self.event_buf, self.event_buf.len);
+        if (linux.errno(rc) != .SUCCESS or rc == 0) return null;
+
+        var changed_name: ?[]const u8 = null;
+        var off: usize = 0;
+        while (off < rc) {
+            const ev: *const linux.inotify_event = @ptrCast(@alignCast(self.event_buf[off..].ptr));
+            if (ev.getName()) |name_z| {
+                const name = std.mem.sliceTo(name_z, 0);
+                if (std.mem.endsWith(u8, name, ".zig")) changed_name = name;
+            }
+            off += @sizeOf(linux.inotify_event) + ev.len;
+        }
+        return changed_name;
+    }
+
+    fn rebuildAndRestart(self: *Session) !void {
+        const io = self.io;
+        // Kill currently running app and its entire process group
+        if (global_app_child) |*ac| {
+            stopChild(io, ac);
+            global_app_child = null;
+        }
+
+        if (global_should_exit.load(.acquire)) return;
+
+        // Run rebuild: zig build build-dev, with the -D options `zig build dev` got.
+        self.build_argv.shrinkRetainingCapacity(0);
+        try self.build_argv.appendSlice(self.gpa, &.{ self.zig, "build", "build-dev" });
+        try self.build_argv.appendSlice(self.gpa, self.opts.build_args.items);
+        var build_child = std.process.spawn(io, .{
+            .argv = self.build_argv.items,
+            .cwd = .{ .path = self.opts.project_dir },
+            .environ_map = self.env,
+        }) catch |err| {
+            std.debug.print("\x1b[31m[oriel dev]\x1b[0m Failed to spawn rebuild: {s}\n", .{@errorName(err)});
+            return;
+        };
+
+        const term = build_child.wait(io) catch |err| {
+            build_child.kill(io);
+            _ = build_child.wait(io) catch {};
+            std.debug.print("\x1b[31m[oriel dev]\x1b[0m Rebuild wait error: {s}\n", .{@errorName(err)});
+            return;
+        };
+
+        if (global_should_exit.load(.acquire)) return;
+
+        switch (term) {
+            .exited => |code| {
+                if (code == 0) {
+                    std.debug.print("\x1b[32m[oriel dev]\x1b[0m Rebuilt successfully. Restarting app...\n", .{});
+                    global_app_child = spawnInGroup(io, self.app_argv, self.opts.project_dir, self.env) catch |err| blk: {
+                        std.debug.print("\x1b[31m[oriel dev]\x1b[0m Failed to restart app: {s}\n", .{@errorName(err)});
+                        break :blk null;
+                    };
+                } else {
+                    std.debug.print("\x1b[31m[oriel dev]\x1b[0m Rebuild failed with code {d}. Waiting for code changes...\n", .{code});
+                }
+            },
+            else => {
+                std.debug.print("\x1b[31m[oriel dev]\x1b[0m Rebuild terminated abnormally.\n", .{});
+            },
+        }
+    }
+};
+
+fn cleanupChildren(io: Io) void {
+    if (global_app_child) |*ac| {
+        stopChild(io, ac);
+        global_app_child = null;
+    }
+    if (global_dev_child) |*dc| {
+        if (dc.id != null) std.debug.print("\x1b[36m[oriel dev]\x1b[0m Stopping frontend dev server...\n", .{});
+        stopChild(io, dc);
+        global_dev_child = null;
+    }
+}
+
+fn addWatchesRecursively(gpa: std.mem.Allocator, io: Io, inotify_fd: i32, dir_path: []const u8) !void {
+    var dir = Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return;
+    defer dir.close(io);
+
+    // Watch dir itself
+    const root_z = try gpa.dupeZ(u8, dir_path);
+    defer gpa.free(root_z);
+    _ = linux.inotify_add_watch(inotify_fd, root_z.ptr, linux.IN.CREATE | linux.IN.MODIFY | linux.IN.DELETE | linux.IN.MOVED_TO);
+
+    var walker = dir.walk(gpa) catch return;
+    defer walker.deinit();
+
+    while (walker.next(io) catch null) |entry| {
+        if (entry.kind == .directory) {
+            // Ignore hidden and build directories
+            if (skipDir(entry.basename)) {
+                walker.leave(io);
+                continue;
+            }
+            const full = try std.fs.path.join(gpa, &.{ dir_path, entry.path });
+            defer gpa.free(full);
+            const full_z = try gpa.dupeZ(u8, full);
+            defer gpa.free(full_z);
+            _ = linux.inotify_add_watch(inotify_fd, full_z.ptr, linux.IN.CREATE | linux.IN.MODIFY | linux.IN.DELETE | linux.IN.MOVED_TO);
+        }
+    }
+}
+
+test {
+    std.testing.refAllDecls(@This());
+}
+
+test "isProcessGroupAlive invalid pgid" {
+    if (is_windows) return error.SkipZigTest;
+    try std.testing.expect(!pgroup.isProcessGroupAlive(0));
+    try std.testing.expect(!pgroup.isProcessGroupAlive(-1));
+}
+
+test "PollWatcher sees a .zig change and ignores other files" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(io, "src/sub");
+    try tmp.dir.createDirPath(io, "src/zig-out");
+    try tmp.dir.writeFile(io, .{ .sub_path = "src/main.zig", .data = "a" });
+    const src = try tmp.dir.realPathFileAlloc(io, "src", gpa);
+    defer gpa.free(src);
+
+    const dirs = [_][]const u8{src};
+    var w = PollWatcher.init(gpa, io, &dirs);
+    try std.testing.expect(!w.changed(gpa, io));
+
+    try tmp.dir.writeFile(io, .{ .sub_path = "src/notes.txt", .data = "x" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "src/zig-out/gen.zig", .data = "x" });
+    try std.testing.expect(!w.changed(gpa, io));
+
+    try tmp.dir.writeFile(io, .{ .sub_path = "src/sub/new.zig", .data = "b" });
+    try std.testing.expect(w.changed(gpa, io));
+    // The name is only for the log: with coarse file timestamps (Linux ticks,
+    // ~ms) main.zig and new.zig can share an mtime, so either may be reported.
+    try std.testing.expect(std.mem.endsWith(u8, w.changedName(), ".zig"));
+    try std.testing.expect(!w.changed(gpa, io));
+
+    try tmp.dir.writeFile(io, .{ .sub_path = "src/main.zig", .data = "longer" }); // size changes too
+    try std.testing.expect(w.changed(gpa, io));
+}

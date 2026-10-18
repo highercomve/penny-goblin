@@ -1,0 +1,7 @@
+<style>
+  budget-part: background=#eaeee4 color=#434a43
+  @media (prefers-color-scheme: dark) {
+    budget-part: background=#1d211d color=#c2c9c0
+  }
+</style>
+<text id="budget-part" class="budget-part" padding="4,10,4,10" radius="8" font-size="12" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">{text}</text>

@@ -1,0 +1,968 @@
+<style>
+  n1: background=#f6f8f1
+  n2: color-scheme=light
+  n3: background=#f6f8f1
+  n4: margin=0,0,0,96 padding=0,0,32,0
+  n5: padding=0,4,0,24 background=#f6f8f1
+  view-title: color=#191d19
+  n8: icon-color=#434a43 viewbox=0,0,24,24
+  content: padding=0,24,0,24
+  view-home: align=start
+  n13: color=#191d19
+  n15: color=#191d19
+  month: max-width=826 color-scheme=light background=#dce7d6 color=#17241a
+  n17: border-color=#17241a
+  n19: color=#191d19
+  n21: color=#191d19
+  account-filter: max-width=826 color-scheme=light background=#dce7d6 color=#17241a
+  n23: border-color=#17241a
+  n25: color=#191d19
+  n26: background=#c4ef9a
+  n27: color=#0f2b1d
+  total: color=#0f2b1d font-size=40
+  payment-count: color=#0f2b1d
+  receipt-count: color=#0f2b1d
+  monthly-budget: background=#f0f3eb
+  n35: color=#434a43
+  budget-forecast: color=#191d19 font-size=17
+  n38: color=#2d6a4f
+  fixed-planned: color=#191d19 font-size=17
+  fixed-paid: color=#434a43
+  n42: color=#434a43
+  salary-total: color=#191d19 font-size=17
+  budget-hint: color=#434a43
+  n46: width=50%-6px background=#f0f3eb
+  n47: color=#191d19
+  n49: width=50%-6px background=#f0f3eb
+  n50: color=#191d19
+  n54: color=#191d19
+  n55: background=#e4e9de
+  n56: icon-color=#434a43 viewbox=0,0,24,24
+  n58: color=#434a43
+  search: color-scheme=light color=#191d19 value=""
+  n62: color=#191d19
+  n64: color=#191d19
+  category-filter: max-width=826 color-scheme=light background=#dce7d6 color=#17241a
+  n66: border-color=#17241a
+  n68: color=#191d19
+  n70: color=#191d19
+  ledger-sort: max-width=826 color-scheme=light background=#dce7d6 color=#17241a
+  n72: border-color=#17241a
+  audit-other: border-color=#c3c9c0
+  n74: color=#434a43
+  research-open: border-color=#c3c9c0
+  n76: color=#434a43
+  clear-drilldown: background=#dce7d6
+  n78: color=#17241a
+  clear-ledger: border-color=#c3c9c0
+  n80: color=#434a43
+  range-toggle: border-color=#c3c9c0
+  n83: icon-color=#434a43 viewbox=0,0,24,24
+  n84: color=#434a43
+  n88: color=#434a43
+  date-from: border-color=#737a72 color-scheme=light color=#191d19 value=""
+  n91: color=#434a43
+  date-through: border-color=#737a72 color-scheme=light color=#191d19 value=""
+  n94: color=#2d6a4f
+  ledger-filter-hint: color=#434a43
+  rows: background=#f0f3eb
+  n97: background=#f0f3eb
+  bulk-details-toggle: color=#2d6a4f
+  n102: color=#434a43
+  bulk-pattern: border-color=#737a72 color-scheme=light color=#191d19 value=""
+  n105: color=#434a43
+  bulk-category: border-color=#737a72 color-scheme=light color=#191d19 value=""
+  categories-bulk-category-list: color-scheme=light background=#eaeee4
+  bulk-only-other: border-color=#2d6a4f color-scheme=light background=#2d6a4f
+  n110: background=#ffffff
+  n111: color=#191d19
+  bulk-remember: border-color=#2d6a4f color-scheme=light background=#2d6a4f
+  n114: background=#ffffff
+  n115: color=#191d19
+  bulk-preview-button: background=#dce7d6
+  n117: color=#17241a
+  bulk-summary: color=#191d19
+  n123: color=#2d6a4f
+  bulk-apply: background=#2d6a4f
+  n125: color=#ffffff
+  export-report: background=#dce7d6
+  n130: color=#17241a
+  n132: width=50%-6px background=#f0f3eb
+  n133: color=#191d19
+  n135: width=50%-6px background=#f0f3eb
+  n136: color=#191d19
+  chart-fixed: border-color=#737a72 color-scheme=light background=#e4e9de
+  n139: background=#737a72
+  n140: color=#191d19
+  n142: background=#f0f3eb
+  n144: color=#191d19
+  n146: color=#191d19
+  n148: color=#191d19
+  comparison-mode: max-width=826 color-scheme=light background=#dce7d6 color=#17241a
+  n150: border-color=#17241a
+  n152: background=#f0f3eb
+  n153: color=#191d19
+  n154: background=#e4e9de
+  n155: icon-color=#434a43 viewbox=0,0,24,24
+  n157: color=#434a43
+  merchant-search: color-scheme=light color=#191d19 value=""
+  n161: color=#191d19
+  n163: color=#191d19
+  merchant-category: max-width=826 color-scheme=light background=#dce7d6 color=#17241a
+  n165: border-color=#17241a
+  n167: color=#191d19
+  n169: color=#191d19
+  merchant-grouping: max-width=826 color-scheme=light background=#dce7d6 color=#17241a
+  n171: border-color=#17241a
+  n173: color=#191d19
+  n175: color=#191d19
+  merchant-sort: max-width=826 color-scheme=light background=#dce7d6 color=#17241a
+  n177: border-color=#17241a
+  merchant-report: color-scheme=light
+  n179: background=#f0f3eb
+  n180: color=#191d19
+  n182: background=#f0f3eb
+  n183: color=#191d19
+  n185: background=#f0f3eb
+  n186: color=#191d19
+  month-report: color-scheme=light
+  n189: color=#2d6a4f
+  n190: background=#f0f3eb
+  n192: icon-color=#434a43 viewbox=0,0,24,24
+  n193: color=#191d19
+  n194: icon-color=#737a72 viewbox=0,0,24,24
+  n196: icon-color=#434a43 viewbox=0,0,24,24
+  n197: color=#191d19
+  n198: icon-color=#737a72 viewbox=0,0,24,24
+  n200: icon-color=#434a43 viewbox=0,0,24,24
+  n201: color=#191d19
+  n202: icon-color=#737a72 viewbox=0,0,24,24
+  n204: icon-color=#434a43 viewbox=0,0,24,24
+  n205: color=#191d19
+  n206: icon-color=#737a72 viewbox=0,0,24,24
+  n208: icon-color=#434a43 viewbox=0,0,24,24
+  n209: color=#191d19
+  n210: icon-color=#737a72 viewbox=0,0,24,24
+  n212: icon-color=#434a43 viewbox=0,0,24,24
+  n213: color=#191d19
+  n214: icon-color=#737a72 viewbox=0,0,24,24
+  n215: color=#2d6a4f
+  n216: background=#f0f3eb
+  n218: icon-color=#434a43 viewbox=0,0,24,24
+  n220: color=#191d19
+  n222: color=#434a43
+  n223: icon-color=#737a72 viewbox=0,0,24,24
+  n224: color=#2d6a4f
+  n225: background=#f0f3eb
+  n227: icon-color=#434a43 viewbox=0,0,24,24
+  n228: color=#191d19
+  n229: icon-color=#737a72 viewbox=0,0,24,24
+  n231: icon-color=#434a43 viewbox=0,0,24,24
+  n232: color=#191d19
+  n233: icon-color=#737a72 viewbox=0,0,24,24
+  n235: icon-color=#434a43 viewbox=0,0,24,24
+  n236: color=#191d19
+  legacy-file: color-scheme=light background=#ffffff unset="color"
+  n238: color-scheme=light color=#191d19
+  desktop-actions: background=#f0f3eb
+  n241: icon-color=#434a43 viewbox=0,0,24,24
+  n242: color=#191d19
+  n244: icon-color=#434a43 viewbox=0,0,24,24
+  n245: color=#191d19
+  device-hint: color=#434a43
+  n247: justify=flex-start width=96 height=auto padding=16,0,16,0 row-gap=4 column-gap=4 top=0 bottom=0 left=0 background=#f6f8f1 unset="direction right"
+  nav-home: grow=0 shrink=0 width=96 min-height=64 padding=4,0,8,0 unset="basis"
+  n251: background=#dce7d6
+  n252: icon-color=#17241a viewbox=0,0,24,24
+  n253: color=#191d19
+  nav-payments: grow=0 shrink=0 width=96 min-height=64 padding=4,0,8,0 unset="basis"
+  n256: icon-color=#434a43 viewbox=0,0,24,24
+  n257: color=#434a43
+  nav-insights: grow=0 shrink=0 width=96 min-height=64 padding=4,0,8,0 unset="basis"
+  n260: icon-color=#434a43 viewbox=0,0,24,24
+  n261: color=#434a43
+  nav-settings: grow=0 shrink=0 width=96 min-height=64 padding=4,0,8,0 unset="basis"
+  n264: icon-color=#434a43 viewbox=0,0,24,24
+  n265: color=#434a43
+  status: right=16 bottom=24 left=120 background=#2e322e unset="top"
+  capture-actions: align=center width=56 top=84 left=20 unset="direction right bottom"
+  new-receipt: width=56 background=#c4ef9a unset="direction padding row-gap column-gap"
+  n269: icon-color=#0f2b1d viewbox=0,0,24,24
+  n270: color=#0f2b1d display=none
+  new-expense: background=#e4e9de unset="direction row-gap column-gap"
+  n272: icon-color=#2d6a4f viewbox=0,0,24,24
+  global-progress: top=60 right=0 left=96 unset="bottom"
+  n274: background="rgba(45, 106, 79, 0.22)"
+  global-progress-value: background=#2d6a4f
+  n276: max-width=1148 background=#e4e9de
+  global-progress-message: color=#191d19
+  @media (prefers-color-scheme: dark) {
+    n1: background=#111511
+    n2: color-scheme=dark
+    n3: background=#111511
+    n5: background=#111511
+    view-title: color=#e0e4dc
+    n8: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n13: color=#e0e4dc
+    n15: color=#e0e4dc
+    month: color-scheme=dark background=#384a3b color=#d6e8d6
+    n17: border-color=#d6e8d6
+    n19: color=#e0e4dc
+    n21: color=#e0e4dc
+    account-filter: color-scheme=dark background=#384a3b color=#d6e8d6
+    n23: border-color=#d6e8d6
+    n25: color=#e0e4dc
+    n26: background=#2f4f22
+    n27: color=#c4ef9a
+    total: color=#c4ef9a
+    payment-count: color=#c4ef9a
+    receipt-count: color=#c4ef9a
+    monthly-budget: background=#191d19
+    n35: color=#c2c9c0
+    budget-forecast: color=#e0e4dc
+    n38: color=#9ad4ae
+    fixed-planned: color=#e0e4dc
+    fixed-paid: color=#c2c9c0
+    n42: color=#c2c9c0
+    salary-total: color=#e0e4dc
+    budget-hint: color=#c2c9c0
+    n46: background=#191d19
+    n47: color=#e0e4dc
+    n49: background=#191d19
+    n50: color=#e0e4dc
+    n54: color=#e0e4dc
+    n55: background=#272b27
+    n56: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n58: color=#c2c9c0
+    search: color-scheme=dark color=#e0e4dc unset="value"
+    n62: color=#e0e4dc
+    n64: color=#e0e4dc
+    category-filter: color-scheme=dark background=#384a3b color=#d6e8d6
+    n66: border-color=#d6e8d6
+    n68: color=#e0e4dc
+    n70: color=#e0e4dc
+    ledger-sort: color-scheme=dark background=#384a3b color=#d6e8d6
+    n72: border-color=#d6e8d6
+    audit-other: border-color=#424942
+    n74: color=#c2c9c0
+    research-open: border-color=#424942
+    n76: color=#c2c9c0
+    clear-drilldown: background=#384a3b
+    n78: color=#d6e8d6
+    clear-ledger: border-color=#424942
+    n80: color=#c2c9c0
+    range-toggle: border-color=#424942
+    n83: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n84: color=#c2c9c0
+    n88: color=#c2c9c0
+    date-from: border-color=#8c938a color-scheme=dark color=#e0e4dc unset="value"
+    n91: color=#c2c9c0
+    date-through: border-color=#8c938a color-scheme=dark color=#e0e4dc unset="value"
+    n94: color=#9ad4ae
+    ledger-filter-hint: color=#c2c9c0
+    rows: background=#191d19
+    n97: background=#191d19
+    bulk-details-toggle: color=#9ad4ae
+    n102: color=#c2c9c0
+    bulk-pattern: border-color=#8c938a color-scheme=dark color=#e0e4dc unset="value"
+    n105: color=#c2c9c0
+    bulk-category: border-color=#8c938a color-scheme=dark color=#e0e4dc unset="value"
+    categories-bulk-category-list: color-scheme=dark background=#1d211d
+    bulk-only-other: border-color=#9ad4ae color-scheme=dark background=#9ad4ae
+    n110: background=#003920
+    n111: color=#e0e4dc
+    bulk-remember: border-color=#9ad4ae color-scheme=dark background=#9ad4ae
+    n114: background=#003920
+    n115: color=#e0e4dc
+    bulk-preview-button: background=#384a3b
+    n117: color=#d6e8d6
+    bulk-summary: color=#e0e4dc
+    n123: color=#9ad4ae
+    bulk-apply: background=#9ad4ae
+    n125: color=#003920
+    export-report: background=#384a3b
+    n130: color=#d6e8d6
+    n132: background=#191d19
+    n133: color=#e0e4dc
+    n135: background=#191d19
+    n136: color=#e0e4dc
+    chart-fixed: border-color=#8c938a color-scheme=dark background=#272b27
+    n139: background=#8c938a
+    n140: color=#e0e4dc
+    n142: background=#191d19
+    n144: color=#e0e4dc
+    n146: color=#e0e4dc
+    n148: color=#e0e4dc
+    comparison-mode: color-scheme=dark background=#384a3b color=#d6e8d6
+    n150: border-color=#d6e8d6
+    n152: background=#191d19
+    n153: color=#e0e4dc
+    n154: background=#272b27
+    n155: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n157: color=#c2c9c0
+    merchant-search: color-scheme=dark color=#e0e4dc unset="value"
+    n161: color=#e0e4dc
+    n163: color=#e0e4dc
+    merchant-category: color-scheme=dark background=#384a3b color=#d6e8d6
+    n165: border-color=#d6e8d6
+    n167: color=#e0e4dc
+    n169: color=#e0e4dc
+    merchant-grouping: color-scheme=dark background=#384a3b color=#d6e8d6
+    n171: border-color=#d6e8d6
+    n173: color=#e0e4dc
+    n175: color=#e0e4dc
+    merchant-sort: color-scheme=dark background=#384a3b color=#d6e8d6
+    n177: border-color=#d6e8d6
+    merchant-report: color-scheme=dark
+    n179: background=#191d19
+    n180: color=#e0e4dc
+    n182: background=#191d19
+    n183: color=#e0e4dc
+    n185: background=#191d19
+    n186: color=#e0e4dc
+    month-report: color-scheme=dark
+    n189: color=#9ad4ae
+    n190: background=#191d19
+    n192: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n193: color=#e0e4dc
+    n194: icon-color=#8c938a viewbox=0,0,24,24
+    n196: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n197: color=#e0e4dc
+    n198: icon-color=#8c938a viewbox=0,0,24,24
+    n200: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n201: color=#e0e4dc
+    n202: icon-color=#8c938a viewbox=0,0,24,24
+    n204: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n205: color=#e0e4dc
+    n206: icon-color=#8c938a viewbox=0,0,24,24
+    n208: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n209: color=#e0e4dc
+    n210: icon-color=#8c938a viewbox=0,0,24,24
+    n212: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n213: color=#e0e4dc
+    n214: icon-color=#8c938a viewbox=0,0,24,24
+    n215: color=#9ad4ae
+    n216: background=#191d19
+    n218: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n220: color=#e0e4dc
+    n222: color=#c2c9c0
+    n223: icon-color=#8c938a viewbox=0,0,24,24
+    n224: color=#9ad4ae
+    n225: background=#191d19
+    n227: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n228: color=#e0e4dc
+    n229: icon-color=#8c938a viewbox=0,0,24,24
+    n231: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n232: color=#e0e4dc
+    n233: icon-color=#8c938a viewbox=0,0,24,24
+    n235: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n236: color=#e0e4dc
+    legacy-file: color-scheme=dark background=#6b6b6b color=#ffffff
+    n238: color-scheme=dark color=#e0e4dc
+    desktop-actions: background=#191d19
+    n241: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n242: color=#e0e4dc
+    n244: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n245: color=#e0e4dc
+    device-hint: color=#c2c9c0
+    n247: background=#111511
+    n251: background=#384a3b
+    n252: icon-color=#d6e8d6 viewbox=0,0,24,24
+    n253: color=#e0e4dc
+    n256: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n257: color=#c2c9c0
+    n260: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n261: color=#c2c9c0
+    n264: icon-color=#c2c9c0 viewbox=0,0,24,24
+    n265: color=#c2c9c0
+    status: background=#e0e4dc
+    new-receipt: background=#2f4f22
+    n269: icon-color=#c4ef9a viewbox=0,0,24,24
+    new-expense: background=#272b27
+    n272: icon-color=#9ad4ae viewbox=0,0,24,24
+    n274: background="rgba(154, 212, 174, 0.22)"
+    global-progress-value: background=#9ad4ae
+    n276: background=#272b27
+    global-progress-message: color=#e0e4dc
+  }
+  @media (max-width: 839px) {
+    n4: padding=0,0,176,0 unset="margin"
+    n5: padding=0,4,0,16
+    content: padding=0,16,0,16
+    view-home: unset="align"
+    month: max-width=275.1
+    account-filter: max-width=275.1
+    n46: width=100%
+    n49: width=100%
+    search: unset="value"
+    category-filter: max-width=275.1
+    ledger-sort: max-width=275.1
+    date-from: unset="value"
+    date-through: unset="value"
+    bulk-pattern: unset="value"
+    bulk-category: unset="value"
+    n132: width=100%
+    n135: width=100%
+    comparison-mode: max-width=275.1
+    merchant-search: unset="value"
+    merchant-category: max-width=275.1
+    merchant-grouping: max-width=275.1
+    merchant-sort: max-width=275.1
+    n247: direction=row justify=space-around height=80 right=0 bottom=0 left=0 background=#eaeee4 unset="width padding row-gap column-gap top"
+    n248: display=none
+    n249: display=none
+    nav-home: grow=1 shrink=1 basis=0% min-height=80 padding=12,0,16,0 unset="width"
+    nav-payments: grow=1 shrink=1 basis=0% min-height=80 padding=12,0,16,0 unset="width"
+    nav-insights: grow=1 shrink=1 basis=0% min-height=80 padding=12,0,16,0 unset="width"
+    nav-settings: grow=1 shrink=1 basis=0% min-height=80 padding=12,0,16,0 unset="width"
+    status: right=16 bottom=92 left=16 unset="top"
+    capture-actions: direction=column-reverse align=flex-end width=auto right=16 bottom=96 unset="top left"
+    new-receipt: direction=row padding=0,20,0,16 row-gap=12 column-gap=12 unset="width"
+    n270: display=flex
+    new-expense: direction=row row-gap=12 column-gap=12
+    global-progress: top=60 right=0 left=0 unset="bottom"
+    n276: max-width=361
+  }
+  @media (max-width: 839px) and (prefers-color-scheme: dark) {
+    n247: background=#1d211d
+    n270: color=#c4ef9a
+  }
+  @media (max-width: 380px) {
+    n4: padding=0,0,176,0 unset="margin"
+    n5: padding=0,4,0,16
+    content: padding=0,16,0,16
+    view-home: unset="align"
+    month: max-width=224
+    account-filter: max-width=224
+    total: font-size=34
+    budget-forecast: font-size=15
+    fixed-planned: font-size=15
+    salary-total: font-size=15
+    n46: width=100%
+    n49: width=100%
+    search: unset="value"
+    category-filter: max-width=224
+    ledger-sort: max-width=224
+    date-from: unset="value"
+    date-through: unset="value"
+    bulk-pattern: unset="value"
+    bulk-category: unset="value"
+    n132: width=100%
+    n135: width=100%
+    comparison-mode: max-width=224
+    merchant-search: unset="value"
+    merchant-category: max-width=224
+    merchant-grouping: max-width=224
+    merchant-sort: max-width=224
+    n247: direction=row justify=space-around height=80 right=0 bottom=0 left=0 background=#eaeee4 unset="width padding row-gap column-gap top"
+    n248: display=none
+    n249: display=none
+    nav-home: grow=1 shrink=1 basis=0% min-height=80 padding=12,0,16,0 unset="width"
+    nav-payments: grow=1 shrink=1 basis=0% min-height=80 padding=12,0,16,0 unset="width"
+    nav-insights: grow=1 shrink=1 basis=0% min-height=80 padding=12,0,16,0 unset="width"
+    nav-settings: grow=1 shrink=1 basis=0% min-height=80 padding=12,0,16,0 unset="width"
+    status: right=16 bottom=92 left=16 unset="top"
+    capture-actions: direction=column-reverse align=flex-end width=auto right=16 bottom=96 unset="top left"
+    new-receipt: direction=row padding=0,20,0,16 row-gap=12 column-gap=12 unset="width"
+    n270: display=flex
+    new-expense: direction=row row-gap=12 column-gap=12
+    global-progress: top=60 right=0 left=0 unset="bottom"
+    n276: max-width=288
+  }
+  @media (max-width: 380px) and (prefers-color-scheme: dark) {
+    n247: background=#1d211d
+    n270: color=#c4ef9a
+  }
+</style>
+<view class="n1" root="true" unset="shrink color font-size">
+  <view class="n2" grow="1" shrink="1" scroll="true">
+    <view class="n3" min-height="100%">
+      <view class="n4" min-height="820">
+        <row class="n5" align="center" height="64" row-gap="8" column-gap="8" sticky="0,auto,auto,auto" z="5">
+          <text id="view-title" class="view-title" grow="1" shrink="1" basis="0%" font-size="22" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Penny Goblin</text>
+          <row id="refresh" justify="center" align="center" width="48" height="48" min-height="40" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
+            <icon class="n8" grow="0" shrink="0" width="24" height="24" clickable="true">
+              <path d="M19 12a7 7 0 1 1-2.05-4.95M19 4v4h-4" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+            </icon>
+          </row>
+        </row>
+        <view id="content" class="content" width="100%" max-width="960" margin="0,auto,0,auto">
+          <row id="view-home" class="view-home" wrap="wrap" padding="0,0,8,0" row-gap="12" column-gap="12">
+            <row width="100%" padding="2,0,2,0" row-gap="8" column-gap="8" scroll-x="true" unset="shrink">
+              <row align="baseline" grow="0" clickable="true">
+                <text class="n13" shrink="0" width="0" min-width="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">​</text>
+                <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
+                  <text class="n15" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Month</text>
+                </view>
+                <select id="month" class="month" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="2026-10" no-arrow="true" label="Month">
+                  <option value="">All months</option>
+                  <option value="2026-10">October 2026</option>
+                </select>
+                <view class="n17" width="6" height="6" border-width="0,1,1,0" position="absolute" top="12" right="13" rotate="45" pointer-events="none" box-sizing="content-box" unset="shrink bottom left" />
+              </row>
+              <row align="baseline" grow="0" clickable="true">
+                <text class="n19" shrink="0" width="0" min-width="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">​</text>
+                <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
+                  <text class="n21" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Account</text>
+                </view>
+                <select id="account-filter" class="account-filter" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="" no-arrow="true" label="Account">
+                  <option value="">All accounts</option>
+                  <option value="1234">Household · 1234</option>
+                </select>
+                <view class="n23" width="6" height="6" border-width="0,1,1,0" position="absolute" top="12" right="13" rotate="45" pointer-events="none" box-sizing="content-box" unset="shrink bottom left" />
+              </row>
+            </row>
+            <view id="period-title" width="1" height="1" position="absolute" clip="true" unset="shrink top right bottom left">
+              <text class="n25" shrink="0" font-size="24" font-weight="700" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">October 2026</text>
+            </view>
+            <view class="n26" width="100%" min-width="0" padding="20" radius="28" unset="shrink">
+              <text class="n27" shrink="0" margin="0,0,4,0" opacity="0.8" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.5">Spent</text>
+              <text id="total" class="total" shrink="0" margin="0,0,12,0" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="-0.5">$12.345</text>
+              <row margin="0" row-gap="16" column-gap="16">
+                <text id="payment-count" class="payment-count" font-size="14" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif"><span font-weight="600">1</span><span> payments</span></text>
+                <text id="receipt-count" class="receipt-count" font-size="14" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif"><span font-weight="600">0</span><span> with receipt</span></text>
+              </row>
+            </view>
+            <view id="monthly-budget" class="monthly-budget" width="100%" min-width="0" padding="16" radius="16" unset="shrink">
+              <row wrap="wrap" margin="0,0,12,0" row-gap="12" column-gap="12">
+                <view grow="1" shrink="1" basis="0%" min-width="0">
+                  <text class="n35" shrink="0" margin="0,0,4,0" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.5">Left this month</text>
+                  <text id="budget-forecast" class="budget-forecast" shrink="0" margin="0" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">$687.655</text>
+                </view>
+                <view id="open-fixed" justify="center" grow="1" shrink="1" basis="0%" min-width="0" min-height="0" radius="8" clickable="true">
+                  <text class="n38" shrink="0" margin="0,0,4,0" clickable="true" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.5">Fixed ›</text>
+                  <text id="fixed-planned" class="fixed-planned" shrink="0" margin="0,0,2,0" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">$300.000</text>
+                  <text id="fixed-paid" class="fixed-paid" shrink="0" margin="0" clickable="true" font-size="12" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">$0 paid</text>
+                </view>
+                <view grow="1" shrink="1" basis="0%" min-width="0">
+                  <text class="n42" shrink="0" margin="0,0,4,0" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.5">Salary</text>
+                  <text id="salary-total" class="salary-total" shrink="0" margin="0" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">$1.000.000</text>
+                </view>
+              </row>
+              <row id="budget-parts" wrap="wrap" margin="0,0,8,0" row-gap="6" column-gap="6" />
+              <text id="budget-hint" class="budget-hint" shrink="0" margin="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">Add your salary in Settings to see what's left.</text>
+            </view>
+            <view class="n46" min-width="0" padding="16" radius="16" unset="shrink">
+              <text class="n47" shrink="0" margin="0,0,8,0" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Categories</text>
+              <view id="category-report" margin="0" />
+            </view>
+            <view class="n49" min-width="0" padding="16" radius="16" unset="shrink">
+              <text class="n50" shrink="0" margin="0,0,8,0" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Accounts</text>
+              <view id="account-report" margin="0" />
+            </view>
+          </row>
+          <view id="view-payments" padding="0,0,8,0" row-gap="12" column-gap="12">
+            <view id="ledger-title" width="1" height="1" position="absolute" clip="true" unset="shrink top right bottom left">
+              <text class="n54" shrink="0" font-size="24" font-weight="700" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Payments</text>
+            </view>
+            <row class="n55" align="center" height="56" padding="0,16,0,16" row-gap="12" column-gap="12" radius="28" clickable="true" unset="shrink">
+              <icon class="n56" grow="0" shrink="0" width="24" height="24">
+                <path d="M5 11a6 6 0 1 0 12 0a6 6 0 1 0 -12 0z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                <path d="m20 20-4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+              </icon>
+              <view width="1" height="1" position="absolute" clip="true" unset="shrink top right bottom left">
+                <text class="n58" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Search payments</text>
+              </view>
+              <input id="search" class="search" grow="1" shrink="1" basis="0%" min-width="0" padding="1" radius="5" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="Search payments" placeholder-color="#a9a9a9" cols="20" type="search" enterkey="search" autocapitalize="sentences" label="Search payments" />
+            </row>
+            <row padding="2,0,2,0" row-gap="8" column-gap="8" scroll-x="true">
+              <row align="baseline" grow="0" clickable="true">
+                <text class="n62" shrink="0" width="0" min-width="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">​</text>
+                <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
+                  <text class="n64" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Category</text>
+                </view>
+                <select id="category-filter" class="category-filter" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="" no-arrow="true" label="Category">
+                  <option value="">All categories</option>
+                  <option value="Groceries">Groceries</option>
+                </select>
+                <view class="n66" width="6" height="6" border-width="0,1,1,0" position="absolute" top="12" right="13" rotate="45" pointer-events="none" box-sizing="content-box" unset="shrink bottom left" />
+              </row>
+              <row align="baseline" grow="0" clickable="true">
+                <text class="n68" shrink="0" width="0" min-width="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">​</text>
+                <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
+                  <text class="n70" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Sort</text>
+                </view>
+                <select id="ledger-sort" class="ledger-sort" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="newest" no-arrow="true" label="Sort">
+                  <option value="newest">Newest</option>
+                  <option value="oldest">Oldest</option>
+                  <option value="highest">Highest</option>
+                  <option value="lowest">Lowest</option>
+                </select>
+                <view class="n72" width="6" height="6" border-width="0,1,1,0" position="absolute" top="12" right="13" rotate="45" pointer-events="none" box-sizing="content-box" unset="shrink bottom left" />
+              </row>
+              <row id="audit-other" class="audit-other" justify="center" align="center" grow="0" height="32" min-height="32" padding="0,16,0,16" border-width="1" row-gap="6" column-gap="6" radius="8" clickable="true">
+                <text class="n74" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Uncategorized</text>
+              </row>
+              <row id="research-open" class="research-open" justify="center" align="center" grow="0" height="32" min-height="32" padding="0,16,0,16" border-width="1" row-gap="6" column-gap="6" radius="8" clickable="true">
+                <text class="n76" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Research categories</text>
+              </row>
+              <row id="clear-drilldown" class="clear-drilldown" justify="center" align="center" grow="0" height="32" min-height="32" padding="0,16,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true">
+                <text class="n78" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Clear filter</text>
+              </row>
+              <row id="clear-ledger" class="clear-ledger" justify="center" align="center" grow="0" height="32" min-height="32" padding="0,16,0,16" border-width="1" row-gap="6" column-gap="6" radius="8" clickable="true">
+                <text class="n80" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Reset</text>
+              </row>
+            </row>
+            <view>
+              <row id="range-toggle" class="range-toggle" align="center" align-self="flex-start" grow="0" height="32" min-height="32" padding="0,16,0,16" border-width="1" row-gap="6" column-gap="6" radius="8" clickable="true">
+                <icon class="n83" grow="0" shrink="0" width="18" height="18" clickable="true">
+                  <path d="M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                  <path d="M4 10h16M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+                <text class="n84" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true" max-content="true">Date range</text>
+              </row>
+              <view id="range-body" margin="10,0,0,0">
+                <row wrap="wrap" align="flex-end" margin="0" row-gap="8" column-gap="8">
+                  <view grow="1" shrink="1" basis="0%" min-width="130" row-gap="4" column-gap="4" clickable="true">
+                    <text class="n88" shrink="1" font-size="12" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">From</text>
+                    <input id="date-from" class="date-from" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" type="date" autocapitalize="sentences" label="From" unset="shrink" />
+                  </view>
+                  <view grow="1" shrink="1" basis="0%" min-width="130" row-gap="4" column-gap="4" clickable="true">
+                    <text class="n91" shrink="1" font-size="12" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">To</text>
+                    <input id="date-through" class="date-through" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" type="date" autocapitalize="sentences" label="To" unset="shrink" />
+                  </view>
+                  <row id="clear-filters" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+                    <text class="n94" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">All time</text>
+                  </row>
+                </row>
+              </view>
+            </view>
+            <text id="ledger-filter-hint" class="ledger-filter-hint" shrink="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">Filtered payments</text>
+            <view id="rows" class="rows" padding="4,8,4,8" radius="16" />
+            <view class="n97" min-width="0" padding="16" radius="16">
+              <text id="bulk-details-toggle" class="bulk-details-toggle" shrink="0" padding="10,0,10,0" clickable="true" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif"><span>Categorize matching payments</span><span> ▴</span></text>
+              <view id="bulk-details-body">
+                <view id="bulk-form">
+                  <view grow="1" shrink="1" basis="0%" min-width="0" margin="0,0,12,0" row-gap="4" column-gap="4" clickable="true">
+                    <text class="n102" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Payee contains</text>
+                    <input id="bulk-pattern" class="bulk-pattern" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" enterkey="go" autocapitalize="sentences" label="Payee contains" unset="shrink" />
+                  </view>
+                  <view grow="1" shrink="1" basis="0%" min-width="0" margin="0,0,12,0" row-gap="4" column-gap="4" clickable="true" z="10">
+                    <text class="n105" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Category</text>
+                    <input id="bulk-category" class="bulk-category" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" enterkey="go" autocapitalize="sentences" label="Category" unset="shrink" />
+                    <view id="categories-bulk-category-list" class="categories-bulk-category-list" max-height="240" margin="4,0,0,0" padding="4,0,4,0" position="absolute" top="100%" right="0" left="0" scroll="true" radius="8" shadow="0,4,12,0,rgba(0, 0, 0, 0.3)" z="10" unset="shrink bottom" />
+                  </view>
+                  <row align="center" min-height="44" margin="0" row-gap="12" column-gap="12" clickable="true">
+                    <view id="bulk-only-other" class="bulk-only-other" grow="0" width="52" height="32" margin="3,2,3,2" padding="1" border-width="2" radius="16" clickable="true" label="Only uncategorized">
+                      <view class="n110" width="24" height="24" position="absolute" top="2" left="22" radius="50%" clickable="true" unset="shrink right bottom" />
+                    </view>
+                    <text class="n111" clickable="true" font-size="14" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Only uncategorized</text>
+                  </row>
+                  <row align="center" min-height="44" row-gap="12" column-gap="12" clickable="true">
+                    <view id="bulk-remember" class="bulk-remember" grow="0" width="52" height="32" margin="3,2,3,2" padding="1" border-width="2" radius="16" clickable="true" label="Remember keyword">
+                      <view class="n114" width="24" height="24" position="absolute" top="2" left="22" radius="50%" clickable="true" unset="shrink right bottom" />
+                    </view>
+                    <text class="n115" clickable="true" font-size="14" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Remember keyword</text>
+                  </row>
+                  <row id="bulk-preview-button" class="bulk-preview-button" justify="center" align="center" align-self="flex-start" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
+                    <text class="n117" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Preview</text>
+                  </row>
+                </view>
+                <view id="bulk-preview">
+                  <text id="bulk-summary" class="bulk-summary" shrink="0" margin="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Preview</text>
+                  <view id="bulk-matches" margin="0,0,12,0" />
+                  <row wrap="wrap" align="center" margin="0" row-gap="8" column-gap="8">
+                    <row id="bulk-cancel" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+                      <text class="n123" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Cancel</text>
+                    </row>
+                    <row id="bulk-apply" class="bulk-apply" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+                      <text class="n125" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Apply</text>
+                    </row>
+                  </row>
+                </view>
+              </view>
+            </view>
+          </view>
+          <view id="view-insights" padding="0,0,8,0" row-gap="12" column-gap="12">
+            <row justify="space-between" align="center">
+              <view unset="shrink" />
+              <row id="export-report" class="export-report" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+                <text class="n130" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Export report</text>
+              </row>
+            </row>
+            <row wrap="wrap" row-gap="12" column-gap="12">
+              <view class="n132" min-width="0" padding="16" radius="16" unset="shrink">
+                <text class="n133" shrink="0" margin="0,0,12,0" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">By cardholder</text>
+                <view id="account-chart" margin="0" />
+              </view>
+              <view class="n135" min-width="0" padding="16" radius="16" unset="shrink">
+                <text class="n136" shrink="0" margin="0,0,8,0" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">By category</text>
+                <row align="center" min-height="44" margin="0" row-gap="12" column-gap="12" clickable="true">
+                  <view id="chart-fixed" class="chart-fixed" grow="0" width="52" height="32" margin="3,2,3,2" padding="1" border-width="2" radius="16" clickable="true" label="Include planned fixed">
+                    <view class="n139" width="16" height="16" position="absolute" top="6" left="6" radius="50%" clickable="true" unset="shrink right bottom" />
+                  </view>
+                  <text class="n140" clickable="true" font-size="14" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Include planned fixed</text>
+                </row>
+                <view id="category-chart" />
+              </view>
+            </row>
+            <view class="n142" min-width="0" padding="16" radius="16">
+              <row justify="space-between" align="center" margin="0,0,8,0" row-gap="8" column-gap="8">
+                <text class="n144" margin="0,0,8,0" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Comparison</text>
+                <row align="baseline" grow="0" clickable="true">
+                  <text class="n146" shrink="0" width="0" min-width="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">​</text>
+                  <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
+                    <text class="n148" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Comparison</text>
+                  </view>
+                  <select id="comparison-mode" class="comparison-mode" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="split" no-arrow="true" label="Comparison">
+                    <option value="split">By cardholder</option>
+                    <option value="combined">Combined</option>
+                  </select>
+                  <view class="n150" width="6" height="6" border-width="0,1,1,0" position="absolute" top="12" right="13" rotate="45" pointer-events="none" box-sizing="content-box" unset="shrink bottom left" />
+                </row>
+              </row>
+              <row id="account-comparison" wrap="wrap" margin="0" row-gap="12" column-gap="12" />
+            </view>
+            <view class="n152" min-width="0" padding="16" radius="16">
+              <text class="n153" shrink="0" margin="0,0,8,0" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Merchants</text>
+              <row class="n154" align="center" height="44" margin="0,0,8,0" padding="0,16,0,16" row-gap="12" column-gap="12" radius="28" clickable="true">
+                <icon class="n155" grow="0" shrink="0" width="24" height="24">
+                  <path d="M5 11a6 6 0 1 0 12 0a6 6 0 1 0 -12 0z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                  <path d="m20 20-4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+                <view width="1" height="1" position="absolute" clip="true" unset="shrink top right bottom left">
+                  <text class="n157" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Find merchant</text>
+                </view>
+                <input id="merchant-search" class="merchant-search" grow="1" shrink="1" basis="0%" min-width="0" padding="1" radius="5" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="Find merchant" placeholder-color="#a9a9a9" cols="20" type="search" enterkey="search" autocapitalize="sentences" label="Find merchant" />
+              </row>
+              <row margin="0" padding="2,0,2,0" row-gap="8" column-gap="8" scroll-x="true">
+                <row align="baseline" grow="0" clickable="true">
+                  <text class="n161" shrink="0" width="0" min-width="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">​</text>
+                  <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
+                    <text class="n163" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Category</text>
+                  </view>
+                  <select id="merchant-category" class="merchant-category" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="" no-arrow="true" label="Category">
+                    <option value="">All categories</option>
+                    <option value="Groceries">Groceries</option>
+                  </select>
+                  <view class="n165" width="6" height="6" border-width="0,1,1,0" position="absolute" top="12" right="13" rotate="45" pointer-events="none" box-sizing="content-box" unset="shrink bottom left" />
+                </row>
+                <row align="baseline" grow="0" clickable="true">
+                  <text class="n167" shrink="0" width="0" min-width="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">​</text>
+                  <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
+                    <text class="n169" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Group</text>
+                  </view>
+                  <select id="merchant-grouping" class="merchant-grouping" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="brand" no-arrow="true" label="Group">
+                    <option value="brand">By brand</option>
+                    <option value="exact">Exact name</option>
+                  </select>
+                  <view class="n171" width="6" height="6" border-width="0,1,1,0" position="absolute" top="12" right="13" rotate="45" pointer-events="none" box-sizing="content-box" unset="shrink bottom left" />
+                </row>
+                <row align="baseline" grow="0" clickable="true">
+                  <text class="n173" shrink="0" width="0" min-width="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">​</text>
+                  <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
+                    <text class="n175" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Sort</text>
+                  </view>
+                  <select id="merchant-sort" class="merchant-sort" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="spend" no-arrow="true" label="Sort">
+                    <option value="spend">Highest</option>
+                    <option value="low">Lowest</option>
+                    <option value="purchases">Most frequent</option>
+                    <option value="name">A–Z</option>
+                  </select>
+                  <view class="n177" width="6" height="6" border-width="0,1,1,0" position="absolute" top="12" right="13" rotate="45" pointer-events="none" box-sizing="content-box" unset="shrink bottom left" />
+                </row>
+              </row>
+              <view id="merchant-report" class="merchant-report" max-height="420" scroll="true" scroll-x="true" />
+            </view>
+            <view class="n179" min-width="0" padding="16" radius="16">
+              <text class="n180" shrink="0" margin="0,0,8,0" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Fixed · planned vs paid</text>
+              <view id="fixed-report" margin="0" />
+            </view>
+            <view class="n182" min-width="0" padding="16" radius="16">
+              <text class="n183" shrink="0" margin="0,0,8,0" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Special payments</text>
+              <view id="special-payments" margin="0" />
+            </view>
+            <view class="n185" min-width="0" padding="16" radius="16">
+              <text class="n186" shrink="0" margin="0,0,8,0" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Monthly history</text>
+              <view id="month-report" class="month-report" max-height="420" margin="0" scroll="true" scroll-x="true" />
+            </view>
+          </view>
+          <view id="view-settings" padding="0,0,8,0" row-gap="12" column-gap="12">
+            <text class="n189" shrink="0" padding="16,4,4,4" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Budget</text>
+            <view class="n190" min-width="0" padding="4" radius="16">
+              <row id="pref-budget" justify="flex-start" align="center" width="100%" min-height="56" padding="8,12,8,12" row-gap="16" column-gap="16" radius="8" clickable="true" unset="shrink">
+                <icon class="n192" grow="0" shrink="0" width="18" height="18" clickable="true">
+                  <path d="M4 7a2 2 0 0 1 2-2h11v4M4 7v11a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H6a2 2 0 0 1-2-2zM16 14h1" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+                <text class="n193" grow="1" shrink="1" basis="0%" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Salary &amp; owners</text>
+                <icon class="n194" grow="0" shrink="0" width="20" height="20" clickable="true">
+                  <path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+              </row>
+              <row id="pref-fixed" justify="flex-start" align="center" width="100%" min-height="56" padding="8,12,8,12" row-gap="16" column-gap="16" radius="8" clickable="true" unset="shrink">
+                <icon class="n196" grow="0" shrink="0" width="18" height="18" clickable="true">
+                  <path d="M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                  <path d="M4 10h16M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+                <text class="n197" grow="1" shrink="1" basis="0%" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Fixed commitments</text>
+                <icon class="n198" grow="0" shrink="0" width="20" height="20" clickable="true">
+                  <path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+              </row>
+              <row id="pref-accounts" justify="flex-start" align="center" width="100%" min-height="56" padding="8,12,8,12" row-gap="16" column-gap="16" radius="8" clickable="true" unset="shrink">
+                <icon class="n200" grow="0" shrink="0" width="18" height="18" clickable="true">
+                  <path d="M5 6h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-9a2 2 0 0 1 2 -2z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                  <path d="M3 10h18M7 15h3" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+                <text class="n201" grow="1" shrink="1" basis="0%" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Accounts</text>
+                <icon class="n202" grow="0" shrink="0" width="20" height="20" clickable="true">
+                  <path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+              </row>
+              <row id="pref-categories" justify="flex-start" align="center" width="100%" min-height="56" padding="8,12,8,12" row-gap="16" column-gap="16" radius="8" clickable="true" unset="shrink">
+                <icon class="n204" grow="0" shrink="0" width="18" height="18" clickable="true">
+                  <path d="M4 4h7l9 9-7 7-9-9zM8 8h.01" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+                <text class="n205" grow="1" shrink="1" basis="0%" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Category rules</text>
+                <icon class="n206" grow="0" shrink="0" width="20" height="20" clickable="true">
+                  <path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+              </row>
+              <row id="pref-vendors" justify="flex-start" align="center" width="100%" min-height="56" padding="8,12,8,12" row-gap="16" column-gap="16" radius="8" clickable="true" unset="shrink">
+                <icon class="n208" grow="0" shrink="0" width="18" height="18" clickable="true">
+                  <path d="M4 9 5.5 4h13L20 9M4 9h16M4 9v1a3 3 0 0 0 5.33 1.9A3 3 0 0 0 12 13a3 3 0 0 0 2.67-1.1A3 3 0 0 0 20 10V9M5 13v7h14v-7" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+                <text class="n209" grow="1" shrink="1" basis="0%" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Merchant names</text>
+                <icon class="n210" grow="0" shrink="0" width="20" height="20" clickable="true">
+                  <path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+              </row>
+              <row id="pref-special" justify="flex-start" align="center" width="100%" min-height="56" padding="8,12,8,12" row-gap="16" column-gap="16" radius="8" clickable="true" unset="shrink">
+                <icon class="n212" grow="0" shrink="0" width="18" height="18" clickable="true">
+                  <path d="m12 4 2.4 5 5.6.7-4.1 3.8 1 5.5L12 16.3 7.1 19l1-5.5L4 9.7 9.6 9z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+                <text class="n213" grow="1" shrink="1" basis="0%" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Special payments</text>
+                <icon class="n214" grow="0" shrink="0" width="20" height="20" clickable="true">
+                  <path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+              </row>
+            </view>
+            <text class="n215" shrink="0" padding="16,4,4,4" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Scanning</text>
+            <view class="n216" min-width="0" padding="4" radius="16">
+              <row id="open-scanner" justify="flex-start" align="center" width="100%" min-height="56" padding="8,12,8,12" row-gap="16" column-gap="16" radius="8" clickable="true" unset="shrink">
+                <icon class="n218" grow="0" shrink="0" width="18" height="18" clickable="true">
+                  <path d="M9 7h6a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                  <path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+                <view grow="1" shrink="1" basis="0%" min-width="0" clickable="true">
+                  <text class="n220" shrink="0" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Receipt scanner</text>
+                  <view id="settings-model-summary" margin="2,0,0,0" clip="true" clickable="true" unset="shrink">
+                    <text class="n222" shrink="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true" letter-spacing="0.1">Read receipts and vouchers on this device</text>
+                  </view>
+                </view>
+                <icon class="n223" grow="0" shrink="0" width="20" height="20" clickable="true">
+                  <path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+              </row>
+            </view>
+            <text class="n224" shrink="0" padding="16,4,4,4" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Data</text>
+            <view class="n225" min-width="0" padding="4" radius="16">
+              <row id="open-sync" justify="flex-start" align="center" width="100%" min-height="56" padding="8,12,8,12" row-gap="16" column-gap="16" radius="8" clickable="true" unset="shrink">
+                <icon class="n227" grow="0" shrink="0" width="18" height="18" clickable="true">
+                  <path d="M5 9a7 7 0 0 1 12.5-2.5L19 8M19 4v4h-4M19 15a7 7 0 0 1-12.5 2.5L5 16M5 20v-4h4" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+                <text class="n228" grow="1" shrink="1" basis="0%" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Pairing &amp; sync</text>
+                <icon class="n229" grow="0" shrink="0" width="20" height="20" clickable="true">
+                  <path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+              </row>
+              <row id="open-statements" justify="flex-start" align="center" width="100%" min-height="56" padding="8,12,8,12" row-gap="16" column-gap="16" radius="8" clickable="true" unset="shrink">
+                <icon class="n231" grow="0" shrink="0" width="18" height="18" clickable="true">
+                  <path d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5M9 13h6M9 17h6" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+                <text class="n232" grow="1" shrink="1" basis="0%" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Bank statements</text>
+                <icon class="n233" grow="0" shrink="0" width="20" height="20" clickable="true">
+                  <path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+              </row>
+              <row justify="flex-start" align="center" width="100%" min-height="56" padding="8,12,8,12" row-gap="16" column-gap="16" clip="true" radius="8" clickable="true" unset="shrink">
+                <icon class="n235" grow="0" shrink="0" width="24" height="24" clickable="true">
+                  <path d="M12 15V4M7 9l5-5 5 5M5 15v4a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+                <text class="n236" grow="1" shrink="1" basis="0%" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Import web export</text>
+                <view id="legacy-file" class="legacy-file" justify="center" padding="1" border-width="2" border-color="#cdcdcd" position="absolute" top="0" right="0" bottom="0" left="0" radius="5" opacity="0" clickable="true" label="Import web export" unset="shrink">
+                  <text class="n238" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center">Choose File  No file chosen</text>
+                </view>
+              </row>
+            </view>
+            <view id="desktop-actions" class="desktop-actions" min-width="0" padding="4" radius="16">
+              <row id="hide-to-tray" justify="flex-start" align="center" width="100%" min-height="56" padding="8,12,8,12" row-gap="16" column-gap="16" radius="8" clickable="true" unset="shrink">
+                <icon class="n241" grow="0" shrink="0" width="18" height="18" clickable="true">
+                  <path d="m6 10 6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+                <text class="n242" grow="1" shrink="1" basis="0%" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Hide to tray</text>
+              </row>
+              <row id="quit" justify="flex-start" align="center" width="100%" min-height="56" padding="8,12,8,12" row-gap="16" column-gap="16" radius="8" clickable="true" unset="shrink">
+                <icon class="n244" grow="0" shrink="0" width="18" height="18" clickable="true">
+                  <path d="M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5M15 8l4 4-4 4M19 12H9" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+                </icon>
+                <text class="n245" grow="1" shrink="1" basis="0%" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Quit</text>
+              </row>
+            </view>
+            <text id="device-hint" class="device-hint" shrink="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85" text-align="center"><span>Saved on this device · </span><span>Runs in the tray when closed</span></text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+  <view class="n247" align="center" position="absolute" z="10" unset="shrink">
+    <image class="n248" width="52" height="52" margin="0,0,12,0" src="logo.png" fit="contain" />
+    <view class="n249" grow="0" height="132" />
+    <view id="nav-home" class="nav-home" justify="center" align="center" row-gap="4" column-gap="4" clickable="true">
+      <row class="n251" justify="center" align="center" width="64" height="32" radius="16" clickable="true" unset="shrink">
+        <icon class="n252" grow="0" shrink="0" width="18" height="18" clickable="true">
+          <path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+        </icon>
+      </row>
+      <text class="n253" shrink="0" clickable="true" font-size="12" font-weight="700" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Home</text>
+    </view>
+    <view id="nav-payments" class="nav-payments" justify="center" align="center" row-gap="4" column-gap="4" clickable="true">
+      <row justify="center" align="center" width="64" height="32" radius="16" clickable="true" unset="shrink">
+        <icon class="n256" grow="0" shrink="0" width="18" height="18" clickable="true">
+          <path d="M7 4h10a1 1 0 0 1 1 1v15l-3-2-3 2-3-2-3 2V5a1 1 0 0 1 1-1zM9 9h6M9 13h4" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+        </icon>
+      </row>
+      <text class="n257" shrink="0" clickable="true" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Payments</text>
+    </view>
+    <view id="nav-insights" class="nav-insights" justify="center" align="center" row-gap="4" column-gap="4" clickable="true">
+      <row justify="center" align="center" width="64" height="32" radius="16" clickable="true" unset="shrink">
+        <icon class="n260" grow="0" shrink="0" width="18" height="18" clickable="true">
+          <path d="M5 20V11M12 20V5M19 20v-6" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+        </icon>
+      </row>
+      <text class="n261" shrink="0" clickable="true" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Insights</text>
+    </view>
+    <view id="nav-settings" class="nav-settings" justify="center" align="center" row-gap="4" column-gap="4" clickable="true">
+      <row justify="center" align="center" width="64" height="32" radius="16" clickable="true" unset="shrink">
+        <icon class="n264" grow="0" shrink="0" width="18" height="18" clickable="true">
+          <path d="M5 7h9M18 7h1M5 17h1M10 17h9" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+          <path d="M14 7a2 2 0 1 0 4 0a2 2 0 1 0 -4 0z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+          <path d="M6 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+        </icon>
+      </row>
+      <text class="n265" shrink="0" clickable="true" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Settings</text>
+    </view>
+  </view>
+  <view id="status" class="status" max-width="560" margin="0,auto,0,auto" padding="14,16,14,16" position="absolute" translate-y="12" radius="4" opacity="0" shadow="0,3,10,0,rgba(0, 0, 0, 0.25)" pointer-events="none" z="30" unset="shrink" />
+  <view id="capture-actions" class="capture-actions" row-gap="12" column-gap="12" position="absolute" z="11" unset="shrink">
+    <view id="new-receipt" class="new-receipt" justify="center" align="center" height="56" min-height="40" radius="16" shadow="0,3,8,0,rgba(0, 0, 0, 0.18)" clickable="true" unset="shrink">
+      <icon class="n269" grow="0" shrink="0" width="24" height="24" clickable="true">
+        <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+      </icon>
+      <text class="n270" clickable="true" font-size="15" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Scan</text>
+    </view>
+    <view id="new-expense" class="new-expense" justify="center" align="center" width="40" height="40" min-height="40" radius="12" shadow="0,3,8,0,rgba(0, 0, 0, 0.18)" clickable="true" unset="shrink">
+      <icon class="n272" grow="0" shrink="0" width="24" height="24" clickable="true">
+        <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
+      </icon>
+    </view>
+  </view>
+  <view id="global-progress" class="global-progress" width="100%" position="absolute" opacity="0" pointer-events="none" z="2147483647" unset="shrink">
+    <view class="n274" height="4" margin="0,0,10,0" clip="true">
+      <view id="global-progress-value" class="global-progress-value" width="40%" height="100%" />
+    </view>
+    <row class="n276" justify="center" align="center" align-self="flex-start" margin="0,auto,0,auto" padding="8,16,8,16" row-gap="10" column-gap="10" radius="18" shadow="0,2,8,0,#00000033">
+      <text id="global-progress-message" class="global-progress-message" font-size="13" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true" max-content="true">Opening your ledger</text>
+    </row>
+  </view>
+</view>

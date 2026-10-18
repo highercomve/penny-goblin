@@ -1,0 +1,1 @@
+{"type":"object","properties":{"tool":{"type":"string","enum":["search","follow_link","propose","abstain"]},"link":{"type":"integer","minimum":0,"maximum":79},"category":{"type":"string","maxLength":120},"reason":{"type":"string","maxLength":600}},"required":["tool","link","category","reason"],"additionalProperties":false}
