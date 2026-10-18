@@ -100,14 +100,16 @@ pub fn setFast(io: std.Io, arena: std.mem.Allocator, enabled: bool) !void {
 
 const gpu_file = "scanner-gpu";
 
-/// Off unless the user turns it on: each scan loads the model afresh, and
-/// Vulkan then rebuilds its pipelines. Measured 2026-10-17 with Qwen3.5 2B:
-/// RTX 4070 21 s vs 15 s on the CPU; the POCO X3's Adreno 618 failed the
-/// self-test. The switch lets a phone whose GPU passes try it.
+/// The user's choice; unset, on for an NVIDIA GPU through CUDA and off
+/// otherwise. Measured 2026-10-18 on an RTX 4070, CUDA: 2.5-3.3 s a receipt
+/// vs 6-15 s on the CPU (Qwen3.5 0.8B and Qwen2.5-VL 3B). Vulkan rebuilds
+/// its pipelines for each scan (the model loads afresh): 21 s vs 15 s on
+/// the CPU (2026-10-17, Qwen3.5 2B); the POCO X3's Adreno 618 failed the
+/// self-test. The switch lets a device whose GPU passes try it.
 pub fn gpuEnabled(io: std.Io, arena: std.mem.Allocator) bool {
     const dir = appDir(arena) catch return false;
     const path = std.fs.path.join(arena, &.{ dir, gpu_file }) catch return false;
-    const text = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(8)) catch return false;
+    const text = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(8)) catch return @import("vision.zig").cudaGpu(io);
     return std.mem.eql(u8, std.mem.trim(u8, text, " \n"), "on");
 }
 

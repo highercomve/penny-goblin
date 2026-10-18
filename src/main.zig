@@ -456,7 +456,7 @@ fn localDay(arena: std.mem.Allocator, seconds: i64) ![]const u8 {
     var timestamp: time_c.time_t = @intCast(seconds);
     var calendar: time_c.struct_tm = undefined;
     if (comptime @import("builtin").os.tag == .windows) {
-        if (time_c.localtime_s(&calendar, &timestamp) != 0) return error.InvalidDate;
+        if (time_c._localtime64_s(&calendar, &timestamp) != 0) return error.InvalidDate;
     } else if (time_c.localtime_r(&timestamp, &calendar) == null) return error.InvalidDate;
     return std.fmt.allocPrint(arena, "{d:0>4}-{d:0>2}-{d:0>2}", .{ @as(u16, @intCast(calendar.tm_year + 1900)), @as(u8, @intCast(calendar.tm_mon + 1)), @as(u8, @intCast(calendar.tm_mday)) });
 }

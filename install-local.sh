@@ -7,6 +7,11 @@
 #   ./install-local.sh                     build (ReleaseSafe) and install, restart Penny
 #   ./install-local.sh -Drenderer=oriel    any zig build option: here the compiled views
 #   NO_RESTART=1 ./install-local.sh        leave Penny stopped
+#   NO_CUDA=1 ./install-local.sh           skip the NVIDIA GPU backend
+#
+# With an NVIDIA GPU and the CUDA toolkit (nvcc, $CUDA_PATH or /opt/cuda),
+# the receipt scanner is built for this GPU (-Dggml_cuda): several times
+# faster than the CPU. The first such build compiles CUDA kernels for a while.
 #
 # The ledger, settings and scanner models stay in ~/.local/share/com.pennygoblin.app.
 set -euo pipefail
@@ -15,13 +20,19 @@ build_flags=()
 for argument in "$@"; do
     case "$argument" in
         -D*) build_flags+=("$argument") ;;
-        -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) printf 'Unknown argument: %s (see --help)\n' "$argument" >&2; exit 1 ;;
     esac
 done
 [[ $(uname -s) == Linux ]] || { printf 'This installer is for Linux.\n' >&2; exit 1; }
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+cuda_root="${CUDA_PATH:-/opt/cuda}"
+if [[ -z ${NO_CUDA:-} && " ${build_flags[*]:-} " != *" -Dggml_cuda"* ]] \
+    && command -v nvidia-smi >/dev/null && nvidia-smi -L >/dev/null 2>&1 \
+    && { command -v nvcc >/dev/null || [[ -x "$cuda_root/bin/nvcc" ]]; }; then
+    build_flags+=(-Dggml_cuda)
+fi
 prefix="$HOME/.local"
 binary="$prefix/bin/penny-goblin"
 

@@ -8,7 +8,7 @@ on your devices; there is no hosted account or cloud ledger.
 
 Built with **Zig 0.16.0** and **Oriel**, with two Linux interfaces: WebKit and
 compiled `.oriel` views. Android uses the compiled Oriel renderer. Application
-ID: `com.pennygoblin.app`. Current development version: **0.2.6**.
+ID: `com.pennygoblin.app`. Current development version: **0.2.7**.
 
 ## What it does
 
