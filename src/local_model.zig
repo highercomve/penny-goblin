@@ -20,7 +20,7 @@ pub fn acquire(io: std.Io, a: std.mem.Allocator) !?std.Io.File {
     const dir = try oriel.paths.appData(a, .{ .name = @import("oriel_app").build.id });
     try std.Io.Dir.cwd().createDirPath(io, dir);
     const path = try std.fs.path.join(a, &.{ dir, "inference.lock" });
-    const file = try std.Io.Dir.cwd().createFile(io, path, .{ .truncate = false, .permissions = .fromMode(0o600) });
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{ .truncate = false, .permissions = if (@import("builtin").os.tag == .windows) .default_file else .fromMode(0o600) });
     errdefer file.close(io);
     if (!try file.tryLock(io, .exclusive)) return error.DesktopScannerBusy;
     return file;

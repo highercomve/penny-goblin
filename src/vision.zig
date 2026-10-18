@@ -58,6 +58,20 @@ pub fn setGpu(enabled: bool) void {
     gpu_requested = enabled;
 }
 
+/// Whether ggml found an NVIDIA GPU through CUDA (libggml-cuda.so, built
+/// with -Dggml_cuda, and the NVIDIA driver): the GPU scans use by default.
+pub fn cudaGpu(io: std.Io) bool {
+    if (comptime !oriel.llama.available) return false;
+    if (oriel.ggml_gpu.load(io) == 0) return false;
+    for (0..c.ggml_backend_dev_count()) |i| {
+        const dev = c.ggml_backend_dev_get(i) orelse continue;
+        if (c.ggml_backend_dev_type(dev) != c.GGML_BACKEND_DEVICE_TYPE_GPU) continue;
+        const reg = c.ggml_backend_dev_backend_reg(dev) orelse continue;
+        if (std.mem.eql(u8, std.mem.span(c.ggml_backend_reg_name(reg)), "CUDA")) return true;
+    }
+    return false;
+}
+
 pub fn cancel() void {
     cancelled.store(true, .release);
 }

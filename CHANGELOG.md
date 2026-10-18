@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.7
+
+- Windows (WebView2, Vulkan scanner) and macOS (WebKit, Metal scanner)
+  desktop builds.
+- Linux WebView build scans on NVIDIA GPUs through CUDA, on by default:
+  2.5-3.3 s a receipt on an RTX 4070 vs 6-15 s on the CPU.
+  `install-local.sh` builds it when the CUDA toolkit is installed.
+
 ## 0.2.6
 
 - Show the Home account filter's label on Android: a hidden progress toast

@@ -11,7 +11,7 @@ pub fn local_time(buffer: []u8, seconds: i64) ![]const u8 {
     var timestamp: c.time_t = @intCast(seconds);
     var calendar: c.struct_tm = undefined;
     if (comptime @import("builtin").os.tag == .windows) {
-        if (c.localtime_s(&calendar, &timestamp) != 0) return error.InvalidDate;
+        if (c._localtime64_s(&calendar, &timestamp) != 0) return error.InvalidDate;
     } else if (c.localtime_r(&timestamp, &calendar) == null) return error.InvalidDate;
     const len = c.strftime(buffer.ptr, buffer.len, "%x, %H:%M", &calendar);
     if (len == 0) return error.InvalidDate;

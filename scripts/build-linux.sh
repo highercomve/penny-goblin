@@ -2,10 +2,12 @@
 # Build the desktop executable and AppImage, using the same entry point as CI.
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+# build-linux.sh <oriel|webview> [zig build options, e.g. -Dggml_cuda_prebuilt=/abs/libggml-cuda.so]
 renderer=${1:-oriel}
+shift || true
 case "$renderer" in oriel|webview) ;; *) printf 'Use oriel or webview\n' >&2; exit 2 ;; esac
-zig build -Drenderer="$renderer" -Doptimize=ReleaseSafe -p "zig-out-$renderer" --summary all
-zig build package-appimage -Drenderer="$renderer" -Doptimize=ReleaseSafe -p "zig-out-$renderer" --summary all
+zig build -Drenderer="$renderer" -Doptimize=ReleaseSafe -p "zig-out-$renderer" --summary all "$@"
+zig build package-appimage -Drenderer="$renderer" -Doptimize=ReleaseSafe -p "zig-out-$renderer" --summary all "$@"
 mkdir -p dist
 cp "zig-out-$renderer/bin/penny-goblin" "dist/penny-goblin-linux-x86_64-$renderer"
 for image in "zig-out-$renderer/package/"*.AppImage; do

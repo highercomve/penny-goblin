@@ -17,7 +17,7 @@ pub fn path(io: std.Io, arena: std.mem.Allocator) ![]const u8 {
         const temporary = try std.fmt.allocPrint(arena, "{s}-{s}.tmp", .{ destination, std.fmt.bytesToHex(random, .lower) });
         defer std.Io.Dir.cwd().deleteFile(io, temporary) catch {};
         {
-            const file = try std.Io.Dir.cwd().createFile(io, temporary, .{ .exclusive = true, .permissions = .fromMode(0o700) });
+            const file = try std.Io.Dir.cwd().createFile(io, temporary, .{ .exclusive = true, .permissions = if (@import("builtin").os.tag == .windows) .default_file else .fromMode(0o700) });
             defer file.close(io);
             try file.writeStreamingAll(io, bytes);
             try file.sync(io);

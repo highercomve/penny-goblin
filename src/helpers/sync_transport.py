@@ -197,9 +197,12 @@ class ResearchJobs:
         self.consume(job)
 
     @staticmethod
-    def kill(job):
+    def kill(job, hard=False):
+        """The worker and, on POSIX, its process group (browser descendants)."""
         if job["process"] is None: return
-        try: os.killpg(job["process"].pid, signal.SIGTERM)
+        try:
+            if hasattr(os, "killpg"): os.killpg(job["process"].pid, signal.SIGKILL if hard else signal.SIGTERM)
+            else: job["process"].kill()
         except ProcessLookupError: pass
 
     def deadline(self, job):
@@ -234,7 +237,7 @@ class ResearchJobs:
             # Also reap any browser descendants before another model can start.
             self.kill(job)
             try: job["process"].wait(timeout=10)
-            except subprocess.TimeoutExpired: os.killpg(job["process"].pid, signal.SIGKILL); job["process"].wait()
+            except subprocess.TimeoutExpired: self.kill(job, hard=True); job["process"].wait()
             job["process"].stdout.close()
             scanning.release()
 

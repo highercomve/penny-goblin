@@ -10,13 +10,20 @@ pub fn build(b: *std.Build) void {
     const renderer = b.option(Renderer, "renderer", "Renderer: webview, native (HTML/JS), or oriel (compiled views)") orelse .webview;
     const vision = b.option(bool, "vision", "Build Oriel's on-device vision runtime") orelse true;
     const mobile = target.result.abi.isAndroid() or target.result.os.tag == .ios;
-    // GPU backends for local vision: off. The CPU was faster on every device
-    // measured (desktop Vulkan 21 s vs 15 s CPU; on the phones, slower or
-    // unavailable). -Dggml_vulkan / -Dggml_opencl build them for experiments.
+    // GPU backends for local vision. Vulkan and OpenCL stay off: the CPU was
+    // faster on every device measured (desktop Vulkan 21 s vs 15 s CPU; on
+    // the phones, slower or unavailable). -Dggml_cuda builds libggml-cuda.so
+    // for NVIDIA GPUs, shipped next to the app and loaded only where the
+    // driver is present (elsewhere the CPU runs the model).
     const ggml_opencl = b.option(bool, "ggml_opencl", "Android: OpenCL backend for Adreno GPUs") orelse false;
     const ggml_vulkan = b.option(bool, "ggml_vulkan", "Vulkan backend for local vision") orelse false;
+    const ggml_cuda = b.option(bool, "ggml_cuda", "Linux: CUDA backend for local vision (needs the CUDA toolkit)") orelse false;
+    const cuda_arch = b.option([]const u8, "cuda_arch", "-Dggml_cuda: compute capabilities like 75,86,89,120 (default: this machine's GPU)");
+    const cuda_static = b.option(bool, "cuda_static", "-Dggml_cuda: link cuBLAS statically, so only the NVIDIA driver is needed at runtime") orelse false;
+    const cuda_prebuilt = b.option([]const u8, "ggml_cuda_prebuilt", "Absolute path of a libggml-cuda.so built earlier from this Oriel snapshot (implies -Dggml_cuda; no nvcc)");
     const helper_file: ?std.Build.LazyPath = if (mobile) null else blk: {
-        const command = b.addSystemCommand(&.{"python3"});
+        // The helper is a native executable: PyInstaller builds it on the host OS.
+        const command = b.addSystemCommand(&.{if (b.graph.host.result.os.tag == .windows) "python" else "python3"});
         command.addFileArg(b.path("scripts/build-statement-helper.py"));
         command.addArg("--output");
         const output = command.addOutputFileArg("statement-helper.bin");
@@ -60,6 +67,10 @@ pub fn build(b: *std.Build) void {
         .system_ai = true,
         .ggml_opencl = ggml_opencl,
         .ggml_vulkan = ggml_vulkan,
+        .ggml_cuda = ggml_cuda,
+        .cuda_arch = cuda_arch,
+        .cuda_static = cuda_static,
+        .ggml_cuda_prebuilt = cuda_prebuilt,
         // Oriel's experimental native renderer instead of the WebView.
         .native_ui = renderer != .webview or (b.option(bool, "native_ui", "Compatibility: use HTML/JS native renderer") orelse false),
         .zig_ui = renderer == .oriel,
@@ -125,7 +136,7 @@ pub fn build(b: *std.Build) void {
             .name = "Penny Goblin",
             // .publisher = "Your Name <you@example.com>", // default: from the app id
             .summary = "Private household expenses, on your devices",
-            .version = "0.2.6",
+            .version = "0.2.7",
         },
         // The isolation pattern: every call from the frontend to Zig goes
         // through isolation/hook.js first, in a frame the page can't reach.
@@ -133,7 +144,7 @@ pub fn build(b: *std.Build) void {
     });
 
     // Zig's native ELF linker cannot yet consume GCC 16 .sframe relocations.
-    const tests = b.addTest(.{ .use_llvm = true, .use_lld = true, .root_module = b.createModule(.{
+    const tests = b.addTest(.{ .use_llvm = true, .use_lld = target.result.ofmt != .macho, .root_module = b.createModule(.{
         .root_source_file = b.path("src/tests.zig"),
         .target = target,
         .optimize = optimize,
@@ -144,7 +155,7 @@ pub fn build(b: *std.Build) void {
     const verifier = b.addExecutable(.{
         .name = "verify-legacy",
         .use_llvm = true,
-        .use_lld = true,
+        .use_lld = target.result.ofmt != .macho,
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/verify_legacy.zig"),
             .target = target,
@@ -156,7 +167,7 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| verify.addArgs(args);
     b.step("verify-legacy", "Verify a web export in memory without logging financial data").dependOn(&verify.step);
 
-    const report_verifier = b.addExecutable(.{ .name = "verify-reports", .use_llvm = true, .use_lld = true, .root_module = b.createModule(.{
+    const report_verifier = b.addExecutable(.{ .name = "verify-reports", .use_llvm = true, .use_lld = target.result.ofmt != .macho, .root_module = b.createModule(.{
         .root_source_file = b.path("src/verify_reports.zig"),
         .target = target,
         .optimize = optimize,
@@ -169,7 +180,7 @@ pub fn build(b: *std.Build) void {
     const importer = b.addExecutable(.{
         .name = "import-web",
         .use_llvm = true,
-        .use_lld = true,
+        .use_lld = target.result.ofmt != .macho,
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/import_web.zig"),
             .target = target,
@@ -188,7 +199,7 @@ pub fn build(b: *std.Build) void {
         @memcpy(ui_imports[0..imports.len], &imports);
         ui_imports[imports.len] = .{ .name = "oriel", .module = dep.module("oriel") };
         ui_imports[imports.len + 1] = .{ .name = "oriel_app", .module = app_module };
-        const ui_tests = b.addTest(.{ .use_llvm = true, .use_lld = true, .root_module = b.createModule(.{
+        const ui_tests = b.addTest(.{ .use_llvm = true, .use_lld = target.result.ofmt != .macho, .root_module = b.createModule(.{
             .root_source_file = b.path("src/oriel_frontend.zig"),
             .target = target,
             .optimize = optimize,
@@ -199,7 +210,7 @@ pub fn build(b: *std.Build) void {
     const scan_verifier = b.addExecutable(.{
         .name = "verify-scan",
         .use_llvm = true,
-        .use_lld = true,
+        .use_lld = target.result.ofmt != .macho,
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/verify_scan.zig"),
             .target = target,
@@ -210,7 +221,7 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-    const research_verifier = b.addExecutable(.{ .name = "verify-research", .use_llvm = true, .use_lld = true, .root_module = b.createModule(.{
+    const research_verifier = b.addExecutable(.{ .name = "verify-research", .use_llvm = true, .use_lld = target.result.ofmt != .macho, .root_module = b.createModule(.{
         .root_source_file = b.path("src/verify_research.zig"), .target = target, .optimize = .ReleaseSafe,
         .imports = &.{ .{ .name = "oriel", .module = dep.module("oriel") }, .{ .name = "oriel_app", .module = app_module } },
     }) });

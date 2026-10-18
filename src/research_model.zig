@@ -53,7 +53,7 @@ pub fn pick(io: std.Io, a: std.mem.Allocator) !void {
     mutex.lockUncancelable(io);
     defer mutex.unlock(io);
     try std.Io.Dir.cwd().createDirPath(io, try root(a));
-    var atomic = try std.Io.Dir.cwd().createFileAtomic(io, try choice(a), .{ .replace = true, .permissions = .fromMode(0o600) });
+    var atomic = try std.Io.Dir.cwd().createFileAtomic(io, try choice(a), .{ .replace = true, .permissions = if (@import("builtin").os.tag == .windows) .default_file else .fromMode(0o600) });
     defer atomic.deinit(io);
     try atomic.file.writeStreamingAll(io, try std.json.Stringify.valueAlloc(a, path, .{}));
     try atomic.file.sync(io);

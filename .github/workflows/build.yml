@@ -12,6 +12,11 @@ concurrency:
   cancel-in-progress: true
 env:
   ZIG_VERSION: 0.16.0
+  # NVIDIA GPUs the Linux WebKit build's scanner runs on: Turing (RTX 20)
+  # to Blackwell (RTX 50; 120a for its FP4 MMA), plus PTX for newer ones.
+  CUDA_ARCHS: 75,86,89,120a
+  VULKAN_SDK_VERSION: 1.4.357.0
+  WEBVIEW2_VERSION: 1.0.4258.31
 jobs:
   test:
     name: Ledger, UI and sync tests
@@ -45,7 +50,8 @@ jobs:
     name: Linux x86_64 (${{ matrix.renderer }})
     runs-on: ubuntu-latest
     container: ghcr.io/archlinux/archlinux:latest
-    timeout-minutes: 45
+    # A CUDA backend rebuild (a new Oriel/ggml or CUDA version) is ~70 min of nvcc.
+    timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
@@ -57,10 +63,128 @@ jobs:
       - uses: mlugg/setup-zig@v2
         with:
           version: ${{ env.ZIG_VERSION }}
-      - run: bash scripts/build-linux.sh '${{ matrix.renderer }}'
+      - name: Fetch Zig packages (retried)
+        run: for i in 1 2 3 4 5; do zig build --fetch=all && exit 0; sleep $((i * 20)); done; exit 1
+      # The WebKit build's scanner runs on NVIDIA GPUs through CUDA:
+      # libggml-cuda.so (cuBLAS from the system's CUDA 13 runtime; without
+      # it, or without an NVIDIA driver, scans run on the CPU). Built once
+      # per Oriel snapshot, GPU list and CUDA version, then cached.
+      - name: CUDA backend cache key
+        if: matrix.renderer == 'webview'
+        id: cuda
+        run: |
+          echo "version=$(pacman -Si cuda | awk '/^Version/{print $3}')" >> "$GITHUB_OUTPUT"
+          echo "archs=${CUDA_ARCHS//,/_}" >> "$GITHUB_OUTPUT"
+      - name: Restore the CUDA backend
+        if: matrix.renderer == 'webview'
+        id: cuda-cache
+        uses: actions/cache@v4
+        with:
+          path: cuda-cache/libggml-cuda.so
+          key: ggml-cuda-${{ hashFiles('vendor/oriel/build.zig.zon', 'vendor/oriel/build/ggml.zig') }}-${{ steps.cuda.outputs.archs }}-cuda-${{ steps.cuda.outputs.version }}
+      - name: Build the CUDA backend
+        if: matrix.renderer == 'webview' && steps.cuda-cache.outputs.cache-hit != 'true'
+        run: |
+          pacman -S --noconfirm --needed cuda gcc
+          export CUDA_PATH=/opt/cuda PATH="/opt/cuda/bin:$PATH"
+          # A non-login shell skips /etc/profile.d: nvcc's supported host compiler.
+          eval "$(grep '^export NVCC_CCBIN=' /etc/profile.d/cuda.sh)"
+          zig build -Drenderer=webview -Doptimize=ReleaseSafe -Dggml_cuda -Dcuda_arch="$CUDA_ARCHS" -p zig-out-cuda --summary all
+          mkdir -p cuda-cache
+          cp zig-out-cuda/bin/libggml-cuda.so cuda-cache/
+      - name: Build
+        run: |
+          if [ '${{ matrix.renderer }}' = webview ]; then
+            bash scripts/build-linux.sh webview -Dggml_cuda_prebuilt="$PWD/cuda-cache/libggml-cuda.so"
+          else
+            bash scripts/build-linux.sh oriel
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: penny-goblin-linux-x86_64-${{ matrix.renderer }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+  windows:
+    # WebView2 (the system's Edge WebView) and Vulkan for the scanner.
+    name: Windows x86_64 (WebView2, Vulkan)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Restore the Vulkan SDK
+        id: vulkan-cache
+        uses: actions/cache@v4
+        with:
+          path: C:\VulkanSDK\${{ env.VULKAN_SDK_VERSION }}
+          key: vulkan-sdk-${{ env.VULKAN_SDK_VERSION }}
+      - name: Install the Vulkan SDK
+        if: steps.vulkan-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ver = $env:VULKAN_SDK_VERSION
+          $root = "C:\VulkanSDK\$ver"
+          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/$ver/windows/vulkansdk-windows-X64-$ver.exe" -OutFile vulkansdk.exe
+          Start-Process -Wait -FilePath .\vulkansdk.exe -ArgumentList "--root", $root, "--accept-licenses", "--default-answer", "--confirm-command", "install"
+      - name: Vulkan SDK, NSIS and WebView2Loader.dll
+        shell: pwsh
+        run: |
+          $root = "C:\VulkanSDK\$env:VULKAN_SDK_VERSION"
+          & "$root\Bin\glslc.exe" --version
+          "VULKAN_SDK=$root" >> $env:GITHUB_ENV
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\NSIS\makensis.exe")) { choco install nsis -y --no-progress }
+          "ORIEL_MAKENSIS=${env:ProgramFiles(x86)}\NSIS\makensis.exe" >> $env:GITHUB_ENV
+          # WebView2Loader.dll from Microsoft's WebView2 SDK (NuGet).
+          Invoke-WebRequest "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/$env:WEBVIEW2_VERSION" -OutFile webview2.zip
+          Expand-Archive webview2.zip -DestinationPath webview2
+          "WEBVIEW2_LOADER=$PWD\webview2\runtimes\win-x64\native\WebView2Loader.dll" >> $env:GITHUB_ENV
+      - name: Fetch Zig packages (retried)
+        run: for i in 1 2 3 4 5; do zig build --fetch=all && exit 0; sleep $((i * 20)); done; exit 1
+      - name: Build the installer
+        run: |
+          zig build package-nsis -Drenderer=webview -Doptimize=ReleaseSafe -Dggml_vulkan -Dwebview2-loader="$WEBVIEW2_LOADER" --summary all
+          mkdir -p dist
+          cp zig-out/package/*.exe dist/
+          (cd dist && sha256sum *.exe > SHA256SUMS-windows)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: penny-goblin-windows-x86_64
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+  macos:
+    # WKWebView and Metal for the scanner (Oriel's default on macOS).
+    name: macOS arm64 (WebKit, Metal)
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Fetch Zig packages (retried)
+        run: for i in 1 2 3 4 5; do zig build --fetch=all && exit 0; sleep $((i * 20)); done; exit 1
+      - name: Build the disk image
+        run: |
+          zig build package-dmg -Drenderer=webview -Doptimize=ReleaseSafe --summary all
+          mkdir -p dist
+          cp zig-out/package/*.dmg dist/
+          (cd dist && shasum -a 256 *.dmg > SHA256SUMS-macos)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: penny-goblin-macos-arm64
           path: dist/*
           if-no-files-found: error
           retention-days: 14
@@ -105,7 +229,7 @@ jobs:
     # releases/latest/download/... links working for every version.
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, linux, android]
+    needs: [test, linux, windows, macos, android]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -119,13 +243,15 @@ jobs:
           cp artifacts/penny-goblin-linux-x86_64-oriel/*-oriel.AppImage release/penny-goblin-linux-x86_64-oriel.AppImage
           cp artifacts/penny-goblin-linux-x86_64-webview/*-webview.AppImage release/penny-goblin-linux-x86_64-webview.AppImage
           cp artifacts/penny-goblin-android-arm64-oriel/*-android-arm64.apk release/penny-goblin-android-arm64.apk
+          cp artifacts/penny-goblin-windows-x86_64/*.exe release/penny-goblin-windows-x86_64-setup.exe
+          cp artifacts/penny-goblin-macos-arm64/*.dmg release/penny-goblin-macos-arm64.dmg
           (cd release && sha256sum * > SHA256SUMS)
       - name: Release notes from the changelog
         run: |
           version="${GITHUB_REF_NAME#v}"
           awk -v v="$version" '/^## /{found = ($2 == v)} found && !/^## /' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "Penny Goblin $version." > notes.md
-          printf '\nBuilt from %s. Linux needs GTK4 and WebKitGTK 6; Android needs Android 10 or newer.\n' "${GITHUB_SHA::12}" >> notes.md
+          printf '\nBuilt from %s. Linux needs GTK4 and WebKitGTK 6 (the WebKit build scans on NVIDIA GPUs with the CUDA 13 runtime); Windows needs the WebView2 runtime (Windows 10/11); macOS needs macOS 13 on Apple silicon; Android needs Android 10 or newer.\n' "${GITHUB_SHA::12}" >> notes.md
       - name: Publish on penny-goblin-site
         env:
           # A token that can write the public site repository's releases
