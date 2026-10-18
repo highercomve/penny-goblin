@@ -4,21 +4,27 @@
 .layout = "page.shtml",
 ---
 Penny Goblin is a household ledger for **Linux and Android**, built with Zig and
-Oriel. It is in early development. The application repository and test builds
-are private; this website is public.
+Oriel. It is in early development. The application's source repository is
+private; its builds and this website are public.
 
 # Try a build
 
-Project collaborators can download Linux AppImages and Android arm64 APKs from
-[successful GitHub Actions runs](https://github.com/highercomve/penny-goblin/actions).
-People without repository access will see GitHub's sign-in or not-found page.
-There is no public app-store or stable release channel yet.
+Download the latest build:
 
-Linux builds need compatible GTK4 and WebKitGTK 6 system libraries. The compiled
-Oriel interface is also available. Android test builds require Android 10 or newer.
-CI APKs use development signing: an existing installation can only be upgraded
-by an APK with the same certificate. Keep your current data and pairing safe;
-use an isolated test device or profile when trying differently signed builds.
+- [Linux x86_64 AppImage](https://github.com/highercomve/penny-goblin-site/releases/latest/download/penny-goblin-linux-x86_64-oriel.AppImage) (compiled Oriel interface)
+- [Linux x86_64 AppImage, WebView interface](https://github.com/highercomve/penny-goblin-site/releases/latest/download/penny-goblin-linux-x86_64-webview.AppImage)
+- [Android arm64 APK](https://github.com/highercomve/penny-goblin-site/releases/latest/download/penny-goblin-android-arm64.apk)
+
+Every version, its notes and the [SHA256SUMS](https://github.com/highercomve/penny-goblin-site/releases/latest/download/SHA256SUMS)
+of its files are on the [releases page](https://github.com/highercomve/penny-goblin-site/releases).
+There is no app-store release yet.
+
+Linux builds need compatible GTK4 and WebKitGTK 6 system libraries; make the
+AppImage executable (`chmod +x`) before running it. Android builds require
+Android 10 or newer. These APKs use development signing: an existing
+installation can only be upgraded by an APK with the same certificate. Keep
+your current data and pairing safe; use an isolated test device or profile when
+trying differently signed builds.
 
 # Your first payment
 
