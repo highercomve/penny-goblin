@@ -66,7 +66,7 @@
     "build/ios.zig": "52f159ffc830ae5c3ddb1c0da7ea304e6078820a7948ef01578c3e0f2002935e",
     "build/ios_entitlements.zig": "d6165c1bc49dd8d3605c3cb7a807ef47990198933f5da5d5d2b5f76815a7a936",
     "build/macos.zig": "80852fe733f6b6cc7729d6a9876efa0c557d2093b2e11e6d14427cde34baabce",
-    "build/package.zig": "ab6667a65143be974590d6a7103a2e6adb87e4cf8e1a5c13a4ff28a6dbae056c",
+    "build/package.zig": "07000f84709ed9779d37b8e170006de40260e15c2d3461bfd881871856461c25",
     "build/swift.zig": "e7c896c8c9d7f569f0c0e62759142188e92444de64856f4a30edb88ffbd16fb1",
     "build.zig": "73ce265cf742e6d4bb57d0c0ed7614f77b658f3c3e39d6acf82b9f8ffe10e3f5",
     "build.zig.zon": "ae613c3a65e3a7171675ab05832149f81512350ebe1b20b61219c9b13a4e7763",
