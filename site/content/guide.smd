@@ -11,7 +11,7 @@ private; its builds and this website are public.
 
 Download the latest build:
 
-- [Linux x86_64 AppImage](https://github.com/highercomve/penny-goblin-site/releases/latest/download/penny-goblin-linux-x86_64-oriel.AppImage) (compiled Oriel interface)
+- [Linux x86_64 AppImage](https://github.com/highercomve/penny-goblin-site/releases/latest/download/penny-goblin-linux-x86_64-oriel.AppImage) (compiled Oriel interface; the scanner can use any GPU through Vulkan)
 - [Linux x86_64 AppImage, WebView interface](https://github.com/highercomve/penny-goblin-site/releases/latest/download/penny-goblin-linux-x86_64-webview.AppImage) (scans on NVIDIA GPUs with CUDA)
 - [Windows x86_64 installer](https://github.com/highercomve/penny-goblin-site/releases/latest/download/penny-goblin-windows-x86_64-setup.exe)
 - [macOS disk image, Apple silicon](https://github.com/highercomve/penny-goblin-site/releases/latest/download/penny-goblin-macos-arm64.dmg)
