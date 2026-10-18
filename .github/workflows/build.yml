@@ -58,7 +58,8 @@ jobs:
         renderer: [oriel, webview]
     steps:
       - name: Install platform dependencies
-        run: pacman -Syu --noconfirm --needed git pkgconf gtk4 webkitgtk-6.0 wayland wayland-protocols libxkbcommon libxtst libx11 dbus ttf-dejavu python python-pip squashfs-tools curl
+        # Vulkan headers, loader and glslc: the Oriel build's libggml-vulkan.so.
+        run: pacman -Syu --noconfirm --needed git pkgconf gtk4 webkitgtk-6.0 wayland wayland-protocols libxkbcommon libxtst libx11 dbus ttf-dejavu python python-pip squashfs-tools curl vulkan-headers spirv-headers vulkan-icd-loader shaderc
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
         with:
@@ -97,7 +98,8 @@ jobs:
           if [ '${{ matrix.renderer }}' = webview ]; then
             bash scripts/build-linux.sh webview -Dggml_cuda_prebuilt="$PWD/cuda-cache/libggml-cuda.so"
           else
-            bash scripts/build-linux.sh oriel
+            # Any GPU vendor through Vulkan (Settings → Receipt scanner → Use GPU).
+            bash scripts/build-linux.sh oriel -Dggml_vulkan
           fi
       - uses: actions/upload-artifact@v4
         with:

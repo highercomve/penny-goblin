@@ -7,6 +7,8 @@
 - Linux WebView build scans on NVIDIA GPUs through CUDA, on by default:
   2.5-3.3 s a receipt on an RTX 4070 vs 6-15 s on the CPU.
   `install-local.sh` builds it when the CUDA toolkit is installed.
+- Linux Oriel-interface build ships the Vulkan scanner backend (any GPU;
+  Settings → Receipt scanner → Use GPU).
 
 ## 0.2.6
 
