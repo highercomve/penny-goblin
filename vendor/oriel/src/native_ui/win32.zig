@@ -1195,14 +1195,17 @@ const PaintOrder = struct {
         po.fields.deinit(gpa);
     }
 
-    fn walk(po: *PaintOrder, gpa: std.mem.Allocator, n: *Node) void {
+    /// `clear`: inside a transparent box (opacity: 0, a faded-out toast),
+    /// which paints nothing over the fields under it.
+    fn walk(po: *PaintOrder, gpa: std.mem.Allocator, n: *Node, clear: bool) void {
         if (n.props.vis == false) return;
         po.next += 1;
         const order = po.next;
+        const transparent = clear or (n.props.op orelse 1) <= 0;
         if (n.kind == .input or n.kind == .textarea or n.kind == .select or n.kind == .check or n.kind == .button) po.fields.put(gpa, n.id, order) catch {};
-        if (paintsOpaque(n)) po.occluders.append(gpa, .{ .order = order, .rect = n.clip.intersect(n.frame) }) catch {};
+        if (!transparent and paintsOpaque(n)) po.occluders.append(gpa, .{ .order = order, .rect = n.clip.intersect(n.frame) }) catch {};
         var it: tree_mod.PaintIter = .{ .kids = n.kids.items };
-        while (it.next()) |k| po.walk(gpa, k);
+        while (it.next()) |k| po.walk(gpa, k, transparent);
     }
 
     fn paintsOpaque(n: *Node) bool {
@@ -1254,7 +1257,7 @@ fn paddingBox(n: *Node) Rect {
 fn syncFields(s: *Surface) void {
     var po: PaintOrder = .{};
     defer po.deinit(s.gpa);
-    if (s.engine.tree.root) |root| po.walk(s.gpa, root);
+    if (s.engine.tree.root) |root| po.walk(s.gpa, root, false);
     var it = s.engine.tree.nodes.valueIterator();
     while (it.next()) |np| {
         const n = np.*;

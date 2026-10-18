@@ -1018,6 +1018,8 @@ internal class NuiView(context: Context, val window: Int, private val transparen
         val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         // Only paint ('X': opacity, scale, rotation) and text: the paint order stands.
         var reorder = false
+        // A box fading in from or out to transparent covers fields, or stops covering them.
+        var shown = false
         while (b.remaining() >= 9) {
             val tag = b.get().toInt().toChar()
             val id = b.int
@@ -1051,7 +1053,7 @@ internal class NuiView(context: Context, val window: Int, private val transparen
                     val op = b.float
                     val sc = b.float
                     val rot = b.float
-                    nodes[id]?.let { it.op = op; it.sc = sc; it.rot = rot }
+                    nodes[id]?.let { if ((it.op <= 0f) != (op <= 0f)) shown = true; it.op = op; it.sc = sc; it.rot = rot }
                 }
                 'C' -> {
                     val ops = CanvasProgram.unpack(b, b.int) ?: return
@@ -1061,6 +1063,7 @@ internal class NuiView(context: Context, val window: Int, private val transparen
             }
         }
         if (reorder) orderDirty = true
+        if (shown && fields.isNotEmpty()) syncFields()
         invalidate()
     }
 
@@ -1339,18 +1342,25 @@ internal class NuiView(context: Context, val window: Int, private val transparen
      * The visible boxes with a background painted after the field at record
      * `r` (in paint order, after its subtree): a sticky footer, a z-index bar. The
      * canvas draws them over the field, but its widget sits above the canvas.
+     * A transparent subtree (opacity: 0, a hidden progress toast) paints nothing.
      */
     private fun paintedOver(r: Int): List<RectF> {
         val out = ArrayList<RectF>()
         ensurePaintOrder()
-        val from = paintEnd[r] ?: return out
-        for (pos in from until paintOrder.size) {
+        var pos = paintEnd[r] ?: return out
+        while (pos < paintOrder.size) {
             val k = paintOrder[pos]
             val n = nodes[ids[k]]
+            if (n != null && n.op <= 0f) {
+                // Its subtree follows it in paint order, up to its paintEnd.
+                pos = max(pos + 1, paintEnd[k] ?: (pos + 1))
+                continue
+            }
             if (n != null && (n.bg?.let { Color.alpha(it) > 0 } == true || n.gradient != null)) {
                 val v = RectF(frames[k + 1], frames[k + 2], frames[k + 1] + frames[k + 3], frames[k + 2] + frames[k + 4])
                 if (v.intersect(frames[k + 5], frames[k + 6], frames[k + 5] + frames[k + 7], frames[k + 6] + frames[k + 8])) out += v
             }
+            pos++
         }
         return out
     }

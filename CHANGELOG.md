@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.6
+
+- Show the Home account filter's label on Android: a hidden progress toast
+  no longer hides the fields under it (Oriel runtime fix, also GTK and Windows).
+
 ## 0.2.5
 
 - Prefer final payable receipt totals over pre-discount subtotals.

@@ -1258,7 +1258,8 @@ fn uncovered(s: *Surface, field: *Node, box: Rect) ?Rect {
         gone: bool = false,
         depth: usize = 0,
         fn visit(w: *@This(), n: *Node) void {
-            if (w.gone or n.props.vis == false) return;
+            // Nothing painted: hidden, or transparent (a faded-out toast).
+            if (w.gone or n.props.vis == false or (n.props.op orelse 1) <= 0) return;
             if (n == w.field) {
                 w.seen = true;
                 return;
