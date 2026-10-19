@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.9
+
+- Reuse identical special-payment rules and explain conflicting labels.
+- Apply special-payment labels to existing payments in every month, keeping them out of Other.
+- Preserve untouched settings sections when saving a rule.
+- Dismiss payment details with outside clicks while protecting unsaved drafts.
+
 ## 0.2.8
 
 - Move Category into the main payment form in WebKit and Oriel.
