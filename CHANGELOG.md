@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.8
+
+- Move Category into the main payment form in WebKit and Oriel.
+- Search existing categories on a dedicated screen, with selected states and explicit creation.
+- Suggest similar names before adding a likely spelling duplicate.
+- Manage categories from Settings: review renames and merges across all dates, preserving keyword rules.
+- Reject stale merge reviews atomically and reuse category names that differ only by case or spacing.
+- Follow Material 3 search, list and text-field sizing; Back preserves the underlying payment draft.
+
 ## 0.2.7
 
 - Windows (WebView2, Vulkan scanner) and macOS (WebKit, Metal scanner)

@@ -19,6 +19,7 @@
   <script src="nav.js?v=8" defer></script>
   <script src="scanner.js?v=8" defer></script>
   <script src="research.js?v=1" defer></script>
+  <script src="categories.js?v=1" defer></script>
   <script src="qa.js?v=8" defer></script>
 </head>
 <body>
@@ -159,7 +160,7 @@
           <button class="list-item" data-pref="budget"><svg><use href="#i-wallet"/></svg><span>Salary & owners</span><svg class="trail"><use href="#i-chevron"/></svg></button>
           <button class="list-item" data-pref="fixed"><svg><use href="#i-calendar"/></svg><span>Fixed commitments</span><svg class="trail"><use href="#i-chevron"/></svg></button>
           <button class="list-item" data-pref="accounts"><svg><use href="#i-card"/></svg><span>Accounts</span><svg class="trail"><use href="#i-chevron"/></svg></button>
-          <button class="list-item" data-pref="categories"><svg><use href="#i-tag"/></svg><span>Category rules</span><svg class="trail"><use href="#i-chevron"/></svg></button>
+          <button class="list-item" data-pref="categories"><svg><use href="#i-tag"/></svg><span>Categories</span><svg class="trail"><use href="#i-chevron"/></svg></button>
           <button class="list-item" data-pref="vendors"><svg><use href="#i-store"/></svg><span>Merchant names</span><svg class="trail"><use href="#i-chevron"/></svg></button>
           <button class="list-item" data-pref="special"><svg><use href="#i-star"/></svg><span>Special payments</span><svg class="trail"><use href="#i-chevron"/></svg></button>
         </div>
@@ -203,8 +204,9 @@
             <label class="field">Date<input name="date" type="date" min="1900-01-01" max="2199-12-31" required></label>
           </div>
           <label class="field">Account<select name="account" required></select></label>
+          <input name="category" type="hidden" value="Other">
+          <button id="choose-category" type="button" class="category-choice"><span class="supporting">Category</span><span><strong id="category-value">Other</strong><span aria-hidden="true">›</span></span></button>
           <details id="more-details" class="inline-details"><summary>More details</summary>
-            <label class="field">Category<input name="category" required maxlength="120" value="Other" data-suggest="categories" autocomplete="off"></label>
             <label class="field">Reference<input name="reference" maxlength="240"></label>
             <label class="field">Location<input name="location" maxlength="500"></label>
             <label class="field">Notes<textarea name="notes" maxlength="4000" rows="2"></textarea></label>
@@ -215,6 +217,23 @@
         <div id="delete-confirm" class="confirm" hidden><p>Delete this payment?</p><div class="actions"><button id="cancel-delete" type="button" class="text-button">Keep</button><button id="confirm-delete" type="button" class="filled danger">Delete</button></div></div>
       </fieldset>
       <footer class="dialog-footer"><button id="delete" type="button" class="text-button danger" hidden>Delete</button><span class="spacer"></span><button id="cancel-analysis" type="button" class="tonal" hidden>Cancel scan</button></footer>
+    </form>
+  </dialog>
+  <dialog id="category-picker" class="sheet" aria-labelledby="category-title">
+    <header class="dialog-bar"><button id="category-back" type="button" class="text-button">Back</button><h2 id="category-title">Choose category</h2><button id="category-rules" type="button" class="text-button" hidden>Rules</button></header>
+    <p id="category-status" class="supporting" role="status" aria-live="polite"></p>
+    <div id="category-browse">
+      <label class="search-bar"><span class="visually-hidden">Search categories</span><input id="category-search" type="search" placeholder="Search categories" maxlength="120" autocomplete="off"></label>
+      <button id="category-add" type="button" class="tonal" hidden>Add category</button>
+      <div id="category-list" class="list"></div>
+    </div>
+    <form id="category-edit" hidden>
+      <h3 id="category-source"></h3>
+      <label class="field">Category name<input id="category-target" maxlength="120" required autocomplete="off"></label>
+      <p class="supporting">Use an existing name to merge its payments and keyword rules.</p>
+      <button type="submit" class="tonal">Review change</button>
+      <p id="category-summary"></p>
+      <button id="category-apply" type="button" class="filled" hidden>Apply change</button>
     </form>
   </dialog>
   <datalist id="categories"></datalist>
@@ -231,7 +250,7 @@
       </section>
       <section data-section="fixed"><div id="preferences-fixed"></div><button type="button" id="add-fixed" class="tonal"><svg><use href="#i-add"/></svg>Add commitment</button></section>
       <section data-section="accounts"><div id="preferences-accounts"></div><button type="button" id="add-account" class="tonal"><svg><use href="#i-add"/></svg>Add account</button></section>
-      <section data-section="categories"><div id="preferences-categories"></div><button type="button" id="add-category" class="tonal"><svg><use href="#i-add"/></svg>Add rule</button></section>
+      <section data-section="categories"><p class="supporting">Manage category names in Settings → Categories. Edit their matching keywords here.</p><div id="preferences-categories"></div><button type="button" id="add-category" class="tonal"><svg><use href="#i-add"/></svg>Add rule</button></section>
       <section data-section="vendors"><div id="preferences-vendors"></div><button type="button" id="add-vendor" class="tonal"><svg><use href="#i-add"/></svg>Add name</button></section>
       <section data-section="special"><div id="preferences-special"></div><button type="button" id="add-special" class="tonal"><svg><use href="#i-add"/></svg>Add rule</button></section>
     </fieldset>

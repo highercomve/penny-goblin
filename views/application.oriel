@@ -813,7 +813,7 @@
                 <icon class="n204" grow="0" shrink="0" width="18" height="18" clickable="true">
                   <path d="M4 4h7l9 9-7 7-9-9zM8 8h.01" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
                 </icon>
-                <text class="n205" grow="1" shrink="1" basis="0%" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Category rules</text>
+                <text class="n205" grow="1" shrink="1" basis="0%" clickable="true" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Categories</text>
                 <icon class="n206" grow="0" shrink="0" width="20" height="20" clickable="true">
                   <path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
                 </icon>

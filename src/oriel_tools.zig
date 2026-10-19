@@ -525,7 +525,8 @@ fn bulk_preview(e: *ui.Engine) !void {
     _ = bulk_arena.reset(.retain_capacity);
     const a = bulk_arena.allocator();
     const pattern = std.mem.trim(u8, f.value(e, f.aid("bulk-pattern")), " ");
-    const category = std.mem.trim(u8, f.value(e, f.aid("bulk-category")), " ");
+    const categories = @import("core/categories.zig");
+    const category = try categories.canonical(a, f.value(e, f.aid("bulk-category")), try categories.catalog(a, f.s.snapshot.?.value.expenses, f.settings()));
     try f.model.text(pattern, 240, false);
     try f.model.text(category, 120, false);
     const prior = try a.dupe(u8, f.s.snapshot.?.value.settings);
@@ -584,6 +585,11 @@ fn mapping(e: *ui.Engine, key: []const u8, v: []const u8, amount: i64) !void {
         } },
     });
     try f.set_value(e, Mapping.id("key", base), key);
+    if (section == .categories) {
+        var props = e.tree.get(Mapping.id("key", base)).?.props;
+        props.ro = true;
+        try e.tree.updateUiProps(Mapping.id("key", base), props);
+    }
     try f.set_value(e, Mapping.id("value", base), v);
     var buf: [32]u8 = undefined;
     try f.set_value(e, Mapping.id("amount", base), try std.fmt.bufPrint(&buf, "{d}", .{amount}));
@@ -605,6 +611,9 @@ fn mapping_kids(e: *ui.Engine) !void {
     for (0..mapping_count) |i| ids[i] = mapping_base + @as(i64, @intCast(i)) * mapping_stride;
     _ = try e.tree.stampKids(mapping_parent(), ids[0..mapping_count]);
 }
+pub fn open_category_rules(e: *ui.Engine) !void {
+    try open_preferences(e, .categories);
+}
 fn open_preferences(e: *ui.Engine, chosen: Section) !void {
     _ = modal_arena.reset(.retain_capacity);
     mapping_count = 0;
@@ -622,7 +631,8 @@ fn open_preferences(e: *ui.Engine, chosen: Section) !void {
         .vendors => "Merchant names",
         .special => "Special payments",
     });
-    try f.set_text(e, pid("preferences-status"), "");
+    try f.set_text(e, pid("preferences-status"), if (section == .categories) "Manage names in Settings → Categories. Edit matching keywords here." else "");
+    try f.show(e, pid("add-category"), section != .categories);
     if (section == .budget) {
         var buf: [32]u8 = undefined;
         try f.set_value(e, pid("preferences-salary"), try std.fmt.bufPrint(&buf, "{d}", .{original.salary}));
@@ -650,6 +660,12 @@ fn open_preferences(e: *ui.Engine, chosen: Section) !void {
                 };
                 try mapping(e, entry.key_ptr.*, text, 0);
             }
+        }
+    }
+    if (section == .categories) {
+        const categories = @import("core/categories.zig");
+        for (try categories.catalog(a, f.s.snapshot.?.value.expenses, original)) |name| {
+            if (!categories.protected(name) and (original.categories != .object or !original.categories.object.contains(name))) try mapping(e, name, "", 0);
         }
     }
     try mapping_kids(e);

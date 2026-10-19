@@ -206,14 +206,17 @@
             <option value="1234">1234 · Household</option>
           </select>
         </view>
+        <column margin="0,0,12,0" gap="4">
+          <text class="n54" font-size="12" font-weight="500">Category</text>
+          <input id="field-category" display="none" label="Category value" />
+          <button id="choose-category" class="field-category" width="100%" min-height="56" padding="14,16,14,16" border-width="1" radius="8" clickable="true">
+            <row width="100%" align="center"><text id="category-value" grow="1" font-size="16">Other</text><text font-size="20">›</text></row>
+          </button>
+        </column>
         <view id="more-details" margin="0,0,12,0">
           <text id="details-toggle" class="details-toggle" shrink="0" padding="10,0,10,0" clickable="true" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif"><span>More details</span><span> ▴</span></text>
           <view id="details-body" margin="0">
-            <view grow="1" shrink="1" basis="0%" min-width="0" margin="0,0,12,0" row-gap="4" column-gap="4" clickable="true" z="10">
-              <text class="n54" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Category</text>
-              <input id="field-category" class="field-category" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" enterkey="go" autocapitalize="sentences" label="Category" unset="shrink" />
-              <view id="categories-category-list" class="categories-category-list" max-height="240" margin="4,0,0,0" padding="4,0,4,0" position="absolute" top="100%" right="0" left="0" scroll="true" radius="8" shadow="0,4,12,0,rgba(0, 0, 0, 0.3)" z="10" unset="shrink bottom" />
-            </view>
+
             <view grow="1" shrink="1" basis="0%" min-width="0" margin="0,0,12,0" row-gap="4" column-gap="4" clickable="true">
               <text class="n58" shrink="1" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Reference</text>
               <input id="field-reference" class="field-reference" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" enterkey="go" autocapitalize="sentences" label="Reference" unset="shrink" />

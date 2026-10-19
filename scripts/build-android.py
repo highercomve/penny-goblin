@@ -20,6 +20,14 @@ def run(argv, **kwargs):
 run(["zig", "build", "android-project", *config])
 gradle_file = ROOT / "android/app/build.gradle.kts"
 text = gradle_file.read_text()
+# android-project preserves customized Gradle files on incremental builds.
+# Refresh the release identity without replacing local signing or SDK settings.
+major, minor, patch = map(int, version.split("."))
+assert 0 <= minor < 100 and 0 <= patch < 100
+version_code = major * 10000 + minor * 100 + patch
+text, code_count = re.subn(r"(?m)^(\s*versionCode\s*=\s*)\d+", lambda match: match[1] + str(version_code), text)
+text, name_count = re.subn(r'(?m)^(\s*versionName\s*=\s*)"[^"]+"', lambda match: match[1] + f'"{version}"', text)
+assert code_count == name_count == 1, "Generated Gradle version fields missing or ambiguous"
 if 'abiFilters += "arm64-v8a"' not in text:
     text = text.replace('defaultConfig {', 'defaultConfig {\n        ndk { abiFilters += "arm64-v8a" }', 1)
 gradle_file.write_text(text)
@@ -30,7 +38,7 @@ apk = ROOT / "android/app/build/outputs/apk/debug/app-debug.apk"
 sdk = Path(os.environ.get("ANDROID_HOME") or os.environ["ANDROID_SDK_ROOT"])
 tools = sdk / "build-tools/35.0.0"
 badging = subprocess.check_output([str(tools / "aapt"), "dump", "badging", str(apk)], text=True)
-assert "name='com.pennygoblin.app'" in badging and f"versionName='{version}'" in badging, badging.splitlines()[0]
+assert "name='com.pennygoblin.app'" in badging and f"versionName='{version}'" in badging and f"versionCode='{version_code}'" in badging, badging.splitlines()[0]
 subprocess.run([str(tools / "apksigner"), "verify", "--verbose", str(apk)], check=True)
 out = ROOT / "dist" / f"penny-goblin-{version}-android-arm64.apk"
 out.parent.mkdir(exist_ok=True)

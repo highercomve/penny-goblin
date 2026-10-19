@@ -49,7 +49,11 @@ pub const Ledger = struct {
         if (args.expected_revision < 0 or args.expected_revision == std.math.maxInt(i64)) return error.InvalidRevision;
         try self.db.exec("BEGIN IMMEDIATE");
         errdefer self.db.exec("ROLLBACK") catch {};
-        const saved_revision = try self.write_expense(args.expense, args.expected_revision);
+        const categories = @import("categories.zig");
+        const settings = try std.json.parseFromSliceLeaky(@import("legacy.zig").Settings, allocator, try self.setting(allocator, "budget"), .{ .ignore_unknown_fields = true });
+        var expense = args.expense;
+        expense.category = try categories.canonical(allocator, expense.category, try categories.catalog(allocator, try self.list(allocator), settings));
+        const saved_revision = try self.write_expense(expense, args.expected_revision);
         if (args.document) |doc| try self.attach(allocator, args.expense.id, doc);
         try self.record_change(args.expense.id, saved_revision);
         try self.db.exec("COMMIT");

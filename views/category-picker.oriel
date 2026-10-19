@@ -1,0 +1,32 @@
+<style>
+  surface: background=#eaeee4 color=#191d19
+  action: color=#2d6a4f
+  search: background=#e4e9de color=#191d19
+  field: border-color=#737a72 color=#191d19
+  @media (prefers-color-scheme: dark) {
+    surface: background=#1d211d color=#e0e4dc
+    action: color=#9ad4ae
+    search: background=#272b27 color=#e0e4dc
+    field: border-color=#8c938a color=#e0e4dc
+  }
+</style>
+<column id="category-picker" class="surface" position="absolute" top="0" left="0" width="640" height="720" padding="16" gap="16" z="10000" radius="28">
+ <row align="center" gap="8" shrink="0">
+  <button id="back" class="action" min-width="56" min-height="48" align="center" justify="center" clickable="true"><text>Back</text></button>
+  <text id="title" grow="1" font-size="22" font-weight="600">Category</text>
+  <button id="rules" class="action" min-height="48" padding="8" clickable="true"><text>Rules</text></button>
+ </row>
+ <text id="status" font-size="14" shrink="0" />
+ <input id="search" class="search" width="100%" min-height="56" padding="16" radius="28" font-size="16" label="Search categories" placeholder="Search categories" />
+ <button id="add" class="action" min-height="48" padding="12" clickable="true"><text id="add-label">Add category</text></button>
+ <column id="list" grow="1" basis="0" min-height="0" scroll="true" />
+ <column id="edit" gap="16" grow="1" min-height="0">
+  <text id="source" font-size="18" font-weight="500" />
+  <text font-size="12">Category name</text>
+  <input id="target" class="field" width="100%" min-height="56" padding="16" border-width="1" radius="12" font-size="16" label="Category name" placeholder="New name or existing category" />
+  <text font-size="14">Use an existing name to merge its payments and keyword rules.</text>
+  <button id="review" class="action" min-height="48" padding="12" clickable="true"><text>Review change</text></button>
+  <text id="summary" font-size="18" />
+  <button id="apply" class="action" min-height="48" padding="12" clickable="true"><text>Apply change</text></button>
+ </column>
+</column>

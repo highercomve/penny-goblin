@@ -26,7 +26,6 @@ fn choose(e: *ui.Engine, index: usize) !void {
     if (index >= count) return;
     const node = e.tree.get(base + @as(i64, @intCast(index))) orelse return;
     try f.set_value(e, field_id, node.props.runs.?[0].t);
-    if (f.s.modal == .editor) f.s.dirty = true;
     try f.show(e, list(), false);
     selected = null;
 }
@@ -74,11 +73,11 @@ fn highlight(e: *ui.Engine) !void {
     if (selected) |index| e.tree.scrollIntoView(e.tree.get(base + @as(i64, @intCast(index))).?, "nearest");
 }
 pub fn event(e: *ui.Engine, id: i64, kind: []const u8, data: []const u8) !bool {
-    if ((f.s.modal != .editor and f.s.modal != .none) or f.s.snapshot == null) return false;
-    const target = if (f.s.modal == .editor) f.eid("field-category") else f.aid("bulk-category");
+    if (f.s.modal != .none or f.s.snapshot == null) return false;
+    const target = f.aid("bulk-category");
     if (id == target) {
         field_id = target;
-        list_id = if (f.s.modal == .editor) f.eid("categories-category-list") else f.aid("categories-bulk-category-list");
+        list_id = f.aid("categories-bulk-category-list");
     }
     if (field_id == 0) return false;
     if (std.mem.eql(u8, kind, "click") and id >= base and id < base + 50) {
@@ -95,7 +94,6 @@ pub fn event(e: *ui.Engine, id: i64, kind: []const u8, data: []const u8) !bool {
         defer v.deinit();
         try e.tree.acceptUiValue(id, v.value);
         try open(e);
-        if (f.s.modal == .editor) f.s.dirty = true;
         return true;
     }
     if (std.mem.eql(u8, kind, "focus")) {

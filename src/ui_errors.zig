@@ -12,6 +12,8 @@ pub fn message(arena: std.mem.Allocator, code: []const u8) ![]const u8 {
         .{ "ResearchTimeLimit", "Research reached its time limit. No expenses were changed." },
         .{ "NoCategories", "Add categories in Settings before researching expenses." },
         .{ "DesktopResearchUnavailable", "Update and open Penny Goblin on your Linux desktop with local model support to run research from this paired phone." },
+        .{ "CategoryExists", "That category already exists. Select it from the list." },
+        .{ "ReservedCategory", "Other and fixed commitments are managed separately." },
         .{ "InvalidCategory", "Choose one of your existing categories." },
         .{ "RevisionConflict", "Changed on another device. Your draft is kept; refresh and reopen it." },
         .{ "SettingsConflict", "Settings changed on another device. Refresh and try again." },

@@ -41,7 +41,10 @@ function preferenceRow(container, fields) {
 function addPreferenceMapping(section, key = "", value = "") {
   const [, keyLabel, valueLabel] = preferenceSections.find(([id]) => id === section);
   const row = preferenceRow(`preferences-${section}`, [preferenceInput(keyLabel, key, section === "accounts" || section === "categories" ? 120 : 240), preferenceInput(valueLabel, value, section === "categories" ? 24000 : 120)]);
-  if (section === "categories") row.querySelectorAll("input")[1].required = false;
+  if (section === "categories") {
+    row.querySelectorAll("input")[0].readOnly = true;
+    row.querySelectorAll("input")[1].required = false;
+  }
 }
 
 function addFixedPreference(item = { name: "", amount: 0, keywords: [] }) {
@@ -50,7 +53,8 @@ function addFixedPreference(item = { name: "", amount: 0, keywords: [] }) {
   preferenceRow("preferences-fixed", [preferenceInput("Name", item.name), preferenceInput("Monthly amount (CLP)", item.amount, 120, "number"), keywords]);
 }
 
-function openPreferences(section = "budget") {
+function openPreferences(section = "budget", rules = false) {
+  if (section === "categories" && !rules) { openCategoryPicker(true); return; }
   if (!snapshot || $("preferences-dialog").open) return;
   // One settings page at a time; saving still writes the whole validated settings document.
   for (const page of $("preferences-fields").children) page.classList.toggle("active", page.dataset.section === section);
@@ -67,6 +71,10 @@ function openPreferences(section = "budget") {
       addPreferenceMapping(section, name, section === "categories" ? value.join(", ") : typeof value === "string" ? value : value.holder);
     }
   }
+  if (section === "categories") {
+    for (const name of knownCategories()) if (!categoryReserved(name) && !(name in (settings.categories || {}))) addPreferenceMapping("categories", name, "");
+  }
+  $("add-category").hidden = section === "categories";
   preferencesDirty = false;
   status("preferences-status", "");
   $("preferences-dialog").showModal();
@@ -138,7 +146,8 @@ $("bulk-form").addEventListener("submit", (event) => {
   if (!pattern) return;
   const rows = selectedPayments().filter((row) =>
     row.payee.toLocaleLowerCase().includes(pattern.toLocaleLowerCase()) && (!$("bulk-only-other").checked || row.category === "Other"));
-  bulkDraft = { expected: snapshot.settings, settings: structuredClone(settings), targets: rows.map((row) => ({ id: row.id, revision: row.revision })), category: $("bulk-category").value.trim() };
+  const category = knownCategories().find((name) => categoryKey(name) === categoryKey($("bulk-category").value)) || $("bulk-category").value.trim();
+  bulkDraft = { expected: snapshot.settings, settings: structuredClone(settings), targets: rows.map((row) => ({ id: row.id, revision: row.revision })), category };
   if ($("bulk-remember").checked) {
     bulkDraft.settings.categories = { ...bulkDraft.settings.categories };
     const keywords = bulkDraft.settings.categories[bulkDraft.category] || [];

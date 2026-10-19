@@ -81,7 +81,7 @@ pub fn build(b: *std.Build) void {
     // zig build run      run it
     // zig build check    type-check src/ without building
     // zig build package  installers: deb/rpm/AppImage (Linux), setup.exe (Windows), .app/.dmg (macOS)
-    const view_names = [_][]const u8{ "application", "payment", "editor", "preferences-dialog", "fixed-page", "statements-page", "scanner-page", "statement-dialog", "sync-dialog", "item", "mapping", "evidence", "notice", "pager", "backdrop", "evidence-panel", "text", "review-row", "donut", "day", "category-row", "report-row", "comparison", "progress", "scanner-row", "statement-source", "statement-evidence", "suggestion", "sync-device", "sync-conflict", "budget-part", "research-dialog", "research-proposal", "research-source" };
+    const view_names = [_][]const u8{ "application", "payment", "editor", "preferences-dialog", "fixed-page", "statements-page", "scanner-page", "statement-dialog", "sync-dialog", "item", "mapping", "evidence", "notice", "pager", "backdrop", "evidence-panel", "text", "review-row", "donut", "day", "category-row", "report-row", "comparison", "progress", "scanner-row", "statement-source", "statement-evidence", "suggestion", "sync-device", "sync-conflict", "budget-part", "research-dialog", "research-proposal", "research-source", "category-picker", "category-option" };
     var imports: [view_names.len + 1]std.Build.Module.Import = undefined;
     imports[0] = .{ .name = "penny_helper", .module = helper_module };
     for (view_names, 1..) |name, i| imports[i] = .{
@@ -136,7 +136,7 @@ pub fn build(b: *std.Build) void {
             .name = "Penny Goblin",
             // .publisher = "Your Name <you@example.com>", // default: from the app id
             .summary = "Private household expenses, on your devices",
-            .version = "0.2.7",
+            .version = "0.2.8",
         },
         // The isolation pattern: every call from the frontend to Zig goes
         // through isolation/hook.js first, in a frame the page can't reach.

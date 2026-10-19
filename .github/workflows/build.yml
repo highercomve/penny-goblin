@@ -45,7 +45,9 @@ jobs:
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
           GDK_BACKEND: x11
           GTK_A11Y: none
-        run: dbus-run-session -- xvfb-run -a python scripts/research_ui_test.py
+        run: |
+          dbus-run-session -- xvfb-run -a python scripts/research_ui_test.py
+          dbus-run-session -- xvfb-run -a python scripts/categories_ui_test.py
   linux:
     name: Linux x86_64 (${{ matrix.renderer }})
     runs-on: ubuntu-latest

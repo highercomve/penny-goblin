@@ -1,0 +1,12 @@
+<style>
+  item: color=#191d19
+  detail: color=#434a43
+  @media (prefers-color-scheme: dark) {
+    item: color=#e0e4dc
+    detail: color=#c2c9c0
+  }
+</style>
+<row id="item" class="item" min-height="56" padding="8,24,8,16" gap="16" align="center" clickable="true" radius="12" shrink="0">
+ <column grow="1" min-width="0" gap="4"><text font-size="16">{text}</text><text id="detail" class="detail" font-size="14">{detail}</text></column>
+ <text font-size="20">{trailing}</text>
+</row>

@@ -8,6 +8,7 @@ const app = @import("main.zig");
 const tools = @import("oriel_tools.zig");
 const progress = @import("oriel_progress.zig");
 const research = @import("oriel_research.zig");
+const categories = @import("oriel_categories.zig");
 const suggestions = @import("oriel_suggestions.zig");
 const errors = @import("ui_errors.zig");
 const App = ui.View(@embedFile("application.oriel"));
@@ -26,7 +27,7 @@ pub const editor_base: i64 = 10000;
 pub const item_style: i64 = 70000;
 pub const Page = enum { home, payments, insights, settings };
 pub const Modal = enum { none, editor, preferences, fixed, statements, statement, scanner, sync, research };
-pub const Request = enum(u32) { snapshot = 1, save, delete, new_id, pick_image, scan, documents, pick_legacy, import_legacy, pick_pdf, stage_pdf, parse_pdf, observations, reconcile, export_pdf, settings, scanner_status, scanner_action, sync_status, sync_transport, sync_action, sync_conflict, sync_resolve, report, quick_action, cancel, sources, background_parse, unlink, defaults, scanner_download, research_run, research_apply, research_source, research_model_status, research_model_action };
+pub const Request = enum(u32) { snapshot = 1, save, delete, new_id, pick_image, scan, documents, pick_legacy, import_legacy, pick_pdf, stage_pdf, parse_pdf, observations, reconcile, export_pdf, settings, scanner_status, scanner_action, sync_status, sync_transport, sync_action, sync_conflict, sync_resolve, report, quick_action, cancel, sources, background_parse, unlink, defaults, scanner_download, research_run, research_apply, research_source, research_model_status, research_model_action, category_edit };
 const input_names = .{ "month", "account-filter", "search", "category-filter", "date-from", "date-through", "ledger-sort", "merchant-search", "merchant-category", "merchant-grouping", "merchant-sort", "comparison-mode" };
 pub const State = struct {
     io: std.Io = undefined,
@@ -259,6 +260,7 @@ fn boot(e: *ui.Engine) !void {
     s.initialized = true;
     inline for (.{ .{ App, 50000 }, .{ Editor, 60000 }, .{ Item, item_style }, .{ Payment, 70500 }, .{ Day, 70600 }, .{ BudgetPart, 70700 }, .{ Evidence, 71000 }, .{ EvidencePanel, 76000 }, .{ StatementEvidence, 76100 }, .{ Text, 79000 }, .{ Notice, 78000 }, .{ Backdrop, 79500 } }) |v| try v[0].prepare(&e.tree, v[1]);
     try suggestions.prepare(e);
+    try categories.prepare(e);
     try tools.prepare(e);
     try research.prepare(e);
     try progress.prepare(e);
@@ -282,6 +284,7 @@ fn shutdown(e: *ui.Engine) void {
     s.inert.deinit(e.gpa);
     s.selected.deinit(e.gpa);
     s.draft.deinit();
+    categories.shutdown();
     progress.shutdown();
     tools.shutdown();
     research.shutdown();
@@ -314,6 +317,7 @@ fn resized(e: *ui.Engine) !void {
     const next: usize = (if (e.tree.width < 840) @as(usize, 2) else 0) + (if (e.tree.dark) @as(usize, 1) else 0);
     if (next != s.variant) try choose_variant(e);
     try tools.resize(e);
+    try categories.resize(e);
     if (s.modal == .editor) {
         try resize_modal(e, editor_base);
         try editor_capture_layout(e);
@@ -446,6 +450,10 @@ pub fn overlay(e: *ui.Engine) !void {
         ids[len] = id;
         len += 1;
     }
+    if (categories.active) {
+        ids[len] = categories.base;
+        len += 1;
+    }
     if (s.notice_open) {
         ids[len] = 19000;
         len += 1;
@@ -457,7 +465,7 @@ pub fn overlay(e: *ui.Engine) !void {
         len += 1;
     }
     if (!try e.tree.stampKids(root.id, ids[0..len])) return error.InvalidTemplate;
-    try modal_focus(e, if (s.notice_open) 19000 else modal_id);
+    try modal_focus(e, if (s.notice_open) 19000 else if (categories.active) categories.base else modal_id);
 }
 pub fn close_modal(e: *ui.Engine) !void {
     if (s.modal == .editor) try ui.setVisible(&e.tree, editor_base, false) else if (tools.modal_id(s.modal)) |id| try ui.setVisible(&e.tree, id, false);
@@ -737,10 +745,11 @@ pub fn open_editor(e: *ui.Engine, expense: ?model.Expense) !void {
     s.extraction_open = false;
     suggestions.reset();
     _ = try Editor.mount(&e.tree, editor_base, 60000, &.{});
-    try mark_actions(e, Editor, editor_base, .{ "close-editor", "save", "receipt-file", "camera-file", "scanner-setup", "manual-fallback", "analyze", "remove-image", "delete", "cancel-delete", "confirm-delete", "cancel-analysis", "details-toggle", "extraction-toggle" });
+    try mark_actions(e, Editor, editor_base, .{ "close-editor", "save", "receipt-file", "camera-file", "scanner-setup", "manual-fallback", "analyze", "remove-image", "delete", "cancel-delete", "confirm-delete", "cancel-analysis", "details-toggle", "extraction-toggle", "choose-category" });
     try ui.setVisible(&e.tree, editor_base, true);
     if (expense) |row| s.current = try std.json.parseFromSliceLeaky(model.Expense, s.draft.allocator(), try std.json.Stringify.valueAlloc(s.draft.allocator(), row, .{}), .{ .allocate = .alloc_always });
     inline for (.{ "payee", "date", "account", "category", "notes", "reference", "location" }) |field| try set_value(e, eid("field-" ++ field), if (s.current) |v| @field(v, field) else if (std.mem.eql(u8, field, "category")) "Other" else "");
+    try set_text(e, eid("category-value"), value(e, eid("field-category")));
     var amount: [32]u8 = undefined;
     try set_value(e, eid("field-amount"), if (s.current) |v| try model.amount_input(&amount, v.amount, v.currency) else "");
     var accounts: std.ArrayList([]const u8) = .empty;
@@ -761,7 +770,7 @@ pub fn open_editor(e: *ui.Engine, expense: ?model.Expense) !void {
     const account_labels = try a.alloc([]const u8, accounts.items.len);
     for (accounts.items, 0..) |account, i| account_labels[i] = if (account.len == 0) "Choose account" else try std.fmt.allocPrint(a, "{s} · {s}", .{ account, reports.holder(account, settings()) });
     try options(e, eid("field-account"), accounts.items, account_labels, if (s.current) |v| v.account else "");
-    inline for (.{ "pending-evidence", "extraction-details", "delete-confirm", "cancel-analysis", "categories-category-list" }) |id| try show(e, eid(id), false);
+    inline for (.{ "pending-evidence", "extraction-details", "delete-confirm", "cancel-analysis" }) |id| try show(e, eid(id), false);
     try set_text(e, eid("editor-title"), if (expense != null) "Payment" else "New payment");
     try show(e, eid("review-fields"), true);
     try show(e, eid("save"), true);
@@ -861,6 +870,7 @@ fn event(e: *ui.Engine, id: i64, kind: []const u8, data: []const u8) bool {
     };
 }
 fn handle_event(e: *ui.Engine, id: i64, kind: []const u8, data: []const u8) !bool {
+    if (try categories.event(e, id, kind, data)) return true;
     if (std.mem.eql(u8, kind, "back")) {
         if (s.notice_open) return click(e, Notice.id("cancel", 19000));
         if (s.modal == .none and s.page == .home and !s.busy) return false;
@@ -873,7 +883,10 @@ fn handle_event(e: *ui.Engine, id: i64, kind: []const u8, data: []const u8) !boo
         defer msg.deinit();
         if (std.mem.eql(u8, msg.value.__oriel_event, "scan_stage") and s.modal == .editor and msg.value.payload == .object) if (msg.value.payload.object.get("stage")) |stage| if (stage == .string) try progress.stage(e, stage.string);
         if (std.mem.eql(u8, msg.value.__oriel_event, "research_progress")) try research.progress(e, msg.value.payload);
-        if (std.mem.eql(u8, msg.value.__oriel_event, "model_download")) { try tools.download_progress(e, msg.value.payload); try research.model_progress(e, msg.value.payload); }
+        if (std.mem.eql(u8, msg.value.__oriel_event, "model_download")) {
+            try tools.download_progress(e, msg.value.payload);
+            try research.model_progress(e, msg.value.payload);
+        }
         if (std.mem.eql(u8, msg.value.__oriel_event, "quick_action")) try invoke(e, .quick_action, "take_quick_action", .{});
         return true;
     }
@@ -906,7 +919,14 @@ fn handle_event(e: *ui.Engine, id: i64, kind: []const u8, data: []const u8) !boo
     return s.modal != .none;
 }
 pub fn request_close(e: *ui.Engine) !void {
-    if (s.modal == .research and research.running) { try research.stop(e); return; }
+    if (categories.active) {
+        try categories.close(e);
+        return;
+    }
+    if (s.modal == .research and research.running) {
+        try research.stop(e);
+        return;
+    }
     if (s.notice_open) {
         _ = try click(e, Notice.id("cancel", 19000));
         return;
@@ -931,6 +951,14 @@ fn inNotice(e: *ui.Engine, id: i64) bool {
 }
 
 fn click(e: *ui.Engine, id: i64) !bool {
+    if (id == eid("choose-category")) {
+        try categories.open(e, false);
+        return true;
+    }
+    if (id == aid("pref-categories")) {
+        try categories.open(e, true);
+        return true;
+    }
     if (s.notice_open) {
         if (id == Notice.id("cancel", 19000) or id == Notice.id("confirm", 19000)) {
             s.notice_open = false;
@@ -994,7 +1022,10 @@ fn click(e: *ui.Engine, id: i64) !bool {
         try render(e);
         return true;
     }
-    if (id == aid("research-open")) { try research.open(e); return true; }
+    if (id == aid("research-open")) {
+        try research.open(e);
+        return true;
+    }
     if (id == aid("audit-other")) {
         var arena = std.heap.ArenaAllocator.init(e.gpa);
         defer arena.deinit();
@@ -1133,6 +1164,7 @@ fn resolved_safe(e: *ui.Engine, request_id: u32, ok: bool, json: []const u8) !vo
 fn resolved(e: *ui.Engine, raw: u32, ok: bool, json: []const u8) !void {
     const request = std.enums.fromInt(Request, raw & 0xffff) orelse return;
     if ((request == .documents or request == .sources or request == .defaults) and raw >> 16 != s.editor_generation) return;
+    if (request == .category_edit) return categories.resolved(e, ok, json);
     try progress.resolved(e, request);
     if (request == .research_run or request == .research_apply or request == .research_source or request == .research_model_status or request == .research_model_action) return research.resolved(e, request, ok, json);
     if (request == .defaults) {
@@ -1350,6 +1382,7 @@ fn resolved_scan(e: *ui.Engine, request: Request, ok: bool, json: []const u8) !v
         var buf: [32]u8 = undefined;
         try set_value(e, eid("field-amount"), try std.fmt.bufPrint(&buf, "{d}", .{result.amount}));
         if (try reports.suggest_category(s.draft.allocator(), result.payee, settings())) |category| try set_value(e, eid("field-category"), category);
+        try set_text(e, eid("category-value"), value(e, eid("field-category")));
     }
     if (s.document) |*doc| doc.extraction = encoded;
     _ = try Text.mount(&e.tree, 18100, 79000, &.{.{ .name = "text", .value = encoded }});
@@ -1513,7 +1546,7 @@ test "settings and bulk previews preserve imported rules and do not write before
     const encoded = try std.json.Stringify.valueAlloc(a, snapshot, .{});
     defer a.free(encoded);
     try resolved(e, @intFromEnum(Request.snapshot), true, encoded);
-    _ = try handle_event(e, aid("pref-categories"), "click", "0");
+    try tools.open_category_rules(e);
     try std.testing.expectEqual(Modal.preferences, s.modal);
     const Preferences = ui.View(@embedFile("preferences-dialog.oriel"));
     _ = try handle_event(e, e.tree.get(Preferences.id("save-preferences", 11000)).?.kids.items[0].id, "click", "0");
@@ -1534,7 +1567,7 @@ test "settings and bulk previews preserve imported rules and do not write before
     try std.testing.expect(!e.tree.get(aid("bulk-preview")).?.props.none);
     try std.testing.expectEqual(prior_request, host.request);
     // Opening another settings view must not invalidate the frozen preview arena.
-    _ = try handle_event(e, aid("pref-categories"), "click", "0");
+    try tools.open_category_rules(e);
     const Mapping = ui.View(@embedFile("mapping.oriel"));
     const long_keywords: [24000]u8 = @splat('x');
     try set_value(e, Mapping.id("value", 20000000), &long_keywords);
@@ -1760,12 +1793,13 @@ test "fixed drilldown, category suggestions and scanner actions follow the web f
     try std.testing.expect(s.drill_active);
     try std.testing.expectEqual(@as(usize, 1), s.selected.items.len);
     try open_editor(e, row);
-    _ = try handle_event(e, eid("field-category"), "input", "\"Fo\"");
-    try std.testing.expect(!e.tree.get(eid("categories-category-list")).?.props.none);
-    _ = try handle_event(e, eid("field-category"), "key", "[\"ArrowDown\",0,false]");
-    _ = try handle_event(e, eid("field-category"), "key", "[\"Enter\",0,false]");
+    _ = try handle_event(e, eid("choose-category"), "click", "0");
+    try std.testing.expect(categories.active);
+    _ = try handle_event(e, categories.id("search"), "input", "\"Fo\"");
+    _ = try handle_event(e, 25000000, "click", "0");
     try std.testing.expectEqualStrings("Food", value(e, eid("field-category")));
-    try std.testing.expect(e.tree.get(eid("categories-category-list")).?.props.none);
+    try std.testing.expect(!categories.active);
+    try std.testing.expectEqualStrings("Food", e.tree.get(eid("category-value")).?.props.runs.?[0].t);
     s.dirty = false;
     try close_modal(e);
     _ = try handle_event(e, aid("open-scanner"), "click", "0");
@@ -1794,7 +1828,6 @@ test "fixed drilldown, category suggestions and scanner actions follow the web f
     _ = try handle_event(e, label(e, Notice.id("confirm", 19000)), "click", "0");
     try std.testing.expectEqualStrings("scanner_delete", host.command);
 }
-
 
 test "Android Back unwinds sheets and protects unsaved drafts before leaving Home" {
     const a = std.testing.allocator;
@@ -1861,7 +1894,6 @@ test "Android Back unwinds sheets and protects unsaved drafts before leaving Hom
     try std.testing.expect(e.back());
     try std.testing.expectEqual(Modal.none, s.modal);
 }
-
 
 test "research review keeps drafts, cancels Back and applies only selected revisions" {
     const a = std.testing.allocator;
@@ -1967,4 +1999,59 @@ test "research review keeps drafts, cancels Back and applies only selected revis
     defer next.deinit();
     try std.testing.expectEqual(@as(usize, 1), next.value.ids.len);
     try std.testing.expectEqualStrings(next_row.id, next.value.ids[0]);
+}
+
+test "category picker preserves drafts and reviews merges across all dates" {
+    const a = std.testing.allocator;
+    var host: TestHost = .{ .allocator = a };
+    defer host.deinit();
+    configure(std.testing.io);
+    const e = try ui.Engine.create(a, .{ .ctx = &host, .measure = TestHost.measure, .laid_out = TestHost.laid, .removed = TestHost.removed, .add_timer = TestHost.timer, .invoke = TestHost.dispatch, .focus = TestHost.focus }, &.{}, "{}", "main", "application.oriel", 393, 820);
+    defer e.destroy();
+    try boot(e);
+    const row: model.Expense = .{ .id = &model.digest("category"), .revision = 3, .date = "2025-01-17", .amount = 100, .payee = "Lunch", .account = "Debit", .category = "Dinning" };
+    var rows = [_]model.Expense{row};
+    const snapshot: app.Snapshot = .{ .expenses = &rows, .settings = "{\"categories\":{\"Dining\":[]}}", .platform = "android", .vision_available = false, .tray_running = false, .statements = &.{} };
+    const encoded = try std.json.Stringify.valueAlloc(a, snapshot, .{});
+    defer a.free(encoded);
+    try resolved(e, @intFromEnum(Request.snapshot), true, encoded);
+    try open_editor(e, row);
+    try set_value(e, eid("field-payee"), "Unsaved merchant");
+    s.dirty = true;
+    try show(e, eid("details-body"), false);
+    try std.testing.expect(e.tree.get(eid("field-category")).?.props.none);
+    _ = try handle_event(e, eid("choose-category"), "click", "0");
+    try std.testing.expect(categories.active);
+    try std.testing.expect(e.back());
+    try std.testing.expect(!categories.active);
+    try std.testing.expect(s.dirty and s.modal == .editor);
+    try std.testing.expectEqualStrings("Unsaved merchant", value(e, eid("field-payee")));
+    _ = try handle_event(e, eid("choose-category"), "click", "0");
+    _ = try handle_event(e, categories.id("search"), "input", "\" dining \"");
+    try std.testing.expect(e.tree.get(categories.id("add")).?.props.none);
+    _ = try handle_event(e, categories.id("search"), "input", "\"Dinning\"");
+    try std.testing.expectEqual(@as(usize, 1), e.tree.get(categories.id("list")).?.kids.items.len);
+    try std.testing.expect(e.back());
+    s.dirty = false;
+    try close_modal(e);
+    _ = try handle_event(e, aid("pref-categories"), "click", "0");
+    _ = try handle_event(e, categories.id("search"), "input", "\"Dinning\"");
+    _ = try handle_event(e, 25000000, "click", "0");
+    _ = try handle_event(e, categories.id("target"), "input", "\"Dining\"");
+    _ = try handle_event(e, categories.id("review"), "click", "0");
+    try std.testing.expect(!e.tree.get(categories.id("apply")).?.props.none);
+    try std.testing.expect(std.mem.indexOf(u8, e.tree.get(categories.id("summary")).?.props.runs.?[0].t, "1 payments across all dates") != null);
+    _ = try handle_event(e, categories.id("apply"), "click", "0");
+    const edit = try std.json.parseFromSlice(@import("core/preferences.zig").Edit, a, host.args, .{});
+    defer edit.deinit();
+    try std.testing.expectEqualStrings("Dinning", edit.value.category_change.?.source);
+    try std.testing.expectEqual(@as(i64, 3), edit.value.targets[0].revision);
+    try resolved(e, @intFromEnum(Request.category_edit), false, "RevisionConflict");
+    try std.testing.expect(categories.active);
+    try std.testing.expectEqualStrings("Dining", value(e, categories.id("target")));
+    try std.testing.expect(e.tree.get(categories.id("apply")).?.props.none);
+    try std.testing.expect(e.back());
+    try std.testing.expect(categories.active);
+    try std.testing.expect(e.back());
+    try std.testing.expect(!categories.active);
 }

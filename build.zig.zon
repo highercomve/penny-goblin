@@ -1,6 +1,6 @@
 .{
     .name = .native,
-    .version = "0.2.7",
+    .version = "0.2.8",
     // Derived from the package name; changing it has security and trust implications.
     .fingerprint = 0xc0881db76ce39fb8,
     .minimum_zig_version = "0.16.0",

@@ -53,6 +53,8 @@ function errorText(error) {
     LocalModelRequired: "Choose a downloaded or imported local model for desktop research.",
     ResearchTimeLimit: "Research reached its time limit. No expenses were changed.",
     DesktopResearchUnavailable: "Update and open Penny Goblin on your Linux desktop with local model support to run research from this paired phone.",
+    CategoryExists: "That category already exists. Select it from the list.",
+    ReservedCategory: "Other and fixed commitments are managed separately.",
     InvalidCategory: "Choose one of your existing categories.",
     RevisionConflict: "Changed on another device. Your draft is kept; refresh and reopen it.",
     SettingsConflict: "Settings changed on another device. Refresh and try again.",
@@ -417,6 +419,7 @@ async function openEditor(expense = null, receipt = false) {
   for (const field of ["payee", "amount", "date", "category", "reference", "location", "notes"]) {
     if (expense) form.elements.namedItem(field).value = expense[field];
   }
+  updateCategoryChoice();
   setCurrency(expense?.currency || "CLP");
   if (expense?.currency === "USD") form.elements.namedItem("amount").value = (expense.amount / 100).toFixed(2);
   fillAccounts(expense ? expense.account : localStorage.getItem("penny-last-account") || "");
@@ -553,7 +556,7 @@ async function analyze(automatic = false) {
     status("editor-status", errorText(error), true);
     if (/ScannerNotSetUp|ModelNotDownloaded|SystemModelNotReady|SystemAiUnavailable|ModelNotImported|ProjectorNotImported/.test(String(error))) openScanner();
   }
-  finally { scan.done(scanned && !cancelRequested); $("expense-fields").classList.remove("scanning"); showReview(); setBusy(false); }
+  finally { updateCategoryChoice(); scan.done(scanned && !cancelRequested); $("expense-fields").classList.remove("scanning"); showReview(); setBusy(false); }
 }
 
 async function saveExpense(event) {

@@ -128,3 +128,9 @@ financial exports are excluded from version control.
 
 This is a private project; no open-source license is assigned to the application.
 Third-party source retains its own licenses; see [notices](THIRD_PARTY_NOTICES.md).
+
+### Categories
+
+Category is a primary payment field. Tap it to search categories from your entire ledger and keyword rules, select one, or explicitly add a new name. Similar spellings are shown to help avoid duplicates.
+
+Use **Settings → Categories** to rename a category or merge it into an existing one. Review the number of affected payments across all dates before applying. Keyword rules are combined, and a conflicting payment or settings change cancels the whole operation. **Other** and **Fixed:** categories retain their special meaning; edit fixed commitments in their own settings page. The **Rules** button opens keyword matching rules.
