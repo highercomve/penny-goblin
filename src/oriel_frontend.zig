@@ -2038,8 +2038,14 @@ test "category picker preserves drafts and reviews merges across all dates" {
     s.dirty = true;
     try show(e, eid("details-body"), false);
     try std.testing.expect(e.tree.get(eid("field-category")).?.props.none);
-    _ = try handle_event(e, eid("choose-category"), "click", "0");
+    const category_frame = e.tree.get(eid("choose-category")).?.frame;
+    const hit = e.tree.hit(category_frame.x + category_frame.w / 2, category_frame.y + category_frame.h / 2) orelse return error.TestUnexpectedResult;
+    try std.testing.expect(inside(hit, eid("choose-category")));
+    _ = try handle_event(e, hit.id, "click", "0");
     try std.testing.expect(categories.active);
+    const search_frame = e.tree.get(categories.id("search")).?.frame;
+    const foreground = e.tree.hit(search_frame.x + search_frame.w / 2, search_frame.y + search_frame.h / 2) orelse return error.TestUnexpectedResult;
+    try std.testing.expect(inside(foreground, categories.base));
     try std.testing.expect(e.back());
     try std.testing.expect(!categories.active);
     try std.testing.expect(s.dirty and s.modal == .editor);

@@ -10,7 +10,7 @@
     field: border-color=#8c938a color=#e0e4dc
   }
 </style>
-<column id="category-picker" class="surface" position="absolute" top="0" left="0" width="640" height="720" padding="16" gap="16" z="10000" radius="28">
+<column id="category-picker" class="surface" position="absolute" top="0" left="0" width="640" height="720" padding="16" gap="16" z="2147483647" radius="28">
  <row align="center" gap="8" shrink="0">
   <button id="back" class="action" min-width="56" min-height="48" align="center" justify="center" clickable="true"><text>Back</text></button>
   <text id="title" grow="1" font-size="22" font-weight="600">Category</text>

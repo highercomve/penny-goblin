@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.10
+
+- Keep the category picker above the payment sheet on Android so category taps reveal an interactive screen.
+
 ## 0.2.9
 
 - Reuse identical special-payment rules and explain conflicting labels.
