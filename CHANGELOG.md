@@ -2,6 +2,8 @@
 
 ## 0.2.12
 
+- Pin desktop WebKit CI to a full-size display and retry failed NSIS tool downloads.
+
 - Opening a category, merchant or fixed item from Home or Insights can be
   undone: Back (and the "Back to Insights" chip on desktop) returns to the
   report it came from instead of leaving a filtered Payments list. On

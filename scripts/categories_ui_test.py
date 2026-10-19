@@ -45,6 +45,8 @@ window.addEventListener('load',async()=>{
  const input=(id,value)=>{document.getElementById(id).value=value;document.getElementById(id).dispatchEvent(new Event('input',{bubbles:true}));};
  try{
   await until(()=>snapshot);
+  check(window.innerWidth < 600 || window.innerWidth >= 840,
+        `Expected phone or desktop viewport, got ${window.innerWidth}px`);
   // Imported case variants in another section must not block Special payments.
   settings.categories = {Dining:[], dining:[]};
   settings.special_cases = {"TRASPASO A DEUDA NACIONAL":"USD purchases converted to CLP"};
@@ -72,7 +74,7 @@ window.addEventListener('load',async()=>{
   check(!document.getElementById('preferences-dialog').open,'Could not save identical special rule');
   await new Promise(r=>setTimeout(r,100));
 
-  if (window.innerWidth > 600) {
+  if (window.innerWidth >= 840) {
     const outside=(downX=0,downY=0)=>{
       editor.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerType:'mouse',clientX:downX,clientY:downY}));
       editor.dispatchEvent(new MouseEvent('click',{bubbles:true,button:0,clientX:0,clientY:0}));

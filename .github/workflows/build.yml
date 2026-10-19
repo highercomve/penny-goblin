@@ -45,8 +45,8 @@ jobs:
           GDK_BACKEND: x11
           GTK_A11Y: none
         run: |
-          dbus-run-session -- xvfb-run -a python scripts/research_ui_test.py
-          dbus-run-session -- xvfb-run -a python scripts/categories_ui_test.py
+          dbus-run-session -- xvfb-run -a -s "-screen 0 1920x1080x24" python scripts/research_ui_test.py
+          dbus-run-session -- xvfb-run -a -s "-screen 0 1920x1080x24" python scripts/categories_ui_test.py
   linux:
     name: Linux x86_64 (${{ matrix.renderer }})
     runs-on: ubuntu-latest
@@ -157,8 +157,17 @@ jobs:
           $root = "C:\VulkanSDK\$env:VULKAN_SDK_VERSION"
           & "$root\Bin\glslc.exe" --version
           "VULKAN_SDK=$root" >> $env:GITHUB_ENV
-          if (-not (Test-Path "${env:ProgramFiles(x86)}\NSIS\makensis.exe")) { choco install nsis -y --no-progress }
-          "ORIEL_MAKENSIS=${env:ProgramFiles(x86)}\NSIS\makensis.exe" >> $env:GITHUB_ENV
+          $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (-not (Test-Path $nsis)) {
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              choco install nsis -y --no-progress
+              if ($LASTEXITCODE -eq 0 -and (Test-Path $nsis)) { break }
+              if ($attempt -eq 3) { throw "NSIS installation failed after three attempts" }
+              Start-Sleep -Seconds (20 * $attempt)
+            }
+          }
+          if (-not (Test-Path $nsis)) { throw "NSIS compiler missing: $nsis" }
+          "ORIEL_MAKENSIS=$nsis" >> $env:GITHUB_ENV
           # WebView2Loader.dll from Microsoft's WebView2 SDK (NuGet).
           Invoke-WebRequest "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/$env:WEBVIEW2_VERSION" -OutFile webview2.zip
           Expand-Archive webview2.zip -DestinationPath webview2
@@ -274,8 +283,14 @@ jobs:
           # (fine-grained: highercomve/penny-goblin-site, Contents read and write).
           GH_TOKEN: ${{ secrets.SITE_RELEASE_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release/* --repo highercomve/penny-goblin-site \
-            --title "Penny Goblin ${GITHUB_REF_NAME#v}" --notes-file notes.md --latest
+          if gh release view "$GITHUB_REF_NAME" --repo highercomve/penny-goblin-site >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release/* --repo highercomve/penny-goblin-site --clobber
+            gh release edit "$GITHUB_REF_NAME" --repo highercomve/penny-goblin-site \
+              --title "Penny Goblin ${GITHUB_REF_NAME#v}" --notes-file notes.md --prerelease=false --latest
+          else
+            gh release create "$GITHUB_REF_NAME" release/* --repo highercomve/penny-goblin-site \
+              --title "Penny Goblin ${GITHUB_REF_NAME#v}" --notes-file notes.md --latest
+          fi
   website:
     name: Zine website
     runs-on: ubuntu-24.04
