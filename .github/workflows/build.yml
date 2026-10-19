@@ -68,23 +68,35 @@ jobs:
         run: for i in 1 2 3 4 5; do zig build --fetch=all && exit 0; sleep $((i * 20)); done; exit 1
       # The WebKit build's scanner runs on NVIDIA GPUs through CUDA:
       # libggml-cuda.so (cuBLAS from the system's CUDA 13 runtime; without
-      # it, or without an NVIDIA driver, scans run on the CPU). Built once
-      # per Oriel snapshot, GPU list and CUDA version, then cached.
-      - name: CUDA backend cache key
+      # it, or without an NVIDIA driver, scans run on the CPU). One per Oriel
+      # snapshot, GPU list and CUDA version: from the Actions cache, else the
+      # prebuilt one on this repository's release of the same name (nvcc on a
+      # hosted runner takes over an hour; scripts/publish-cuda-backend.sh
+      # uploads one built on a faster machine), else compiled here.
+      - name: CUDA backend key
         if: matrix.renderer == 'webview'
         id: cuda
         run: |
-          echo "version=$(pacman -Si cuda | awk '/^Version/{print $3}')" >> "$GITHUB_OUTPUT"
-          echo "archs=${CUDA_ARCHS//,/_}" >> "$GITHUB_OUTPUT"
+          ggml=$(sha256sum vendor/oriel/build.zig.zon vendor/oriel/build/ggml.zig | sha256sum | cut -c1-16)
+          echo "key=ggml-cuda-$ggml-${CUDA_ARCHS//,/_}-cuda-$(pacman -Si cuda | awk '/^Version/{print $3}')" >> "$GITHUB_OUTPUT"
       - name: Restore the CUDA backend
         if: matrix.renderer == 'webview'
         id: cuda-cache
         uses: actions/cache@v4
         with:
           path: cuda-cache/libggml-cuda.so
-          key: ggml-cuda-${{ hashFiles('vendor/oriel/build.zig.zon', 'vendor/oriel/build/ggml.zig') }}-${{ steps.cuda.outputs.archs }}-cuda-${{ steps.cuda.outputs.version }}
-      - name: Build the CUDA backend
+          key: ${{ steps.cuda.outputs.key }}
+      - name: Download the prebuilt CUDA backend
         if: matrix.renderer == 'webview' && steps.cuda-cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pacman -S --noconfirm --needed github-cli
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          gh release download '${{ steps.cuda.outputs.key }}' -R '${{ github.repository }}' -p libggml-cuda.so -D cuda-cache \
+            || echo "No prebuilt ${{ steps.cuda.outputs.key }}: compiling it."
+      - name: Build the CUDA backend
+        if: matrix.renderer == 'webview' && hashFiles('cuda-cache/libggml-cuda.so') == ''
         run: |
           pacman -S --noconfirm --needed cuda gcc
           export CUDA_PATH=/opt/cuda PATH="/opt/cuda/bin:$PATH"
