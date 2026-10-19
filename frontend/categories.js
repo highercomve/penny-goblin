@@ -22,6 +22,9 @@ function similarCategory(x, y) {
 const categoryReserved = (name) => categoryKey(name) === "other" || categoryKey(name).startsWith("fixed:");
 function updateCategoryChoice() {
   $("category-value").textContent = form.elements.namedItem("category").value || "Other";
+  const special = PennyReports.special({payee:form.elements.namedItem("payee").value}, settings);
+  $("category-rule-note").hidden = !special;
+  $("category-rule-note").textContent = special ? `Special payment: ${special}` : "";
 }
 function knownCategories() {
   return [...new Set(["Other", ...snapshot.expenses.map((row) => row.category), ...Object.keys(settings.categories || {}), ...(settings.fixed_expenses_items || []).map((item) => `Fixed: ${item.name}`)])].sort((a, b) => a.localeCompare(b));

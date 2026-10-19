@@ -25,11 +25,11 @@ pub const Filter = struct {
         if (f.from.len > 0 and f.through.len > 0 and std.mem.order(u8, f.from, f.through) == .gt) return false;
         if (f.month.len > 0 and !std.mem.startsWith(u8, row.date, f.month)) return false;
         if (f.account.len > 0 and !std.mem.eql(u8, f.account, row.account)) return false;
-        if (f.category.len > 0 and !std.mem.eql(u8, f.category, row.category)) return false;
+        if (f.category.len > 0 and !category_matches(f.category, row, settings)) return false;
         if (f.from.len > 0 and std.mem.order(u8, row.date, f.from) == .lt) return false;
         if (f.through.len > 0 and std.mem.order(u8, row.date, f.through) == .gt) return false;
-        if (f.audit and (!std.mem.eql(u8, row.category, "Other") or special(row, settings) != null or fixed_item(row, settings) != null)) return false;
-        return f.search.len == 0 or contains(row.payee, f.search) or contains(row.notes, f.search) or contains(row.category, f.search);
+        if (f.audit and !uncategorized(row, settings)) return false;
+        return f.search.len == 0 or contains(row.payee, f.search) or contains(row.notes, f.search) or contains(special(row, settings) orelse row.category, f.search);
     }
 };
 pub fn contains(haystack: []const u8, needle: []const u8) bool {
@@ -148,6 +148,19 @@ pub fn special(row: model.Expense, settings: Settings) ?[]const u8 {
     var it = settings.special_cases.object.iterator();
     while (it.next()) |v| if (v.key_ptr.len > 0 and v.value_ptr.* == .string and contains(row.payee, v.key_ptr.*)) return v.value_ptr.string;
     return null;
+}
+/// Reporting classification is derived from rules, including historical payments.
+/// Keep the reviewed ledger category intact; special transfers remain distinct.
+pub fn category_name(a: std.mem.Allocator, row: model.Expense, settings: Settings) ![]const u8 {
+    if (special(row, settings)) |label| return std.fmt.allocPrint(a, "Special: {s}", .{label});
+    return row.category;
+}
+pub fn category_matches(name: []const u8, row: model.Expense, settings: Settings) bool {
+    if (special(row, settings)) |label| return std.mem.startsWith(u8, name, "Special: ") and std.mem.eql(u8, name[9..], label);
+    return std.mem.eql(u8, name, row.category);
+}
+pub fn uncategorized(row: model.Expense, settings: Settings) bool {
+    return std.mem.eql(u8, row.category, "Other") and special(row, settings) == null and fixed_item(row, settings) == null;
 }
 fn normalized(buf: []u8, value: []const u8) []const u8 {
     var len: usize = 0;
@@ -364,4 +377,19 @@ test "merchant fallback matches Spanish Unicode lowercasing and ASCII initials" 
     defer a.free(name);
     try std.testing.expectEqualStrings("Café SeñOra", name);
     try std.testing.expectEqualStrings("Tottus", try merchant(a, "TOTTUS 123", .{}, true));
+}
+
+test "historical special payments are classified outside Other without changing the ledger" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const config = try std.json.parseFromSliceLeaky(Settings, a, "{\"special_cases\":{\"TRASPASO A DEUDA NACIONAL\":\"USD purchases converted to CLP\"}}", .{});
+    const row: model.Expense = .{ .id = "", .date = "2026-09-09", .payee = "Traspaso A Deuda Nacional", .amount = 232466, .category = "Other" };
+    const other: Filter = .{ .month = "2026-09", .category = "Other" };
+    const special_filter: Filter = .{ .month = "2026-09", .category = "Special: USD purchases converted to CLP" };
+    try std.testing.expect(!other.matches(row, config));
+    try std.testing.expect(special_filter.matches(row, config));
+    try std.testing.expect(!uncategorized(row, config));
+    try std.testing.expectEqualStrings("Special: USD purchases converted to CLP", try category_name(a, row, config));
+    try std.testing.expectEqualStrings("Other", row.category);
 }

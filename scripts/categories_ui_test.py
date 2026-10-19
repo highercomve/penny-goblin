@@ -20,7 +20,7 @@ window.setInterval = () => 0;
 window.qaCalls = [];
 window.qaFixture = {platform:'android',vision_available:false,tray_running:false,statements:[],
  settings:JSON.stringify({categories:{Dining:['CAFE'],Dinning:['RESTAURANT']}}),expenses:[
- {id:'a'.repeat(64),revision:3,date:'2026-10-18',amount:1000,payee:'Cafe',account:'Debit',category:'Dining'},
+ {id:'a'.repeat(64),revision:3,date:'2026-10-18',amount:1000,payee:'Cafe',account:'Debit',category:'Other'},
  {id:'b'.repeat(64),revision:1,date:'2025-01-18',amount:2000,payee:'Lunch',account:'Debit',category:'Dinning'},
  {id:'c'.repeat(64),revision:1,date:'2026-10-18',amount:3000,payee:'Old category',account:'Debit',category:'Travel'}]};
 window.qaFail = false;
@@ -32,6 +32,7 @@ window.oriel = {listen(){},invoke:async(cmd,args={})=>{
  if(cmd==='save_budget'){
   if(qaFail)throw Error('RevisionConflict');
   const config=JSON.parse(qaFixture.settings), change=args.category_change;
+  if(!change){qaFixture.settings=JSON.stringify(args.settings);return 0;}
   config.categories[change.target]=[...(config.categories[change.target]||[]),...(config.categories[change.source]||[])];
   if(change.source){delete config.categories[change.source];for(const row of qaFixture.expenses)if(row.category===change.source)row.category=change.target;}
   qaFixture.settings=JSON.stringify(config);return args.targets.length;
@@ -44,6 +45,33 @@ window.addEventListener('load',async()=>{
  const input=(id,value)=>{document.getElementById(id).value=value;document.getElementById(id).dispatchEvent(new Event('input',{bubbles:true}));};
  try{
   await until(()=>snapshot);
+  // Imported case variants in another section must not block Special payments.
+  settings.categories = {Dining:[], dining:[]};
+  settings.special_cases = {"TRASPASO A DEUDA NACIONAL":"USD purchases converted to CLP"};
+  snapshot.settings = JSON.stringify(settings);
+  const historic={id:'d'.repeat(64),revision:1,date:'2026-09-09',amount:232466,payee:'Traspaso A Deuda Nacional',account:'Debit',category:'Other'};
+  snapshot.expenses.push(historic);
+  document.getElementById('month').value='';render();
+  check(PennyReports.category(historic,settings)==='Special: USD purchases converted to CLP','Historical special classification missing');
+  check(document.getElementById('rows').textContent.includes('Special: USD purchases converted to CLP'),'Payment row still shows Other');
+  document.getElementById('category-filter').value='Other';
+  check(!filteredPayments().some(row=>row.id===historic.id),'Other filter includes special transfer');
+  document.getElementById('category-filter').value='';
+  openPreferences('special');
+  addPreferenceMapping('special','Traspaso A Deuda Nacional','USD purchases converted to CLP');
+  const equivalent = readPreferences();
+  check(Object.keys(equivalent.special_cases).length===1,'Equivalent rule was not reused');
+  check(Object.keys(equivalent.categories).length===2,'Unrelated category settings changed');
+  const duplicateInputs=document.querySelector('#preferences-special > .preference-row:last-child').querySelectorAll('input');
+  duplicateInputs[1].value='Different label';
+  let conflict=null;try{readPreferences();}catch(error){conflict=error;}
+  check(conflict?.name==='RuleConflict' && errorText(conflict).includes('USD purchases converted to CLP'),'Conflicting rule error is not actionable');
+  duplicateInputs[1].value='USD purchases converted to CLP';
+  document.getElementById('preferences-form').requestSubmit();
+  await until(()=>!preferencesSaving);
+  check(!document.getElementById('preferences-dialog').open,'Could not save identical special rule');
+  await new Promise(r=>setTimeout(r,100));
+
   if (window.innerWidth > 600) {
     const outside=(downX=0,downY=0)=>{
       editor.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerType:'mouse',clientX:downX,clientY:downY}));
@@ -101,7 +129,7 @@ window.addEventListener('load',async()=>{
   input('category-target','Dining');
   document.getElementById('category-edit').requestSubmit();
   check(document.getElementById('category-summary').textContent.includes('1 payments across all dates'),'Preview ignored old dates');
-  check(qaCalls.filter(x=>x.cmd==='save_budget').length===1,'Preview wrote data');
+  check(qaCalls.filter(x=>x.cmd==='save_budget').length===2,'Preview wrote data');
   input('category-target','Dining2');check(document.getElementById('category-apply').hidden,'Edited target left stale apply');
   input('category-target','Dining');document.getElementById('category-edit').requestSubmit();
   qaFail=true;document.getElementById('category-apply').click();await until(()=>!categorySaving);
@@ -153,7 +181,7 @@ class CategoryUiTest(unittest.TestCase):
         try:
             loop.run()
             self.assertTrue(result.get("ok"), result or "WebKit UI timed out")
-            self.assertEqual(result["calls"], 3)
+            self.assertEqual(result["calls"], 4)
         finally:
             GLib.source_remove(timeout)
             window.destroy()

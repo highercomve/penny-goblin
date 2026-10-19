@@ -84,22 +84,42 @@ const splitKeywords = (value) => [...new Set(value.split(",").map((part) => part
 
 function readPreferences() {
   const result = structuredClone(preferencesOriginal);
-  result.salary = Number($("preferences-salary").value);
-  result.account_owners = splitKeywords($("preferences-owners").value);
-  result.fixed_expenses_items = [...$("preferences-fixed").children].map((row) => {
-    const values = [...row.querySelectorAll("input")].map((input) => input.value);
-    const original = (preferencesOriginal.fixed_expenses_items || []).find((item) => item.name === values[0]);
-    const keywords = original && (original.keywords || []).join(", ") === values[2] ? original.keywords || [] : splitKeywords(values[2]);
-    return { name: values[0].trim(), amount: Number(values[1]), keywords };
-  });
-  if (new Set(result.fixed_expenses_items.map((item) => item.name.toLowerCase())).size !== result.fixed_expenses_items.length) throw Error("Commitment names must be unique");
+  const selected = document.querySelector("#preferences-fields > section.active")?.dataset.section;
+  if (selected === "budget") {
+    result.salary = Number($("preferences-salary").value);
+    result.account_owners = splitKeywords($("preferences-owners").value);
+  }
+  if (selected === "fixed") {
+    result.fixed_expenses_items = [...$("preferences-fixed").children].map((row) => {
+      const values = [...row.querySelectorAll("input")].map((input) => input.value);
+      const original = (preferencesOriginal.fixed_expenses_items || []).find((item) => item.name === values[0]);
+      const keywords = original && (original.keywords || []).join(", ") === values[2] ? original.keywords || [] : splitKeywords(values[2]);
+      return { name: values[0].trim(), amount: Number(values[1]), keywords };
+    });
+    if (new Set(result.fixed_expenses_items.map((item) => item.name.toLowerCase())).size !== result.fixed_expenses_items.length) throw Error("Commitment names must be unique");
+  }
   for (const [section, , , key] of preferenceSections) {
+    if (section !== selected) continue;
     const pairs = [...$(`preferences-${section}`).children].map((row) => {
       const inputs = row.querySelectorAll("input");
       const name = inputs[0].value.trim(), rawValue = inputs[1].value, value = rawValue.trim();
       const old = preferencesOriginal[key]?.[name];
       return [name, section === "categories" ? Array.isArray(old) && old.join(", ") === rawValue ? old : splitKeywords(value) : section === "accounts" && old && typeof old === "object" ? { ...old, holder: value } : value];
     });
+    if (section === "special") {
+      const unique = new Map();
+      for (const [name, label] of pairs) {
+        const previous = unique.get(name.toLowerCase());
+        if (previous && previous[1] !== label) {
+          const error = Error(`“${name}” already has the label “${previous[1]}”. Edit that rule or use a different description.`);
+          error.name = "RuleConflict";
+          throw error;
+        }
+        if (!previous) unique.set(name.toLowerCase(), [name, label]);
+      }
+      result[key] = Object.fromEntries(unique.values());
+      continue;
+    }
     if (new Set(pairs.map(([key]) => key.toLowerCase())).size !== pairs.length) throw Error("Each rule or account must have a unique name");
     result[key] = Object.fromEntries(pairs);
   }
@@ -145,7 +165,7 @@ $("bulk-form").addEventListener("submit", (event) => {
   const pattern = $("bulk-pattern").value.trim();
   if (!pattern) return;
   const rows = selectedPayments().filter((row) =>
-    row.payee.toLocaleLowerCase().includes(pattern.toLocaleLowerCase()) && (!$("bulk-only-other").checked || row.category === "Other"));
+    row.payee.toLocaleLowerCase().includes(pattern.toLocaleLowerCase()) && (!$("bulk-only-other").checked || PennyReports.uncategorized(row, settings)));
   const category = knownCategories().find((name) => categoryKey(name) === categoryKey($("bulk-category").value)) || $("bulk-category").value.trim();
   bulkDraft = { expected: snapshot.settings, settings: structuredClone(settings), targets: rows.map((row) => ({ id: row.id, revision: row.revision })), category };
   if ($("bulk-remember").checked) {

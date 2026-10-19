@@ -27,8 +27,10 @@ pub fn apply(db: ledger_mod.Ledger, arena: std.mem.Allocator, edit: Edit) !usize
     defer by_id.deinit(arena);
     for (rows) |row| try by_id.put(arena, row.id, row);
     const update = try prepare_edit(arena, edit, rows, by_id);
-    const config = update.settings;
+    var config = update.settings;
     const category = update.category;
+    const before = try std.json.parseFromSliceLeaky(legacy.Settings, arena, edit.expected, .{ .ignore_unknown_fields = true });
+    if (!std.mem.eql(u8, try std.json.Stringify.valueAlloc(arena, before.special_cases, .{}), try std.json.Stringify.valueAlloc(arena, config.special_cases, .{}))) config.special_cases = try special_rules(arena, config.special_cases);
     try validate(config);
     const json = try std.json.Stringify.valueAlloc(arena, config, .{});
     if (json.len > json_limit) return error.SettingsTooLarge;
@@ -82,6 +84,34 @@ fn prepare_edit(arena: std.mem.Allocator, edit: Edit, rows: []const model.Expens
         if (edit.targets.len > 0) category = try categories.canonical(arena, category, try categories.catalog(arena, rows, config));
     }
     return .{ .settings = config, .category = category };
+}
+
+/// Special-payment descriptions match without case; equivalent rules have one meaning.
+/// Preserve the first spelling. Conflicting labels require an explicit user edit.
+pub fn special_rules(a: std.mem.Allocator, rules: std.json.Value) !std.json.Value {
+    if (rules == .null) return rules;
+    if (rules != .object or rules.object.count() > 1000) return error.InvalidRules;
+    var result: std.json.ObjectMap = .empty;
+    var it = rules.object.iterator();
+    while (it.next()) |entry| {
+        if (entry.value_ptr.* != .string) return error.InvalidRules;
+        try put_special_rule(a, &result, entry.key_ptr.*, entry.value_ptr.string);
+    }
+    return .{ .object = result };
+}
+
+pub fn put_special_rule(a: std.mem.Allocator, result: *std.json.ObjectMap, raw_name: []const u8, raw_label: []const u8) !void {
+    const name = std.mem.trim(u8, raw_name, " \t\r\n");
+    const label = std.mem.trim(u8, raw_label, " \t\r\n");
+    try model.text(name, 240, false);
+    try model.text(label, 120, false);
+    for (result.keys(), result.values()) |old_name, old_label| {
+        if (!std.ascii.eqlIgnoreCase(old_name, name)) continue;
+        if (!std.mem.eql(u8, old_label.string, label)) return error.ConflictingSpecialRule;
+        return;
+    }
+    if (result.count() >= 1000) return error.InvalidRules;
+    try result.put(a, name, .{ .string = label });
 }
 
 pub fn validate(settings: legacy.Settings) !void {
@@ -235,4 +265,27 @@ test "new categories and payment saves reuse case and spacing and protect reserv
     try std.testing.expectError(error.CategoryExists, apply(db, a, .{ .settings = bad, .expected = expected }));
     _ = try apply(db, a, .{ .settings = .{}, .expected = expected, .targets = &.{.{ .id = row.id, .revision = 1 }}, .category_change = .{ .source = "Pet care", .target = "Pets" } });
     try std.testing.expectEqualStrings("Pets", (try db.list(a))[0].category);
+}
+
+test "special rules reuse identical case variants and reject conflicting labels atomically" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const db = try ledger_mod.Ledger.open(":memory:");
+    defer db.close();
+    var config = try std.json.parseFromSliceLeaky(legacy.Settings, a, "{\"special_cases\":{\"TRASPASO A DEUDA NACIONAL\":\"USD purchases converted to CLP\",\"Traspaso A Deuda Nacional\":\"USD purchases converted to CLP\"}}", .{});
+    _ = try apply(db, a, .{ .settings = config, .expected = "{}" });
+    const expected = try db.setting(a, "budget");
+    const saved = try std.json.parseFromSliceLeaky(legacy.Settings, a, expected, .{});
+    try std.testing.expectEqual(@as(usize, 1), saved.special_cases.object.count());
+    try std.testing.expect(saved.special_cases.object.contains("TRASPASO A DEUDA NACIONAL"));
+    try config.special_cases.object.put(a, "Traspaso A Deuda Nacional", .{ .string = "Different label" });
+    try std.testing.expectError(error.ConflictingSpecialRule, apply(db, a, .{ .settings = config, .expected = expected }));
+    try std.testing.expectEqualStrings(expected, try db.setting(a, "budget"));
+    // An unrelated salary change preserves legacy rule data until that section is edited.
+    try db.put_setting("budget", try std.json.Stringify.valueAlloc(a, config, .{}));
+    const legacy_expected = try db.setting(a, "budget");
+    config.salary = 42;
+    _ = try apply(db, a, .{ .settings = config, .expected = legacy_expected });
+    try std.testing.expectEqual(@as(i64, 42), (try std.json.parseFromSliceLeaky(legacy.Settings, a, try db.setting(a, "budget"), .{})).salary);
 }

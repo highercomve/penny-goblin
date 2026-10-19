@@ -17,6 +17,7 @@ pub fn message(arena: std.mem.Allocator, code: []const u8) ![]const u8 {
         .{ "InvalidCategory", "Choose one of your existing categories." },
         .{ "RevisionConflict", "Changed on another device. Your draft is kept; refresh and reopen it." },
         .{ "SettingsConflict", "Settings changed on another device. Refresh and try again." },
+        .{ "ConflictingSpecialRule", "This description already has a different label. Edit the existing rule or use a different description." },
         .{ "InvalidRules", "Every name and keyword needs a value." },
         .{ "InvalidPdf", "Choose a valid PDF smaller than 32 MiB." },
         .{ "StatementParseFailed", "Couldn't read this statement. Santander and BCI PDFs are supported." },

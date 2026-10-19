@@ -512,7 +512,7 @@ fn period_options(e: *ui.Engine) !void {
             const v = switch (which) {
                 0 => row.date[0..7],
                 1 => row.account,
-                else => row.category,
+                else => try reports.category_name(a, row, settings()),
             };
             var found = false;
             for (list.items) |x| {
@@ -657,7 +657,7 @@ fn render_payments(e: *ui.Engine, rows: []const model.Expense) !void {
     defer search_arena.deinit();
     for (rows) |row| {
         if (!f.matches(row, settings()) or (s.drill_active and !s.drill_ids.contains(row.id))) continue;
-        const matches = query.len == 0 or reports.contains(row.payee, query) or reports.contains(row.account, query) or reports.contains(reports.holder(row.account, settings()), query) or reports.contains(row.category, query) or reports.contains(row.notes, query) or reports.contains(row.reference, query) or reports.contains(try reports.merchant(search_arena.allocator(), row.payee, settings(), true), query);
+        const matches = query.len == 0 or reports.contains(row.payee, query) or reports.contains(row.account, query) or reports.contains(reports.holder(row.account, settings()), query) or reports.contains(reports.special(row, settings()) orelse row.category, query) or reports.contains(row.notes, query) or reports.contains(row.reference, query) or reports.contains(try reports.merchant(search_arena.allocator(), row.payee, settings(), true), query);
         if (matches) try s.selected.append(e.gpa, row);
     }
     const sort = value(e, aid("ledger-sort"));
@@ -689,7 +689,7 @@ fn render_payments(e: *ui.Engine, rows: []const model.Expense) !void {
         const payee = try reports.merchant(arena.allocator(), row.payee, settings(), true);
         const initial = if (payee.len > 0) payee[0..@min(payee.len, try std.unicode.utf8ByteSequenceLength(payee[0]))] else "?";
         const by_date = sort.len == 0 or std.mem.eql(u8, sort, "newest") or std.mem.eql(u8, sort, "oldest");
-        const detail_text = try std.fmt.bufPrint(&detail, "{s} · {s}{s}{s}", .{ row.category, reports.holder(row.account, settings()), if (by_date) "" else " · ", if (by_date) "" else row.date });
+        const detail_text = try std.fmt.bufPrint(&detail, "{s} · {s}{s}{s}", .{ try reports.category_name(arena.allocator(), row, settings()), reports.holder(row.account, settings()), if (by_date) "" else " · ", if (by_date) "" else row.date });
         _ = try Payment.mount(&e.tree, base, 70500, &.{ .{ .name = "payee", .value = payee }, .{ .name = "initial", .value = initial }, .{ .name = "detail", .value = detail_text }, .{ .name = "amount", .value = try reports.amount_text(&amount, row.amount, row.currency) } });
         if (row.evidence_count > 0) {
             const avatar = e.tree.get(Payment.id("payment-avatar", base)).?;
@@ -750,6 +750,7 @@ pub fn open_editor(e: *ui.Engine, expense: ?model.Expense) !void {
     if (expense) |row| s.current = try std.json.parseFromSliceLeaky(model.Expense, s.draft.allocator(), try std.json.Stringify.valueAlloc(s.draft.allocator(), row, .{}), .{ .allocate = .alloc_always });
     inline for (.{ "payee", "date", "account", "category", "notes", "reference", "location" }) |field| try set_value(e, eid("field-" ++ field), if (s.current) |v| @field(v, field) else if (std.mem.eql(u8, field, "category")) "Other" else "");
     try set_text(e, eid("category-value"), value(e, eid("field-category")));
+    try category_rule_note(e);
     var amount: [32]u8 = undefined;
     try set_value(e, eid("field-amount"), if (s.current) |v| try model.amount_input(&amount, v.amount, v.currency) else "");
     var accounts: std.ArrayList([]const u8) = .empty;
@@ -862,6 +863,12 @@ fn save(e: *ui.Engine) !void {
     errdefer s.busy = false;
     try invoke(e, .save, "save_expense", model.Save{ .expense = expense, .expected_revision = expense.revision, .document = s.document });
 }
+fn category_rule_note(e: *ui.Engine) !void {
+    const row: model.Expense = .{ .id = "", .date = "", .amount = 0, .payee = value(e, eid("field-payee")) };
+    const special = reports.special(row, settings());
+    try show(e, eid("category-rule-note"), special != null);
+    if (special) |label| try set_text(e, eid("category-rule-note"), try std.fmt.allocPrint(s.draft.allocator(), "Special payment: {s}", .{label}));
+}
 fn event(e: *ui.Engine, id: i64, kind: []const u8, data: []const u8) bool {
     return handle_event(e, id, kind, data) catch |err| {
         std.log.err("Oriel view action: {s}", .{@errorName(err)});
@@ -896,7 +903,10 @@ fn handle_event(e: *ui.Engine, id: i64, kind: []const u8, data: []const u8) !boo
             defer parsed.deinit();
             try e.tree.acceptUiValue(id, parsed.value);
         };
-        if (s.modal == .editor) s.dirty = true else if (s.modal == .preferences) s.dirty = true else {
+        if (s.modal == .editor) {
+            s.dirty = true;
+            if (id == eid("field-payee")) try category_rule_note(e);
+        } else if (s.modal == .preferences) s.dirty = true else {
             if (id == aid("month") or id == aid("account-filter")) clear_drilldown(e);
             remember_inputs(e);
             try render(e);
@@ -1034,7 +1044,7 @@ fn click(e: *ui.Engine, id: i64) !bool {
         var arena = std.heap.ArenaAllocator.init(e.gpa);
         defer arena.deinit();
         var ids: std.ArrayList([]const u8) = .empty;
-        for (s.snapshot.?.value.expenses) |row| if (std.mem.eql(u8, row.category, "Other") and reports.special(row, settings()) == null and reports.fixed_item(row, settings()) == null) try ids.append(arena.allocator(), row.id);
+        for (s.snapshot.?.value.expenses) |row| if (reports.uncategorized(row, settings())) try ids.append(arena.allocator(), row.id);
         try drilldown(e, ids.items, "Uncategorized variable payments");
         return true;
     }
@@ -1232,6 +1242,9 @@ fn resolved_snapshot(e: *ui.Engine, _: Request, ok: bool, json: []const u8) !voi
     const next = try std.json.parseFromSlice(app.Snapshot, e.gpa, json, .{ .allocate = .alloc_always });
     errdefer next.deinit();
     const config = try std.json.parseFromSlice(reports.Settings, e.gpa, next.value.settings, .{ .ignore_unknown_fields = true, .allocate = .alloc_always });
+    if (s.snapshot) |old| if (!std.mem.eql(u8, old.value.settings, next.value.settings)) {
+        clear_drilldown(e);
+    };
     if (s.snapshot) |v| v.deinit();
     if (s.settings) |v| v.deinit();
     s.snapshot = next;
@@ -1387,6 +1400,7 @@ fn resolved_scan(e: *ui.Engine, request: Request, ok: bool, json: []const u8) !v
         try set_value(e, eid("field-amount"), try std.fmt.bufPrint(&buf, "{d}", .{result.amount}));
         if (try reports.suggest_category(s.draft.allocator(), result.payee, settings())) |category| try set_value(e, eid("field-category"), category);
         try set_text(e, eid("category-value"), value(e, eid("field-category")));
+        try category_rule_note(e);
     }
     if (s.document) |*doc| doc.extraction = encoded;
     _ = try Text.mount(&e.tree, 18100, 79000, &.{.{ .name = "text", .value = encoded }});
@@ -2091,4 +2105,34 @@ test "payment backdrop dismisses clean sheets and protects dirty or busy drafts"
     _ = try handle_event(e, 19500, "click", "0");
     try std.testing.expect(!s.notice_open and s.modal == .editor);
     s.busy = false;
+}
+
+test "special rule editor reuses equivalent descriptions and preserves conflicting drafts" {
+    const a = std.testing.allocator;
+    var host: TestHost = .{ .allocator = a };
+    defer host.deinit();
+    configure(std.testing.io);
+    const e = try ui.Engine.create(a, .{ .ctx = &host, .measure = TestHost.measure, .laid_out = TestHost.laid, .removed = TestHost.removed, .add_timer = TestHost.timer, .invoke = TestHost.dispatch, .focus = TestHost.focus }, &.{}, "{}", "main", "application.oriel", 1180, 820);
+    defer e.destroy();
+    try boot(e);
+    const config = "{\"special_cases\":{\"TRASPASO A DEUDA NACIONAL\":\"USD purchases converted to CLP\"}}";
+    const snapshot: app.Snapshot = .{ .expenses = &.{}, .settings = config, .platform = "linux", .vision_available = false, .tray_running = false, .statements = &.{} };
+    const encoded = try std.json.Stringify.valueAlloc(a, snapshot, .{});
+    defer a.free(encoded);
+    try resolved(e, @intFromEnum(Request.snapshot), true, encoded);
+    _ = try handle_event(e, aid("pref-special"), "click", "0");
+    const Preferences = ui.View(@embedFile("preferences-dialog.oriel"));
+    const Mapping = ui.View(@embedFile("mapping.oriel"));
+    _ = try handle_event(e, Preferences.id("add-special", 11000), "click", "0");
+    try set_value(e, Mapping.id("key", 20000032), "Traspaso A Deuda Nacional");
+    try set_value(e, Mapping.id("value", 20000032), "Different label");
+    try std.testing.expectError(error.ConflictingSpecialRule, handle_event(e, Preferences.id("save-preferences", 11000), "click", "0"));
+    try std.testing.expect(s.modal == .preferences and !s.busy);
+    try std.testing.expectEqualStrings("Different label", value(e, Mapping.id("value", 20000032)));
+    try set_value(e, Mapping.id("value", 20000032), "USD purchases converted to CLP");
+    _ = try handle_event(e, Preferences.id("save-preferences", 11000), "click", "0");
+    const edit = try std.json.parseFromSlice(@import("core/preferences.zig").Edit, a, host.args, .{});
+    defer edit.deinit();
+    try std.testing.expectEqual(@as(usize, 1), edit.value.settings.special_cases.object.count());
+    try std.testing.expect(edit.value.settings.special_cases.object.contains("TRASPASO A DEUDA NACIONAL"));
 }

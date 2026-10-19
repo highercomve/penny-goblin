@@ -46,3 +46,12 @@ test("only saved rules suggest categories for scanned recipients", () => {
   assert.equal(report.suggestCategory("Known Recipient", { categories: { Childcare: ["Known Recipient"] } }), "Childcare");
   assert.equal(report.suggestCategory("Known Recipient", { fixed_expenses_items: [{ name: "Childcare", keywords: ["Known Recipient"], amount: 100 }] }), "Fixed: Childcare");
 });
+
+
+test("special-payment descriptions classify historical Other rows without editing them", () => {
+  const settings = {special_cases:{"TRASPASO A DEUDA NACIONAL":"USD purchases converted to CLP"}};
+  const row = {date:"2026-09-09",payee:"Traspaso A Deuda Nacional",amount:232466,category:"Other"};
+  assert.equal(report.category(row, settings), "Special: USD purchases converted to CLP");
+  assert.equal(report.uncategorized(row, settings), false);
+  assert.equal(row.category, "Other");
+});

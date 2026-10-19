@@ -362,12 +362,12 @@ fn collect_groups(e: *ui.Engine, rows: []const f.model.Expense) !void {
             const group = if (std.mem.eql(u8, f.value(e, f.aid("comparison-mode")), "combined")) "All accounts" else try f.reports.account_label(report_arena.allocator(), row.account, f.settings());
             try add_comparison(group, row.category, row.amount);
         }
-        try add_group(.category, row.category, row.amount);
+        try add_group(.category, try f.reports.category_name(report_arena.allocator(), row, f.settings()), row.amount);
         try add_group(.account, try f.reports.account_label(report_arena.allocator(), row.account, f.settings()), row.amount);
         const merchant = try f.reports.merchant(report_arena.allocator(), row.payee, f.settings(), !std.mem.eql(u8, f.value(e, f.aid("merchant-grouping")), "exact"));
         const search = f.value(e, f.aid("merchant-search"));
         const category = f.value(e, f.aid("merchant-category"));
-        if (f.reports.contains(merchant, search) and (category.len == 0 or std.mem.eql(u8, category, row.category))) try add_group(.merchant, merchant, row.amount);
+        if (f.reports.contains(merchant, search) and (category.len == 0 or f.reports.category_matches(category, row, f.settings()))) try add_group(.merchant, merchant, row.amount);
         if (f.reports.special(row, f.settings())) |label| try add_group(.special, label, row.amount);
     }
     if (f.s.snapshot) |snapshot| for (snapshot.value.expenses) |row| if (f.value(e, f.aid("account-filter")).len == 0 or std.mem.eql(u8, f.value(e, f.aid("account-filter")), row.account)) {
@@ -533,7 +533,7 @@ fn bulk_preview(e: *ui.Engine) !void {
     var config = try std.json.parseFromSliceLeaky(legacy.Settings, a, prior, .{ .ignore_unknown_fields = true, .allocate = .alloc_always });
     var targets: std.ArrayList(prefs.Target) = .empty;
     var ids: std.ArrayList(i64) = .empty;
-    for (f.s.snapshot.?.value.expenses) |row| if (f.period(e).matches(row, f.settings()) and f.reports.contains(row.payee, pattern) and (!bulk_only_other or std.mem.eql(u8, row.category, "Other"))) {
+    for (f.s.snapshot.?.value.expenses) |row| if (f.period(e).matches(row, f.settings()) and f.reports.contains(row.payee, pattern) and (!bulk_only_other or f.reports.uncategorized(row, f.settings()))) {
         const base = 560000 + @as(i64, @intCast(targets.items.len)) * 16;
         var amount: [48]u8 = undefined;
         try f.supporting(e, base, try std.fmt.allocPrint(a, "{s} · {s} · {s}", .{ row.date, row.payee, try f.reports.money(&amount, row.amount) }));
@@ -699,6 +699,10 @@ fn save_preferences(e: *ui.Engine) !void {
             if (e.tree.get(base).?.props.none) continue;
             const key = f.value(e, Mapping.id("key", base));
             const v = f.value(e, Mapping.id("value", base));
+            if (section == .special) {
+                try prefs.put_special_rule(a, &obj, key, v);
+                continue;
+            }
             if (obj.contains(key)) return error.DuplicateRule;
             var out: std.json.Value = .{ .string = v };
             if (section == .categories) {
@@ -1028,7 +1032,7 @@ fn click_none(e: *ui.Engine, id: i64) !bool {
             if (!filter.matches(row, f.settings())) continue;
             const variable = f.reports.special(row, f.settings()) == null and f.reports.fixed_item(row, f.settings()) == null and !std.mem.startsWith(u8, row.category, "Fixed:");
             const matches = switch (g.kind) {
-                .category => std.mem.eql(u8, row.category, g.name),
+                .category => f.reports.category_matches(g.name, row, f.settings()),
                 .variable_category => variable and std.mem.eql(u8, row.category, g.name),
                 .account => std.mem.eql(u8, try f.reports.account_label(a, row.account, f.settings()), g.name),
                 .variable_account => variable and std.mem.eql(u8, try f.reports.account_label(a, row.account, f.settings()), g.name),

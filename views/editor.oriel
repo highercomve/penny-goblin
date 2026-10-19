@@ -213,6 +213,7 @@
             <row width="100%" align="center"><text id="category-value" grow="1" font-size="16">Other</text><text font-size="20">›</text></row>
           </button>
         </column>
+        <text id="category-rule-note" class="n54" font-size="14" margin="0,0,12,0" display="none" />
         <view id="more-details" margin="0,0,12,0">
           <text id="details-toggle" class="details-toggle" shrink="0" padding="10,0,10,0" clickable="true" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif"><span>More details</span><span> ▴</span></text>
           <view id="details-body" margin="0">

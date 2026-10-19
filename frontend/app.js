@@ -39,6 +39,7 @@ function status(id, text, error = false) {
 
 function errorText(error) {
   const code = String(error?.message || error);
+  if (error?.name === "RuleConflict") return code;
   const messages = {
     NotPaired: "Pair this phone with your desktop in Settings → Synchronization first.",
     DesktopUnavailable: "Cannot reach the paired desktop. Keep Penny Goblin open there and check Wi-Fi or Tailscale. Research can be resumed.",
@@ -58,6 +59,7 @@ function errorText(error) {
     InvalidCategory: "Choose one of your existing categories.",
     RevisionConflict: "Changed on another device. Your draft is kept; refresh and reopen it.",
     SettingsConflict: "Settings changed on another device. Refresh and try again.",
+    ConflictingSpecialRule: "This description already has a different label. Edit the existing rule or use a different description.",
     InvalidRules: "Every name and keyword needs a value.",
     InvalidPdf: "Choose a valid PDF smaller than 32 MiB.",
     StatementParseFailed: "Couldn't read this statement. Santander and BCI PDFs are supported.",
@@ -117,8 +119,8 @@ function updatePeriodOptions() {
   for (const [id, values, label, all] of [
     ["month", months, monthLabel, "All months"],
     ["account-filter", [...new Set([...snapshot.expenses.map((e) => e.account), ...Object.keys(settings.cards_config || {})])].sort(), accountLabel, "All accounts"],
-    ["category-filter", [...new Set(snapshot.expenses.map((e) => e.category))].sort(), (value) => value, "All categories"],
-    ["merchant-category", [...new Set(snapshot.expenses.map((e) => e.category))].sort(), (value) => value, "All categories"],
+    ["category-filter", [...new Set(snapshot.expenses.map((e) => PennyReports.category(e, settings)))].sort(), (value) => value, "All categories"],
+    ["merchant-category", [...new Set(snapshot.expenses.map((e) => PennyReports.category(e, settings)))].sort(), (value) => value, "All categories"],
   ]) {
     const previous = id === "month" ? selected : $(id).value;
     $(id).replaceChildren(...["", ...values].map((value) => {
@@ -164,7 +166,7 @@ function renderReports(periodRows) {
     ["Variable", report.variable], ["Special", report.special],
   ].map(([label, amount]) => node("span", `${label} ${money.format(amount)}`)));
   for (const [id, key] of [
-    ["category-report", (row) => row.category],
+    ["category-report", (row) => PennyReports.category(row, settings)],
     ["account-report", (row) => accountLabel(row.account)],
   ]) {
     const groups = PennyReports.group(periodRows, key);
@@ -194,7 +196,7 @@ function renderMerchants(periodRows) {
   const query = $("merchant-search").value.trim().toLocaleLowerCase();
   const grouped = $("merchant-grouping").value === "brand";
   const category = $("merchant-category").value;
-  const groups = PennyReports.group(periodRows.filter((row) => !category || row.category === category), (row) => PennyReports.merchant(row.payee, settings, grouped))
+  const groups = PennyReports.group(periodRows.filter((row) => !category || PennyReports.category(row, settings) === category), (row) => PennyReports.merchant(row.payee, settings, grouped))
     .filter((group) => !query || group.name.toLocaleLowerCase().includes(query) || group.rows.some((row) => row.payee.toLocaleLowerCase().includes(query)));
   const sort = $("merchant-sort").value;
   if (sort === "low") groups.reverse();
@@ -209,8 +211,8 @@ function renderMerchants(periodRows) {
 function filteredPayments(periodRows = selectedPayments()) {
   const query = $("search").value.trim().toLocaleLowerCase();
   const rows = periodRows.filter((e) => (!drilldown || drilldown.ids.has(e.id)) &&
-    (!$("category-filter").value || e.category === $("category-filter").value) &&
-    (!query || [e.payee, e.account, accountLabel(e.account), PennyReports.merchant(e.payee, settings), e.category, e.notes, e.reference].some((s) => s.toLocaleLowerCase().includes(query))));
+    (!$("category-filter").value || PennyReports.category(e, settings) === $("category-filter").value) &&
+    (!query || [e.payee, e.account, accountLabel(e.account), PennyReports.merchant(e.payee, settings), PennyReports.category(e, settings), e.notes, e.reference].some((s) => s.toLocaleLowerCase().includes(query))));
   const sort = $("ledger-sort").value;
   rows.sort((a, b) => sort === "highest" ? b.amount - a.amount : sort === "lowest" ? a.amount - b.amount : sort === "oldest" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
   return rows;
@@ -248,7 +250,7 @@ function render() {
     row.setAttribute("aria-label", `${expense.payee}, ${formatAmount(expense.amount, expense.currency)}, ${expense.date}`);
     const initial = (PennyReports.merchant(expense.payee, settings) || expense.payee).trim().charAt(0).toUpperCase() || "?";
     const text = node("span", undefined, "payment-text");
-    text.append(node("strong", PennyReports.merchant(expense.payee, settings) || expense.payee), node("small", `${expense.category} · ${PennyReports.holder(expense.account, settings)}${byDate ? "" : ` · ${expense.date}`}`));
+    text.append(node("strong", PennyReports.merchant(expense.payee, settings) || expense.payee), node("small", `${PennyReports.category(expense, settings)} · ${PennyReports.holder(expense.account, settings)}${byDate ? "" : ` · ${expense.date}`}`));
     row.append(node("span", initial, expense.evidence_count ? "avatar evidence" : "avatar"), text, node("span", formatAmount(expense.amount, expense.currency), "amount"));
     row.addEventListener("click", () => openEditor(expense));
     list.append(row);
@@ -330,7 +332,9 @@ async function reload(message = "") {
   $("refresh").disabled = true;
   const task = progressTask(firstLoad ? "Opening your ledger" : "Refreshing");
   try {
-    snapshot = await invoke("snapshot");
+    const next = await invoke("snapshot");
+    if (snapshot && snapshot.settings !== next.settings) drilldown = null;
+    snapshot = next;
     settings = JSON.parse(snapshot.settings);
     updatePeriodOptions();
     render();
@@ -665,11 +669,11 @@ $("clear-drilldown").addEventListener("click", () => { drilldown = null; if (sna
 $("clear-ledger").addEventListener("click", () => { $("search").value = $("category-filter").value = ""; drilldown = null; if (snapshot) render(); });
 $("audit-other").addEventListener("click", () => {
   if (!snapshot) return;
-  showGroup("Uncategorized variable payments", snapshot.expenses.filter((row) => row.category === "Other" && !PennyReports.special(row, settings) && !PennyReports.fixedItem(row, settings)));
+  showGroup("Uncategorized variable payments", snapshot.expenses.filter((row) => PennyReports.uncategorized(row, settings)));
 });
 for (const id of ["category-filter", "ledger-sort", "merchant-grouping", "merchant-sort", "merchant-category"]) $(id).addEventListener("change", () => snapshot && render());
 $("merchant-search").addEventListener("input", () => snapshot && render());
-form.addEventListener("input", () => { dirty = true; });
+form.addEventListener("input", () => { dirty = true; updateCategoryChoice(); });
 form.addEventListener("submit", saveExpense);
 editor.addEventListener("cancel", (event) => { if (event.target !== editor) return; event.preventDefault(); closeEditor(); });
 $("close-editor").addEventListener("click", closeEditor);

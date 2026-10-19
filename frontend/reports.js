@@ -27,6 +27,14 @@ const PennyReports = (() => {
     return entries(settings.special_cases).find(([pattern]) => pattern && row.payee.toUpperCase().includes(pattern.toUpperCase()))?.[1] || null;
   }
 
+  function category(row, settings) {
+    const label = special(row, settings);
+    return label ? `Special: ${label}` : row.category;
+  }
+  function uncategorized(row, settings) {
+    return row.category === "Other" && !special(row, settings) && !fixedItem(row, settings);
+  }
+
   function fixedItem(row, settings) {
     const items = settings.fixed_expenses_items || [];
     // An explicitly reviewed category takes precedence over keyword guesses.
@@ -72,5 +80,5 @@ const PennyReports = (() => {
     if (fixed) return `Fixed: ${fixed.name}`;
     return entries(settings.categories).find(([, words]) => words.some((word) => word && payee.toUpperCase().includes(word.toUpperCase())))?.[0] || null;
   }
-  return { sum, group, monthly, holder, merchant, special, fixedItem, suggestCategory };
+  return { sum, group, monthly, holder, merchant, special, category, uncategorized, fixedItem, suggestCategory };
 })();
