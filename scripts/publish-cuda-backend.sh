@@ -9,18 +9,17 @@
 #                                              the same Oriel snapshot, GPU
 #                                              list and CUDA version
 #
-# The key must match CI's: the same vendor/oriel files, CUDA_ARCHS and the
-# CUDA version Arch currently ships (CI installs the latest).
+# The key must match CI's: the same vendor/oriel files, CUDA_ARCHS and CUDA
+# major version (the library links libcublas.so.<major>).
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 
 archs=$(sed -n 's/^  CUDA_ARCHS: //p' .github/workflows/build.yml)
 [[ -n $archs ]] || { printf 'error: no CUDA_ARCHS in .github/workflows/build.yml\n' >&2; exit 1; }
 installed=$(pacman -Q cuda | cut -d' ' -f2)
-latest=$(pacman -Si cuda | awk '/^Version/{print $3}')
-[[ $installed == "$latest" ]] || { printf 'error: CUDA %s installed, Arch ships %s: update it first\n' "$installed" "$latest" >&2; exit 1; }
+major=${installed%%.*}
 ggml=$(sha256sum vendor/oriel/build.zig.zon vendor/oriel/build/ggml.zig | sha256sum | cut -c1-16)
-key="ggml-cuda-$ggml-${archs//,/_}-cuda-$installed"
+key="ggml-cuda-$ggml-${archs//,/_}-cuda$major"
 
 lib=${1:-}
 if [[ -z $lib ]]; then
