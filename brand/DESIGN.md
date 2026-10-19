@@ -6,7 +6,7 @@ Forest outlines, bright leaf green, warm ivory and a coral confirmation mark for
 
 Meticulously spaced eyes, a small fang and an asymmetric smile provide personality without a detailed fantasy scene. The silhouette carries the identity at small scales; larger uses reveal the hands, paper edge and checkmark. The craft comes from restraint and painstaking attention to visual balance.
 
-The primary mark contains no lettering. The application pairs it with a separate Penny Goblin wordmark, preserving legibility and accessibility. The transparent original lives in frontend/logo.png; icon.png is its 1024-pixel application derivative. The original mascot was generated specifically for this application with the image-generation tool. The application identity is com.pennygoblin.app across platforms; desktop data and pairing identity are preserved during the namespace migration.
+The primary mark contains no lettering. The application pairs it with a separate Penny Goblin wordmark, preserving legibility and accessibility. The transparent original lives in frontend/logo.png; icon.png, the 1024-pixel desktop application icon, places it with thickened strokes on the forest-green tile of the Android adaptive icon so it stays legible at 32–48 px (`python3 -I scripts/desktop-icon.py frontend/logo.png icon.png /tmp/icon-preview.png`). The original mascot was generated specifically for this application with the image-generation tool. The application identity is com.pennygoblin.app across platforms; desktop data and pairing identity are preserved during the namespace migration.
 
 ## Name check
 

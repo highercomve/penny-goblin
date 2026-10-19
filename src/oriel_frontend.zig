@@ -46,6 +46,8 @@ pub const State = struct {
     drill_name: ?[]u8 = null,
     drill_ids: std.StringHashMapUnmanaged(void) = .empty,
     drill_active: bool = false,
+    /// The page a drill-down was opened from; Back and its chip return there.
+    drill_from: ?Page = null,
     return_to_editor: bool = false,
     editor_dirty: bool = false,
     inputs: [input_names.len][512]u8 = undefined,
@@ -572,10 +574,18 @@ pub fn clear_drilldown(e: *ui.Engine) void {
     if (s.drill_name) |name| e.gpa.free(name);
     s.drill_name = null;
     s.drill_active = false;
+    s.drill_from = null;
+}
+fn leave_drilldown(e: *ui.Engine) !void {
+    const from = s.drill_from;
+    clear_drilldown(e);
+    if (from) |page| try navigate(e, page);
+    try render(e);
 }
 pub fn drilldown(e: *ui.Engine, ids: []const []const u8, name: []const u8) !void {
     clear_drilldown(e);
     errdefer clear_drilldown(e);
+    s.drill_from = s.page;
     s.drill_name = try e.gpa.dupe(u8, name);
     for (ids) |id| {
         const owned = try e.gpa.dupe(u8, id);
@@ -637,6 +647,12 @@ pub fn render(e: *ui.Engine) !void {
     _ = try BudgetPart.mount(&e.tree, 27000004, 70700, &.{.{ .name = "text", .value = try std.fmt.bufPrint(&parts, "Special {s}", .{try reports.money(&special, total.special)}) }});
     _ = try e.tree.stampKids(aid("budget-parts"), &.{ 27000000, 27000004 });
     try show(e, aid("clear-drilldown"), s.drill_active);
+    try set_text(e, aid("clear-drilldown"), if (s.drill_from) |from| switch (from) {
+        .home => "Back to Home",
+        .payments => "Back to Payments",
+        .insights => "Back to Insights",
+        .settings => "Back to Settings",
+    } else "Clear filter");
     try render_payments(e, selected.items);
     // Insights in CLP, as the budget; the list above shows every currency.
     var clp: std.ArrayList(model.Expense) = .empty;
@@ -955,7 +971,7 @@ pub fn request_close(e: *ui.Engine) !void {
         redraw(e);
         return;
     }
-    if (s.modal != .none) try close_modal(e) else try navigate(e, .home);
+    if (s.modal != .none) try close_modal(e) else if (s.drill_from != null) try leave_drilldown(e) else try navigate(e, .home);
 }
 /// Whether node `id` is the open dialog's (Notice, mounted at 19000) or inside it.
 fn inNotice(e: *ui.Engine, id: i64) bool {
@@ -1004,6 +1020,11 @@ fn click(e: *ui.Engine, id: i64) !bool {
     if (s.modal == .editor) return editor_click(e, id);
     if (s.modal != .none) return tools.click(e, id);
     inline for (.{ "home", "payments", "insights", "settings" }) |page| if (id == aid("nav-" ++ page)) {
+        // Choosing a destination ends a drill-down, as in the web view.
+        if (s.drill_active) {
+            clear_drilldown(e);
+            try render(e);
+        }
         try navigate(e, @field(Page, page));
         return true;
     };
@@ -1032,8 +1053,7 @@ fn click(e: *ui.Engine, id: i64) !bool {
         return true;
     }
     if (id == aid("clear-drilldown")) {
-        clear_drilldown(e);
-        try render(e);
+        try leave_drilldown(e);
         return true;
     }
     if (id == aid("research-open")) {
@@ -1653,7 +1673,9 @@ test "Insights keeps web chart geometry, percentages and exact row actions" {
     _ = try handle_event(e, ReportView.id("title", 6000000), "click", "0");
     try std.testing.expectEqual(Page.payments, s.page);
     try std.testing.expectEqual(@as(usize, 1), s.selected.items.len);
-    clear_drilldown(e);
+    try std.testing.expect(e.back()); // Back returns to the report it came from.
+    try std.testing.expectEqual(Page.insights, s.page);
+    try std.testing.expect(!s.drill_active);
     try navigate(e, .insights);
     _ = try handle_event(e, 14000000, "click", "0");
     try std.testing.expectEqual(Modal.editor, s.modal);

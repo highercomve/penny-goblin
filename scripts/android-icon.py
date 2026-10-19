@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Penny Goblin's Android adaptive icon from icon.png: the mascot centred in
+"""Penny Goblin's Android adaptive icon from the transparent mark: the mascot centred in
 Android's safe zone on a forest-green background (res/values), plus the
 monochrome layer for themed icons, at every density.
 
-    python3 -I scripts/android-icon.py icon.png android/app/src/main/res /tmp/icon-preview.png
+    python3 -I scripts/android-icon.py frontend/logo.png android/app/src/main/res /tmp/icon-preview.png
 """
 import sys, math
 from PIL import Image, ImageDraw

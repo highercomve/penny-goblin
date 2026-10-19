@@ -118,10 +118,38 @@ test "research groups eligible merchants and applies reviewed mixed categories a
     try std.testing.expect(!eligible(fixed, try std.json.parseFromSliceLeaky(reports.Settings, a, settings, .{})));
 }
 
-/// Only the merchant label reaches search, with numeric identifiers/email
-/// tokens removed. The model cannot broaden queries using page instructions.
+/// Card descriptors read "PROCESSOR*BUSINESS" when a payment provider's
+/// terminal or gateway took the card (MERPAGO*HAPETITO is a Mercado Pago POS
+/// at Hapetito). Only known processors are split: elsewhere the text before
+/// the asterisk is the business itself (UBER *TRIP).
+const processors = [_][2][]const u8{
+    .{ "MERCADOPAGO", "Mercado Pago" }, .{ "MERPAGO", "Mercado Pago" }, .{ "MP", "Mercado Pago" },
+    .{ "TUU", "TUU" },                   .{ "PAYU", "PayU" },              .{ "REDGLOBA", "Redglobal" },
+    .{ "DL", "dLocal" },                 .{ "SUMUP", "SumUp" },            .{ "RAPYD", "Rapyd" },
+    .{ "PAYSCAN", "Payscan" },           .{ "FUDO", "Fudo" },              .{ "FLOW", "Flow" },
+};
+pub const Descriptor = struct { business: []const u8, processor: []const u8 = "" };
+pub fn descriptor(merchant: []const u8) Descriptor {
+    const star = std.mem.indexOfScalar(u8, merchant, '*') orelse return .{ .business = merchant };
+    const prefix = std.mem.trim(u8, merchant[0..star], " ");
+    const business = std.mem.trim(u8, merchant[star + 1 ..], " ");
+    if (business.len == 0) return .{ .business = merchant };
+    for (processors) |p| if (std.ascii.eqlIgnoreCase(prefix, p[0])) return .{ .business = business, .processor = p[1] };
+    return .{ .business = merchant };
+}
+test "payment processor prefixes are split from the business" {
+    try std.testing.expectEqualDeep(Descriptor{ .business = "HAPETITO", .processor = "Mercado Pago" }, descriptor("MERPAGO*HAPETITO"));
+    try std.testing.expectEqualDeep(Descriptor{ .business = "SEPULVEDA Y RIVERA", .processor = "TUU" }, descriptor("TUU*SEPULVEDA Y RIVERA"));
+    try std.testing.expectEqualDeep(Descriptor{ .business = "CAFE NUK.", .processor = "SumUp" }, descriptor("SUMUP * CAFE NUK."));
+    try std.testing.expectEqualDeep(Descriptor{ .business = "UBER *TRIP" }, descriptor("UBER *TRIP"));
+    try std.testing.expectEqualDeep(Descriptor{ .business = "MERPAGO*" }, descriptor("MERPAGO*"));
+}
+
+/// Only the business label reaches search, without its payment processor
+/// and with numeric identifiers/email tokens removed. The model cannot
+/// broaden queries using page instructions.
 pub fn search_query(a: std.mem.Allocator, merchant: []const u8) ![]const u8 {
-    var words = std.mem.tokenizeAny(u8, merchant, " \t\r\n");
+    var words = std.mem.tokenizeAny(u8, descriptor(merchant).business, " \t\r\n");
     var query: std.ArrayList(u8) = .empty;
     while (words.next()) |word| {
         var digits: usize = 0;
@@ -140,4 +168,5 @@ test "search never receives embedded bank identifiers or email tokens" {
     defer arena.deinit();
     try std.testing.expectEqualStrings("Merchant Chile", try search_query(arena.allocator(), "Merchant 12.345.678-9 hello@example.com"));
     try std.testing.expectError(error.NoSearchableMerchant, search_query(arena.allocator(), "123456789"));
+    try std.testing.expectEqualStrings("HAPETITO Chile", try search_query(arena.allocator(), "MERPAGO*HAPETITO"));
 }

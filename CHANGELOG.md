@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.12
+
+- Opening a category, merchant or fixed item from Home or Insights can be
+  undone: Back (and the "Back to Insights" chip on desktop) returns to the
+  report it came from instead of leaving a filtered Payments list. On
+  desktop, Alt+Left, the mouse back button and Escape do the same.
+- The desktop icon sits on the forest-green tile Android uses, with bolder
+  strokes, instead of a thin outline that faded at launcher sizes.
+- Category research searches for the business behind a payment processor
+  prefix (MERPAGO*HAPETITO searches "HAPETITO Chile") and tells the model
+  which processor took the card, so it no longer researches Mercado Pago,
+  TUU, PayU, SumUp and similar providers.
+
 ## 0.2.11
 
 - Use the published Oriel 0.18.0 release with a verified package hash instead of a vendored snapshot.

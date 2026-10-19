@@ -12,11 +12,11 @@
   <script src="merchants.js?v=8" defer></script>
   <script src="reports.js?v=8" defer></script>
   <script src="analysis.js?v=8" defer></script>
-  <script src="app.js?v=8" defer></script>
+  <script src="app.js?v=10" defer></script>
   <script src="preferences.js?v=8" defer></script>
   <script src="statements.js?v=8" defer></script>
   <script src="sync.js?v=8" defer></script>
-  <script src="nav.js?v=8" defer></script>
+  <script src="nav.js?v=10" defer></script>
   <script src="scanner.js?v=8" defer></script>
   <script src="research.js?v=1" defer></script>
   <script src="categories.js?v=1" defer></script>
@@ -38,6 +38,7 @@
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.05-4.95M19 4v4h-4"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/></symbol>
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="M20 12H4m6-6-6 6 6 6"/></symbol>
     <symbol id="i-sync" viewBox="0 0 24 24"><path d="M5 9a7 7 0 0 1 12.5-2.5L19 8M19 4v4h-4M19 15a7 7 0 0 1-12.5 2.5L5 16M5 20v-4h4"/></symbol>
     <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h11v4M4 7v11a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H6a2 2 0 0 1-2-2zM16 14h1"/></symbol>
     <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/></symbol>
@@ -106,11 +107,11 @@
         <h2 id="ledger-title" class="visually-hidden">Payments</h2>
         <label class="search-bar"><svg><use href="#i-search"/></svg><span class="visually-hidden">Search payments</span><input id="search" type="search" placeholder="Search payments"></label>
         <div class="chips filters">
+          <button id="clear-drilldown" class="chip selected" hidden><svg><use href="#i-back"/></svg><span id="drilldown-label">Clear filter</span></button>
           <label class="select-chip"><span class="visually-hidden">Category</span><select id="category-filter"><option value="">All categories</option></select></label>
           <label class="select-chip"><span class="visually-hidden">Sort</span><select id="ledger-sort"><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="highest">Highest</option><option value="lowest">Lowest</option></select></label>
           <button id="audit-other" class="chip">Uncategorized</button>
           <button id="research-open" class="chip" hidden>Research categories</button>
-          <button id="clear-drilldown" class="chip selected" hidden>Clear filter</button>
           <button id="clear-ledger" class="chip">Reset</button>
         </div>
         <details class="range"><summary class="chip"><svg><use href="#i-calendar"/></svg>Date range</summary>

@@ -145,8 +145,13 @@ function reportRow(label, amount, detail, onClick) {
 function showGroup(name, rows) {
   drilldown = { name, ids: new Set(rows.map((row) => row.id)) };
   $("search").value = $("category-filter").value = "";
+  if (typeof showFrom === "function") showFrom("payments");
   render();
-  if (typeof showView === "function") showView("payments");
+}
+function endDrilldown() {
+  if (!drilldown) return;
+  drilldown = null;
+  if (snapshot) render();
 }
 
 function renderReports(periodRows) {
@@ -232,6 +237,9 @@ function render() {
   $("count").textContent = periodRows.length.toLocaleString();
   $("evidence-count").textContent = periodRows.filter((e) => e.evidence_count > 0).length.toLocaleString();
   $("clear-drilldown").hidden = !drilldown;
+  const origin = drilldown && typeof drilldownOrigin === "function" ? drilldownOrigin() : null;
+  $("drilldown-label").textContent = origin ? `Back to ${origin}` : "Clear filter";
+  $("clear-drilldown").querySelector("svg").style.display = origin ? "" : "none";
   $("ledger-filter-hint").textContent = drilldown ? `${drilldown.name} · ${rows.length}` : rows.length === periodAll.length ? "" : `${rows.length} of ${periodAll.length}`;
   const list = $("rows");
   list.replaceChildren();
@@ -665,7 +673,7 @@ for (const id of ["date-from", "date-through"]) $(id).addEventListener("change",
 });
 $("search").addEventListener("input", () => snapshot && render());
 $("clear-filters").addEventListener("click", () => { $("month").value = $("account-filter").value = $("search").value = $("category-filter").value = $("date-from").value = $("date-through").value = ""; $("date-through").setCustomValidity(""); drilldown = null; if (snapshot) render(); });
-$("clear-drilldown").addEventListener("click", () => { drilldown = null; if (snapshot) render(); });
+$("clear-drilldown").addEventListener("click", () => { if (typeof drilldownOrigin === "function" && drilldownOrigin()) history.back(); else endDrilldown(); });
 $("clear-ledger").addEventListener("click", () => { $("search").value = $("category-filter").value = ""; drilldown = null; if (snapshot) render(); });
 $("audit-other").addEventListener("click", () => {
   if (!snapshot) return;
