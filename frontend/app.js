@@ -673,6 +673,20 @@ form.addEventListener("input", () => { dirty = true; });
 form.addEventListener("submit", saveExpense);
 editor.addEventListener("cancel", (event) => { if (event.target !== editor) return; event.preventDefault(); closeEditor(); });
 $("close-editor").addEventListener("click", closeEditor);
+// A backdrop click must start and end outside the sheet. Dragging from a
+// field or selecting text must never dismiss the payment draft.
+let editorOutsidePress = false;
+function outsideEditor(event) {
+  const bounds = editor.getBoundingClientRect();
+  return event.target === editor && (event.clientX < bounds.left || event.clientX >= bounds.right || event.clientY < bounds.top || event.clientY >= bounds.bottom);
+}
+editor.addEventListener("pointerdown", (event) => { editorOutsidePress = event.button === 0 && outsideEditor(event); });
+editor.addEventListener("pointercancel", () => { editorOutsidePress = false; });
+editor.addEventListener("click", (event) => {
+  const dismiss = editorOutsidePress && outsideEditor(event);
+  editorOutsidePress = false;
+  if (dismiss) closeEditor();
+});
 $("receipt-file").addEventListener("change", (event) => chooseImage(event.target.files[0]));
 $("camera-file").addEventListener("change", (event) => chooseImage(event.target.files[0]));
 $("remove-image").addEventListener("click", () => { pendingDocument = null; dirty = true; showPending(); status("editor-status", ""); });

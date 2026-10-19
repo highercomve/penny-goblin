@@ -908,6 +908,10 @@ fn handle_event(e: *ui.Engine, id: i64, kind: []const u8, data: []const u8) !boo
         return true;
     }
     if (!std.mem.eql(u8, kind, "click")) return false;
+    if (id == 19500 and s.modal == .editor and !s.notice_open) {
+        try request_close(e);
+        return true;
+    }
     // The engine reports the hit leaf; resolve against its ancestor controls.
     var node = e.tree.get(id);
     var depth: usize = 0;
@@ -2054,4 +2058,37 @@ test "category picker preserves drafts and reviews merges across all dates" {
     try std.testing.expect(categories.active);
     try std.testing.expect(e.back());
     try std.testing.expect(!categories.active);
+}
+
+test "payment backdrop dismisses clean sheets and protects dirty or busy drafts" {
+    const a = std.testing.allocator;
+    var host: TestHost = .{ .allocator = a };
+    defer host.deinit();
+    configure(std.testing.io);
+    const e = try ui.Engine.create(a, .{ .ctx = &host, .measure = TestHost.measure, .laid_out = TestHost.laid, .removed = TestHost.removed, .add_timer = TestHost.timer, .invoke = TestHost.dispatch, .focus = TestHost.focus }, &.{}, "{}", "main", "application.oriel", 1280, 820);
+    defer e.destroy();
+    try boot(e);
+    const snapshot: app.Snapshot = .{ .expenses = &.{}, .settings = "{}", .platform = "linux", .vision_available = false, .tray_running = false, .statements = &.{} };
+    const encoded = try std.json.Stringify.valueAlloc(a, snapshot, .{});
+    defer a.free(encoded);
+    try resolved(e, @intFromEnum(Request.snapshot), true, encoded);
+    try open_editor(e, null);
+    try std.testing.expect(e.tree.get(19500).?.props.click);
+    _ = try handle_event(e, eid("editor-title"), "click", "0");
+    try std.testing.expectEqual(Modal.editor, s.modal);
+    _ = try handle_event(e, 19500, "click", "0");
+    try std.testing.expectEqual(Modal.none, s.modal);
+    try open_editor(e, null);
+    try set_value(e, eid("field-payee"), "Unsaved merchant");
+    s.dirty = true;
+    _ = try handle_event(e, 19500, "click", "0");
+    try std.testing.expect(s.notice_open);
+    _ = try handle_event(e, 19500, "click", "0");
+    try std.testing.expect(s.notice_open);
+    _ = try handle_event(e, Notice.id("cancel", 19000), "click", "0");
+    try std.testing.expectEqualStrings("Unsaved merchant", value(e, eid("field-payee")));
+    s.busy = true;
+    _ = try handle_event(e, 19500, "click", "0");
+    try std.testing.expect(!s.notice_open and s.modal == .editor);
+    s.busy = false;
 }

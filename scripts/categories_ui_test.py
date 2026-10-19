@@ -44,6 +44,32 @@ window.addEventListener('load',async()=>{
  const input=(id,value)=>{document.getElementById(id).value=value;document.getElementById(id).dispatchEvent(new Event('input',{bubbles:true}));};
  try{
   await until(()=>snapshot);
+  if (window.innerWidth > 600) {
+    const outside=(downX=0,downY=0)=>{
+      editor.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerType:'mouse',clientX:downX,clientY:downY}));
+      editor.dispatchEvent(new MouseEvent('click',{bubbles:true,button:0,clientX:0,clientY:0}));
+    };
+    await openEditor(snapshot.expenses[0]);
+    const bounds=editor.getBoundingClientRect();
+    outside(bounds.left+40,bounds.top+100);
+    check(editor.open,'Dragging from inside dismissed payment');
+    editor.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,clientX:0,clientY:0}));
+    editor.dispatchEvent(new PointerEvent('pointercancel',{bubbles:true}));
+    editor.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:0,clientY:0}));
+    check(editor.open,'Cancelled press dismissed payment');
+    outside();
+    await until(()=>!editor.open);
+    await new Promise(r=>setTimeout(r,100));
+    await openEditor(snapshot.expenses[0]);
+    form.elements.namedItem('payee').value='Keep my draft';form.dispatchEvent(new Event('input',{bubbles:true}));
+    outside();await until(()=>document.getElementById('ask-dialog').open);
+    document.querySelector('#ask-dialog button[value=""]').click();
+    await until(()=>!document.getElementById('ask-dialog').open);
+    check(editor.open && form.elements.namedItem('payee').value==='Keep my draft','Outside click lost dirty draft');
+    dirty=false;
+    await new Promise(r=>setTimeout(r,100));outside();await until(()=>!editor.open);
+    await new Promise(r=>setTimeout(r,100));
+  }
   await openEditor(snapshot.expenses[0]);
   form.elements.namedItem('payee').value='Unsaved merchant';
   document.getElementById('choose-category').click();
