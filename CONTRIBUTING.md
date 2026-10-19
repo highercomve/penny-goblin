@@ -11,9 +11,9 @@ changes. Review scanner output manually; never make extraction auto-save payment
 Synchronization changes must preserve authentication, revision checks and atomic
 writes. Research suggestions remain drafts until explicit Apply.
 
-The Oriel dependency is a source snapshot, not a moving Git branch. Refresh it
-only with a tested upstream revision/snapshot, retaining its licenses and updating
-SNAPSHOT.json hashes. Run `python3 scripts/check-vendor.py` before committing.
+The Oriel dependency is a tagged upstream release with a package hash in
+`build.zig.zon`. Update it with `zig fetch --save-exact=oriel <release-url>`
+and validate both renderers and Android before releasing.
 
 Android Gradle output is generated and ignored. Update `build.zig` for package
 metadata, hooks and permissions; edit Kotlin/resources under `platform/android`.

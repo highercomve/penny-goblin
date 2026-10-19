@@ -20,7 +20,7 @@ pub fn build(b: *std.Build) void {
     const ggml_cuda = b.option(bool, "ggml_cuda", "Linux: CUDA backend for local vision (needs the CUDA toolkit)") orelse false;
     const cuda_arch = b.option([]const u8, "cuda_arch", "-Dggml_cuda: compute capabilities like 75,86,89,120 (default: this machine's GPU)");
     const cuda_static = b.option(bool, "cuda_static", "-Dggml_cuda: link cuBLAS statically, so only the NVIDIA driver is needed at runtime") orelse false;
-    const cuda_prebuilt = b.option([]const u8, "ggml_cuda_prebuilt", "Absolute path of a libggml-cuda.so built earlier from this Oriel snapshot (implies -Dggml_cuda; no nvcc)");
+    const cuda_prebuilt = b.option([]const u8, "ggml_cuda_prebuilt", "Absolute path of a libggml-cuda.so built earlier from this Oriel release (implies -Dggml_cuda; no nvcc)");
     const helper_file: ?std.Build.LazyPath = if (mobile) null else blk: {
         // The helper is a native executable: PyInstaller builds it on the host OS.
         const command = b.addSystemCommand(&.{if (b.graph.host.result.os.tag == .windows) "python" else "python3"});
@@ -75,6 +75,13 @@ pub fn build(b: *std.Build) void {
         .native_ui = renderer != .webview or (b.option(bool, "native_ui", "Compatibility: use HTML/JS native renderer") orelse false),
         .zig_ui = renderer == .oriel,
     });
+
+    // Hash the resolved package independently of its Zig cache location.
+    const cuda_key = b.addSystemCommand(&.{"python3"});
+    cuda_key.addFileArg(b.path("scripts/cuda-backend-key.py"));
+    cuda_key.addFileArg(dep.path("build.zig.zon"));
+    cuda_key.addFileArg(dep.path("build/ggml.zig"));
+    b.step("cuda-backend-key", "Print the CUDA backend source fingerprint").dependOn(&cuda_key.step);
 
     // Frontend in frontend/ (embeds frontend/ as-is).
     // zig build          production build
@@ -136,7 +143,7 @@ pub fn build(b: *std.Build) void {
             .name = "Penny Goblin",
             // .publisher = "Your Name <you@example.com>", // default: from the app id
             .summary = "Private household expenses, on your devices",
-            .version = "0.2.10",
+            .version = "0.2.11",
         },
         // The isolation pattern: every call from the frontend to Zig goes
         // through isolation/hook.js first, in a frame the page can't reach.
@@ -222,7 +229,9 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const research_verifier = b.addExecutable(.{ .name = "verify-research", .use_llvm = true, .use_lld = target.result.ofmt != .macho, .root_module = b.createModule(.{
-        .root_source_file = b.path("src/verify_research.zig"), .target = target, .optimize = .ReleaseSafe,
+        .root_source_file = b.path("src/verify_research.zig"),
+        .target = target,
+        .optimize = .ReleaseSafe,
         .imports = &.{ .{ .name = "oriel", .module = dep.module("oriel") }, .{ .name = "oriel_app", .module = app_module } },
     }) });
     const verify_research = b.addRunArtifact(research_verifier);

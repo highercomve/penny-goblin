@@ -30,7 +30,6 @@ jobs:
       - uses: mlugg/setup-zig@v2
         with:
           version: ${{ env.ZIG_VERSION }}
-      - run: python scripts/check-vendor.py
       - run: zig build test -Dvision=false --summary all
       - run: zig build test-ui -Drenderer=oriel -Dvision=false --summary all
       - run: node --test scripts/reports.test.cjs
@@ -71,7 +70,7 @@ jobs:
       # The WebKit build's scanner runs on NVIDIA GPUs through CUDA:
       # libggml-cuda.so (cuBLAS from the system's CUDA 13 runtime; without
       # it, or without an NVIDIA driver, scans run on the CPU). One per Oriel
-      # snapshot, GPU list and CUDA version: from the Actions cache, else the
+      # release, GPU list and CUDA version: from the Actions cache, else the
       # prebuilt one on this repository's release of the same name (nvcc on a
       # hosted runner takes over an hour; scripts/publish-cuda-backend.sh
       # uploads one built on a faster machine), else compiled here.
@@ -79,7 +78,7 @@ jobs:
         if: matrix.renderer == 'webview'
         id: cuda
         run: |
-          ggml=$(sha256sum vendor/oriel/build.zig.zon vendor/oriel/build/ggml.zig | sha256sum | cut -c1-16)
+          ggml=$(zig build cuda-backend-key -Dvision=false)
           # CUDA's major version: the library links libcublas.so.<major>.
           echo "key=ggml-cuda-$ggml-${CUDA_ARCHS//,/_}-cuda$(pacman -Si cuda | awk '/^Version/{split($3, v, "."); print v[1]}')" >> "$GITHUB_OUTPUT"
       - name: Restore the CUDA backend

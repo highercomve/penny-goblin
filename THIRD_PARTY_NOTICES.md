@@ -1,9 +1,10 @@
 # Third-party notices
 
-Oriel source is vendored under its own LICENSE and NOTICE, with dependency
-attribution in `vendor/oriel/licenses/`. Its upstream revision and local snapshot
-hashes are in `vendor/oriel/SNAPSHOT.json`. The application has no open-source
-license assigned; this does not alter third-party licenses.
+Oriel 0.18.0 is fetched from https://github.com/highercomve/Oriel using the
+release URL and package hash in `build.zig.zon`. Its LICENSE, NOTICE and
+`licenses/` directory remain in the fetched package and apply to distributed
+builds. The application has no open-source license assigned; this does not alter
+third-party licenses.
 
 Zig fetches the dependencies pinned by the Oriel package manifest, including
 SQLite, llama.cpp, Yoga, QuickJS-ng, GTK bindings and zigimg. Python helper packages

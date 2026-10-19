@@ -95,7 +95,6 @@ only to the public site repository. Pull requests never publish.
 ## Development and tests
 
 ```sh
-python3 scripts/check-vendor.py
 zig build test -Dvision=false
 zig build test-ui -Drenderer=oriel -Dvision=false
 node --test scripts/reports.test.cjs
@@ -116,12 +115,13 @@ use synthetic fixtures and do not touch a real ledger.
 | `views/` | Compiled `.oriel` UI and exported layout fixtures |
 | `frontend/` | Matching WebKit HTML/CSS/JavaScript UI |
 | `platform/android/` | OCR, secure sync and Android integration sources |
-| `vendor/oriel/` | Pinned source snapshot with upstream revision and file hashes |
+| `build.zig.zon` | Oriel release URL and verified package hash |
 | `scripts/` | Reproducible builds and acceptance fixtures |
 | `site/` | Zine website source |
 
-The Oriel snapshot includes unreleased renderer features required by this app.
-See [vendor provenance](vendor/README.md), [contributing](CONTRIBUTING.md),
+Oriel 0.18.0 supplies the native renderer and platform integrations. Zig fetches
+the tagged release and verifies its pinned package hash.
+See [contributing](CONTRIBUTING.md),
 [security](SECURITY.md), [sync](SYNC.md), [changelog](CHANGELOG.md), and the
 [implementation plan](PLAN.md). App data, receipts, models, keys and legacy
 financial exports are excluded from version control.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.11
+
+- Use the published Oriel 0.18.0 release with a verified package hash instead of a vendored snapshot.
+- Include upstream renderer and file-picker safety fixes.
+- Keep reproducible CUDA backend caching with the resolved framework package.
+
 ## 0.2.10
 
 - Keep the category picker above the payment sheet on Android so category taps reveal an interactive screen.

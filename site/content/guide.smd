@@ -57,8 +57,8 @@ filters. Its suggestions remain a draft until you review and select Apply.
 # Build it yourself
 
 Collaborators can clone the private repository and follow its README. The source
-contains a documented Oriel snapshot so builds do not depend on a developer's
-local framework checkout. Zig 0.16.0 is required.
+pins Oriel 0.18.0 with a verified package hash, so builds do not depend on a
+developer’s local framework checkout. Zig 0.16.0 is required.
 
 ```sh
 zig build run -Drenderer=oriel
