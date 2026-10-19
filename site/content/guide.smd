@@ -7,15 +7,15 @@ Penny Goblin is a household ledger for **Linux and Android**, built with Zig and
 Oriel. It is in early development. The application's source repository is
 private; its builds and this website are public.
 
-# Try a build
+# Download Penny Goblin
 
-Download the latest build:
+Download the [latest release](https://github.com/highercomve/penny-goblin-site/releases/latest):
 
 - [Linux x86_64 AppImage](https://github.com/highercomve/penny-goblin-site/releases/latest/download/penny-goblin-linux-x86_64-oriel.AppImage) (compiled Oriel interface; the scanner can use any GPU through Vulkan)
 - [Linux x86_64 AppImage, WebView interface](https://github.com/highercomve/penny-goblin-site/releases/latest/download/penny-goblin-linux-x86_64-webview.AppImage) (scans on NVIDIA GPUs with CUDA)
-- [Windows x86_64 installer](https://github.com/highercomve/penny-goblin-site/releases/latest/download/penny-goblin-windows-x86_64-setup.exe)
-- [macOS disk image, Apple silicon](https://github.com/highercomve/penny-goblin-site/releases/latest/download/penny-goblin-macos-arm64.dmg)
 - [Android arm64 APK](https://github.com/highercomve/penny-goblin-site/releases/latest/download/penny-goblin-android-arm64.apk)
+
+Windows and macOS packages are not yet available for the current release.
 
 Every version, its notes and the [SHA256SUMS](https://github.com/highercomve/penny-goblin-site/releases/latest/download/SHA256SUMS)
 of its files are on the [releases page](https://github.com/highercomve/penny-goblin-site/releases).
@@ -24,11 +24,7 @@ There is no app-store release yet.
 Linux builds need compatible GTK4 and WebKitGTK 6 system libraries; make the
 AppImage executable (`chmod +x`) before running it. The WebView AppImage
 scans receipts on an NVIDIA GPU when the NVIDIA driver and the CUDA 13
-runtime (cuBLAS) are installed, and on the CPU otherwise. Windows 10 and 11
-need the WebView2 runtime (included with Windows 11 and current Edge); the
-scanner can use the GPU through Vulkan (Settings → Receipt scanner). The macOS
-build is for Apple silicon (macOS 13 or newer) and scans with Metal; it isn't
-notarized, so open it the first time with right-click → Open. Android builds require
+runtime (cuBLAS) are installed, and on the CPU otherwise. Android builds require
 Android 10 or newer. These APKs use development signing: an existing
 installation can only be upgraded by an APK with the same certificate. Keep
 your current data and pairing safe; use an isolated test device or profile when
