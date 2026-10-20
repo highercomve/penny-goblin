@@ -6,6 +6,10 @@ const model = ledger_mod.model;
 pub const Row = struct { date: []const u8, amount: i64, payee: []const u8, account: []const u8, category: []const u8, currency: []const u8 = "CLP" };
 /// The statement parsers whose rows are accepted (statement_helper.py).
 const parsers = [_][]const u8{ "santander-web-v1", "bci-card-v1", "bci-cartola-v1" };
+pub fn supported_parser(parser: []const u8) bool {
+    for (parsers) |name| if (std.mem.eql(u8, name, parser)) return true;
+    return false;
+}
 pub const Parsed = struct { parser: []const u8, rows: []const Row };
 pub const Source = struct { hash: []const u8, name: []const u8, status: []const u8 };
 pub const Observation = struct { id: []const u8, source: Row, expense_id: ?[]const u8, ignored: bool };
@@ -62,10 +66,15 @@ pub fn pdf_bytes(arena: std.mem.Allocator, data_url: []const u8) ![]u8 {
     const encoded = data_url[prefix.len..];
     const decoder = std.base64.standard.Decoder;
     const bytes = try arena.alloc(u8, try decoder.calcSizeForSlice(encoded));
+    errdefer arena.free(bytes);
     if (bytes.len > 32 * 1024 * 1024) return error.InvalidPdf;
     try decoder.decode(bytes, encoded);
     if (!std.mem.startsWith(u8, bytes, "%PDF-")) return error.InvalidPdf;
     return bytes;
+}
+
+test "invalid decoded PDF releases its allocation" {
+    try std.testing.expectError(error.InvalidPdf, pdf_bytes(std.testing.allocator, "data:application/pdf;base64,bm90cGRm"));
 }
 
 pub fn stage(db: ledger_mod.Ledger, arena: std.mem.Allocator, name: []const u8, data_url: []const u8) ![]const u8 {
@@ -114,9 +123,7 @@ pub fn content(db: ledger_mod.Ledger, arena: std.mem.Allocator, hash: []const u8
 }
 
 pub fn accept_parse(db: ledger_mod.Ledger, arena: std.mem.Allocator, hash: []const u8, parsed: Parsed) !void {
-    const known = for (parsers) |name| {
-        if (std.mem.eql(u8, parsed.parser, name)) break true;
-    } else false;
+    const known = supported_parser(parsed.parser);
     if (!model.valid_id(hash) or parsed.rows.len == 0 or parsed.rows.len > 10000 or !known) return error.InvalidStatement;
     try db.db.exec("BEGIN IMMEDIATE");
     errdefer db.db.exec("ROLLBACK") catch {};

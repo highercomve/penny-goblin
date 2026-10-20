@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.13
+
+- Security and memory safety audit fixes:
+  - Add image header validation (`image_header.zig`) to verify PNG/JPEG headers and dimensions before decoding.
+  - Enforce explicit JSON document size limits (`json_limits.zig`) across settings, sync, and ledger parsing.
+  - Atomic and permission-restricted file publishing (`private_file.zig`) for sensitive ledger and statement files.
+  - Add recursion depth bounds (depth <= 64) and stampKids safety checks across compiled Oriel views.
+  - Re-use search arenas in payment views to reduce allocation churn.
+  - Fix category casing search collision in web and Oriel category picker.
+  - Add OOM rollback and stale event protection tests in UI frontend.
+
 ## 0.2.12
 
 - Pin desktop WebKit CI to a full-size display and retry failed NSIS tool downloads.

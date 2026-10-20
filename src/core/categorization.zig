@@ -124,9 +124,9 @@ test "research groups eligible merchants and applies reviewed mixed categories a
 /// the asterisk is the business itself (UBER *TRIP).
 const processors = [_][2][]const u8{
     .{ "MERCADOPAGO", "Mercado Pago" }, .{ "MERPAGO", "Mercado Pago" }, .{ "MP", "Mercado Pago" },
-    .{ "TUU", "TUU" },                   .{ "PAYU", "PayU" },              .{ "REDGLOBA", "Redglobal" },
-    .{ "DL", "dLocal" },                 .{ "SUMUP", "SumUp" },            .{ "RAPYD", "Rapyd" },
-    .{ "PAYSCAN", "Payscan" },           .{ "FUDO", "Fudo" },              .{ "FLOW", "Flow" },
+    .{ "TUU", "TUU" },                  .{ "PAYU", "PayU" },            .{ "REDGLOBA", "Redglobal" },
+    .{ "DL", "dLocal" },                .{ "SUMUP", "SumUp" },          .{ "RAPYD", "Rapyd" },
+    .{ "PAYSCAN", "Payscan" },          .{ "FUDO", "Fudo" },            .{ "FLOW", "Flow" },
 };
 pub const Descriptor = struct { business: []const u8, processor: []const u8 = "" };
 pub fn descriptor(merchant: []const u8) Descriptor {
@@ -153,7 +153,9 @@ pub fn search_query(a: std.mem.Allocator, merchant: []const u8) ![]const u8 {
     var query: std.ArrayList(u8) = .empty;
     while (words.next()) |word| {
         var digits: usize = 0;
-        for (word) |ch| if (std.ascii.isDigit(ch)) { digits += 1; };
+        for (word) |ch| if (std.ascii.isDigit(ch)) {
+            digits += 1;
+        };
         if (digits >= 4 or std.mem.indexOfScalar(u8, word, '@') != null) continue;
         if (query.items.len + word.len > 220) break;
         if (query.items.len > 0) try query.append(a, ' ');

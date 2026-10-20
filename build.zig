@@ -143,7 +143,7 @@ pub fn build(b: *std.Build) void {
             .name = "Penny Goblin",
             // .publisher = "Your Name <you@example.com>", // default: from the app id
             .summary = "Private household expenses, on your devices",
-            .version = "0.2.12",
+            .version = "0.2.13",
         },
         // The isolation pattern: every call from the frontend to Zig goes
         // through isolation/hook.js first, in a frame the page can't reach.

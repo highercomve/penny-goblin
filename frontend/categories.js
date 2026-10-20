@@ -123,7 +123,7 @@ $("category-edit").addEventListener("submit", (event) => {
   event.preventDefault();
   const target = $("category-target").value.trim().replace(/\s+/g, " ");
   if (!target || target === categorySource || categoryReserved(target)) { status("category-status", "Enter a different category name.", true); return; }
-  const existing = categoryNames.find((name) => name !== categorySource && categoryKey(name) === categoryKey(target));
+  const existing = categoryNames.includes(target) ? target : categoryNames.find((name) => name !== categorySource && categoryKey(name) === categoryKey(target));
   if (existing && existing !== target) { status("category-status", `Use the existing spelling: ${existing}`, true); return; }
   const targets = snapshot.expenses.filter((row) => row.category === categorySource).map((row) => ({ id: row.id, revision: row.revision }));
   categoryDraft = { change: { source: categorySource, target }, targets };

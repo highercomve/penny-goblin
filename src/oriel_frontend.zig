@@ -366,11 +366,11 @@ fn modal_focus(e: *ui.Engine, modal: ?i64) !void {
         }
     }
     // Controls gone since (a list re-rendered): nothing to give back.
+    var stale_ids: std.ArrayList(i64) = .empty;
+    defer stale_ids.deinit(e.gpa);
     var stale = s.inert.keyIterator();
-    while (stale.next()) |id| if (e.tree.get(id.*) == null) {
-        _ = s.inert.remove(id.*);
-        stale = s.inert.keyIterator();
-    };
+    while (stale.next()) |id| if (e.tree.get(id.*) == null) try stale_ids.append(e.gpa, id.*);
+    for (stale_ids.items) |id| _ = s.inert.remove(id);
     for (s.actions.items) |id| if (e.tree.get(id)) |n| if (e.tree.ax.get(id)) |ax| {
         const allowed = if (modal) |parent| inside(n, parent) else true;
         try e.tree.setAxEntry(id, .{ .r = ax.r, .n = ax.n, .s = if (allowed) 1024 else 0 });
@@ -645,7 +645,7 @@ pub fn render(e: *ui.Engine) !void {
     var parts: [180]u8 = undefined;
     _ = try BudgetPart.mount(&e.tree, 27000000, 70700, &.{.{ .name = "text", .value = try std.fmt.bufPrint(&parts, "Variable {s}", .{try reports.money(&variable, total.variable)}) }});
     _ = try BudgetPart.mount(&e.tree, 27000004, 70700, &.{.{ .name = "text", .value = try std.fmt.bufPrint(&parts, "Special {s}", .{try reports.money(&special, total.special)}) }});
-    _ = try e.tree.stampKids(aid("budget-parts"), &.{ 27000000, 27000004 });
+    if (!try e.tree.stampKids(aid("budget-parts"), &.{ 27000000, 27000004 })) return error.InvalidTemplate;
     try show(e, aid("clear-drilldown"), s.drill_active);
     try set_text(e, aid("clear-drilldown"), if (s.drill_from) |from| switch (from) {
         .home => "Back to Home",
@@ -700,12 +700,11 @@ fn render_payments(e: *ui.Engine, rows: []const model.Expense) !void {
             count_ids += 1;
             last_day = row.date;
         }
-        var arena = std.heap.ArenaAllocator.init(e.gpa);
-        defer arena.deinit();
-        const payee = try reports.merchant(arena.allocator(), row.payee, settings(), true);
+        _ = search_arena.reset(.retain_capacity);
+        const payee = try reports.merchant(search_arena.allocator(), row.payee, settings(), true);
         const initial = if (payee.len > 0) payee[0..@min(payee.len, try std.unicode.utf8ByteSequenceLength(payee[0]))] else "?";
         const by_date = sort.len == 0 or std.mem.eql(u8, sort, "newest") or std.mem.eql(u8, sort, "oldest");
-        const detail_text = try std.fmt.bufPrint(&detail, "{s} · {s}{s}{s}", .{ try reports.category_name(arena.allocator(), row, settings()), reports.holder(row.account, settings()), if (by_date) "" else " · ", if (by_date) "" else row.date });
+        const detail_text = try std.fmt.bufPrint(&detail, "{s} · {s}{s}{s}", .{ try reports.category_name(search_arena.allocator(), row, settings()), reports.holder(row.account, settings()), if (by_date) "" else " · ", if (by_date) "" else row.date });
         _ = try Payment.mount(&e.tree, base, 70500, &.{ .{ .name = "payee", .value = payee }, .{ .name = "initial", .value = initial }, .{ .name = "detail", .value = detail_text }, .{ .name = "amount", .value = try reports.amount_text(&amount, row.amount, row.currency) } });
         if (row.evidence_count > 0) {
             const avatar = e.tree.get(Payment.id("payment-avatar", base)).?;
@@ -803,7 +802,7 @@ pub fn open_editor(e: *ui.Engine, expense: ?model.Expense) !void {
     try show(e, eid("camera-label"), oriel.target.is_android);
     try set_text(e, eid("editor-status"), "");
     _ = try EvidencePanel.mount(&e.tree, 18000, 76000, &.{});
-    _ = try e.tree.stampKids(eid("saved-evidence"), &.{18000});
+    if (!try e.tree.stampKids(eid("saved-evidence"), &.{18000})) return error.InvalidTemplate;
     s.modal = .editor;
     try resize_modal(e, editor_base);
     try overlay(e);
@@ -975,9 +974,7 @@ pub fn request_close(e: *ui.Engine) !void {
 }
 /// Whether node `id` is the open dialog's (Notice, mounted at 19000) or inside it.
 fn inNotice(e: *ui.Engine, id: i64) bool {
-    var node = e.tree.get(id);
-    while (node) |n| : (node = n.parent) if (n.id == 19000) return true;
-    return false;
+    return if (e.tree.get(id)) |node| inside(node, 19000) else false;
 }
 
 fn click(e: *ui.Engine, id: i64) !bool {
@@ -1424,7 +1421,7 @@ fn resolved_scan(e: *ui.Engine, request: Request, ok: bool, json: []const u8) !v
     }
     if (s.document) |*doc| doc.extraction = encoded;
     _ = try Text.mount(&e.tree, 18100, 79000, &.{.{ .name = "text", .value = encoded }});
-    _ = try e.tree.stampKids(eid("extraction-text"), &.{18100});
+    if (!try e.tree.stampKids(eid("extraction-text"), &.{18100})) return error.InvalidTemplate;
     try show(e, eid("extraction-details"), true);
     try show(e, eid("extraction-text"), false);
     try set_text(e, eid("extraction-toggle"), "Extraction ▾");
@@ -1453,7 +1450,7 @@ fn resolved_documents(e: *ui.Engine, _: Request, ok: bool, json: []const u8) !vo
         try set_image(e, Evidence.id("image", base), doc.data_url);
         try ids.append(e.gpa, base);
     }
-    _ = try e.tree.stampKids(EvidencePanel.id("documents", 18000), ids.items);
+    if (!try e.tree.stampKids(EvidencePanel.id("documents", 18000), ids.items)) return error.InvalidTemplate;
     return;
 }
 
@@ -1475,7 +1472,7 @@ fn resolved_sources(e: *ui.Engine, _: Request, ok: bool, json: []const u8) !void
         try mark_actions(e, StatementEvidence, base, .{ "toggle", "save" });
         try ids.append(e.gpa, base);
     }
-    _ = try e.tree.stampKids(EvidencePanel.id("statements", 18000), ids.items);
+    if (!try e.tree.stampKids(EvidencePanel.id("statements", 18000), ids.items)) return error.InvalidTemplate;
     return;
 }
 
@@ -1487,6 +1484,54 @@ fn resolved_unlink(e: *ui.Engine, request: Request, ok: bool, json: []const u8) 
     } else if (!ok) try status(e, json);
     return;
 }
+test "parser dispatch OOM rolls back its owned map key and can retry" {
+    const a = std.testing.allocator;
+    var host: TestHost = .{ .allocator = a };
+    defer host.deinit();
+    configure(std.testing.io);
+    const e = try ui.Engine.create(a, .{ .ctx = &host, .measure = TestHost.measure, .laid_out = TestHost.laid, .removed = TestHost.removed, .add_timer = TestHost.timer, .invoke = TestHost.dispatch, .focus = TestHost.focus }, &.{}, "{}", "main", "application.oriel", 1180, 820);
+    defer e.destroy();
+    try boot(e);
+    var sources = [_]@import("core/statements.zig").Source{.{ .hash = &model.digest("queued"), .name = "Synthetic PDF", .status = "queued" }};
+    const snap: app.Snapshot = .{ .expenses = &.{}, .settings = "{}", .platform = "linux", .vision_available = false, .tray_running = false, .statements = &sources };
+    const json = try std.json.Stringify.valueAlloc(a, snap, .{});
+    defer a.free(json);
+    s.busy = true;
+    try resolved(e, @intFromEnum(Request.snapshot), true, json);
+    s.busy = false;
+    var failing = std.testing.FailingAllocator.init(a, .{ .fail_index = 2 });
+    e.gpa = failing.allocator();
+    const result = tools.parse_queued(e);
+    e.gpa = a;
+    try std.testing.expectError(error.OutOfMemory, result);
+    try tools.parse_queued(e);
+    try std.testing.expectEqualStrings("parse_statement", host.command);
+}
+
+test "stale statement and sync replies cannot invalidate a preferences draft" {
+    const a = std.testing.allocator;
+    var host: TestHost = .{ .allocator = a };
+    defer host.deinit();
+    configure(std.testing.io);
+    const e = try ui.Engine.create(a, .{ .ctx = &host, .measure = TestHost.measure, .laid_out = TestHost.laid, .removed = TestHost.removed, .add_timer = TestHost.timer, .invoke = TestHost.dispatch, .focus = TestHost.focus }, &.{}, "{}", "main", "application.oriel", 1180, 820);
+    defer e.destroy();
+    try boot(e);
+    const snap: app.Snapshot = .{ .expenses = &.{}, .settings = "{\"salary\":1234}", .platform = "linux", .vision_available = false, .tray_running = false, .statements = &.{} };
+    const json = try std.json.Stringify.valueAlloc(a, snap, .{});
+    defer a.free(json);
+    try resolved(e, @intFromEnum(Request.snapshot), true, json);
+    _ = try handle_event(e, aid("pref-budget"), "click", "0");
+    try resolved(e, @intFromEnum(Request.observations), true, "[]");
+    try resolved(e, @intFromEnum(Request.sync_conflict), true, "\"not a conflict\"");
+    try std.testing.expect(s.modal == .preferences);
+    const Preferences = ui.View(@embedFile("preferences-dialog.oriel"));
+    _ = try handle_event(e, Preferences.id("save-preferences", 11000), "click", "0");
+    const edit = try std.json.parseFromSlice(@import("core/preferences.zig").Edit, a, host.args, .{});
+    defer edit.deinit();
+    try std.testing.expectEqual(@as(i64, 1234), edit.value.settings.salary);
+    try std.testing.expectEqualStrings(snap.settings, edit.value.expected);
+}
+
 const TestHost = struct {
     request: u32 = 0,
     command: []const u8 = "",

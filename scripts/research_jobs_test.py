@@ -98,4 +98,17 @@ class JobsTest(unittest.TestCase):
    self.ready('a'*64,job) # The HTTP request thread has exited; the job must survive.
   finally:server.shutdown();server.server_close();thread.join()
 
+class PrivateWriteTest(unittest.TestCase):
+ def test_atomic_private_writes_ignore_old_symlinks_and_do_not_collide(self):
+  from concurrent.futures import ThreadPoolExecutor
+  import os
+  with tempfile.TemporaryDirectory() as directory:
+   root=Path(directory); path=root/'state.json'; victim=root/'victim'
+   victim.write_bytes(b'keep'); path.with_suffix('.json.new').symlink_to(victim)
+   values=[bytes([index])*4096 for index in range(16)]
+   with ThreadPoolExecutor(max_workers=4) as pool:list(pool.map(lambda value:t.private_write(path,value),values))
+   self.assertIn(path.read_bytes(),values)
+   self.assertEqual(victim.read_bytes(),b'keep')
+   self.assertEqual(os.stat(path).st_mode&0o777,0o600)
+
 if __name__=='__main__':unittest.main()

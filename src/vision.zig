@@ -53,9 +53,9 @@ fn stage(name: []const u8) void {
 
 /// Settings → Receipt scanner → Use GPU (only offered when a GPU passed
 /// ggml's self-test; scanner.gpuEnabled holds the per-device default).
-var gpu_requested = false;
+var gpu_requested = std.atomic.Value(bool).init(false);
 pub fn setGpu(enabled: bool) void {
-    gpu_requested = enabled;
+    gpu_requested.store(enabled, .release);
 }
 
 /// Whether ggml found an NVIDIA GPU through CUDA (libggml-cuda.so, built
@@ -103,6 +103,7 @@ pub fn pick_model(io: std.Io, arena: std.mem.Allocator, projector: bool) !bool {
 }
 
 pub fn extract(io: std.Io, arena: std.mem.Allocator, image: []const u8, engine: scanner.Engine) !Extraction {
+    try @import("core/image_header.zig").validate(image);
     switch (engine) {
         .system => return system(arena, image),
         .local => |paths| if (oriel.llama.available) return run(io, arena, image, paths.model, paths.projector) else return error.VisionNotBuilt,
@@ -145,7 +146,7 @@ fn run(io: std.Io, arena: std.mem.Allocator, image: []const u8, path: [:0]const 
     std.Io.Dir.cwd().access(io, path, .{}) catch return error.ModelNotImported;
     std.Io.Dir.cwd().access(io, projector, .{}) catch return error.ProjectorNotImported;
     stage("loading");
-    const use_gpu = gpu_requested;
+    const use_gpu = gpu_requested.load(.acquire);
     const gpu = use_gpu and oriel.ggml_gpu.load(io) > 0;
     const n_threads = threads();
     const started = std.Io.Clock.awake.now(io);
@@ -222,7 +223,8 @@ fn generate(arena: std.mem.Allocator, model: *c.llama_model, ctx: *c.llama_conte
     defer c.llama_sampler_free(chain);
     // Small models can loop inside a string: a mild repetition penalty, and
     // the schema caps every string's length.
-    c.llama_sampler_chain_add(chain, c.llama_sampler_init_penalties(c.llama_vocab_n_tokens(vocab), 64, 1.1, 0, 0));
+    const penalties = c.llama_sampler_init_penalties(c.llama_vocab_n_tokens(vocab), 64, 1.1, 0, 0) orelse return error.OutOfMemory;
+    c.llama_sampler_chain_add(chain, penalties);
     const grammar = c.llama_sampler_init_grammar(vocab, grammar_text.ptr, "root") orelse return error.InvalidSchema;
     c.llama_sampler_chain_add(chain, grammar);
     const greedy = c.llama_sampler_init_greedy() orelse return error.OutOfMemory;

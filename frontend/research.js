@@ -9,6 +9,10 @@ let categorizationModelBusy = false;
 
 function updateResearchAvailability() {
   $("research-open").hidden = !snapshot || !["linux", "android"].includes(snapshot.platform);
+  // The model runs on the Linux desktop; phones use the paired desktop's.
+  const desktop = !!snapshot && snapshot.platform === "linux";
+  $("research-settings").hidden = $("research-settings-header").hidden = !desktop;
+  if (desktop && !researchModelState) refreshResearchModel().catch(() => {});
 }
 function researchChoices() {
   return [...$("research-results").querySelectorAll("select")].filter((input) => input.value).map((input) => ({
@@ -115,31 +119,71 @@ if (window.oriel) window.oriel.listen("research_progress", (event) => {
   }
 });
 
+// The research model (desktop): Settings › Research model lists the GGUF
+// files already on this computer; the research dialog links there.
+let researchModelState = null;
+const gigabytes = (mb) => `${(mb / 1024).toFixed(1)} GB`;
 async function refreshResearchModel() {
   const state = JSON.parse(await invoke("research_model_status"));
+  researchModelState = state;
   categorizationModelReady = state.ready && (snapshot.platform === "android" || snapshot.vision_available);
   categorizationModelBusy = state.downloading;
   if (!categorizationModelReady || state.downloading) $("research-details").open = true;
-  status("research-model-status", `${state.label} · ${state.ready ? "Ready · unloads after research" : (snapshot.platform === "android" ? "Configure this model on the desktop first" : "Choose or download a categorization model")}`);
-  $("research-model-download").disabled = state.downloading || researchRunning || researchApplying || (state.ready && !state.custom);
-  $("research-model-pick").disabled = state.downloading || researchRunning || researchApplying;
-  $("research-model-default").hidden = !state.custom;
-  $("research-model-cancel").hidden = !state.downloading;
+  const line = `${state.label} · ${state.ready ? "Ready · unloads after research" : (snapshot.platform === "android" ? "Configure this model on the desktop first" : "Choose or download a categorization model")}`;
+  status("research-model-status", line);
+  status("research-model-summary", line);
+  $("settings-research-summary").textContent = state.ready ? `Using ${state.label}` : "Choose a model to suggest categories";
   $("research-start").disabled = !categorizationModelReady || state.downloading || researchRunning || researchApplying;
+  if ($("research-model-page").open) await renderResearchModels();
 }
-async function changeResearchModel(command) {
+async function renderResearchModels() {
+  const state = researchModelState;
+  const options = JSON.parse(await invoke("research_model_options"));
+  const locked = state.downloading || researchRunning || researchApplying || categorizationModelBusy;
+  $("research-found-section").hidden = !options.length;
+  $("research-found").replaceChildren(...options.map((option) => {
+    const badge = node("span", "In use", "badge");
+    badge.hidden = !option.current;
+    const actions = [badge];
+    if (!option.current) {
+      const use = scannerButton("Use", "tonal", () => changeResearchModel("research_model_use", { path: option.path }));
+      use.disabled = locked;
+      actions.push(use);
+    }
+    return scannerRow(option.name, `${option.app} · ${gigabytes(option.size_mb)}`, actions);
+  }));
+  // The pinned default: offered for download until Penny has its own copy.
+  const ownDefault = options.some((option) => option.app === "Penny Goblin" && option.name === "Qwen3.5-9B-Q4_K_M");
+  $("research-download-section").hidden = ownDefault && !state.downloading;
+  const download = state.downloading
+    ? scannerButton("Cancel", "text-button", () => invoke("cancel_research_model").catch((error) => status("research-model-summary", errorText(error), true)))
+    : scannerButton("Download", "tonal", () => changeResearchModel("research_model_download"));
+  download.disabled = !state.downloading && locked;
+  $("research-download").replaceChildren(scannerRow("Qwen3.5 9B (Q4_K_M)", `Recommended · ${gigabytes(state.size_mb)}`, [download]));
+  $("research-model-pick").disabled = locked;
+}
+async function changeResearchModel(command, args = {}) {
   if (researchRunning || researchApplying || categorizationModelBusy) return;
   categorizationModelBusy = true; $("research-start").disabled = true;
-  $("research-model-download").disabled = true; $("research-model-pick").disabled = true;
-  $("research-model-cancel").hidden = command !== "research_model_download";
-  try { await invoke(command); }
-  catch (error) { status("research-status", errorText(error), true); }
+  if (command === "research_model_download") { researchModelState.downloading = true; renderResearchModels().catch(() => {}); }
+  try { await invoke(command, args); }
+  catch (error) { status("research-model-summary", errorText(error), true); }
   finally { categorizationModelBusy = false; await refreshResearchModel(); }
 }
-for (const action of ["download", "pick", "default"]) $("research-model-" + action).addEventListener("click", () => changeResearchModel("research_model_" + action).catch((error) => status("research-model-status", errorText(error), true)));
-$("research-model-cancel").addEventListener("click", () => invoke("cancel_research_model").catch((error) => status("research-model-status", errorText(error), true)));
+function openResearchModel() {
+  status("research-model-summary", "Looking for models on this computer…");
+  $("research-model-page").showModal();
+  refreshResearchModel().catch((error) => status("research-model-summary", errorText(error), true));
+}
+$("open-research-model").addEventListener("click", openResearchModel);
+$("research-model-change").addEventListener("click", openResearchModel);
+$("close-research-model").addEventListener("click", () => $("research-model-page").close());
+$("research-model-pick").addEventListener("click", () => changeResearchModel("research_model_pick"));
 if (window.oriel) window.oriel.listen("model_download", (event) => {
-  if (event.id === "research-qwen3.5-9b") status("research-model-status", `${event.state} · ${event.done_mb}/${event.total_mb} MiB`);
+  if (event.id !== "research-qwen3.5-9b") return;
+  const line = `${event.state} · ${event.done_mb}/${event.total_mb} MiB`;
+  status("research-model-status", line);
+  status("research-model-summary", line);
 });
 
 updateResearchAvailability();

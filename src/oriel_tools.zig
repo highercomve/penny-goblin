@@ -74,6 +74,7 @@ var attempted: std.StringHashMapUnmanaged(void) = .empty;
 var parser_busy = false;
 var ready = false;
 pub fn prepare(e: *ui.Engine) !void {
+    shutdown();
     try SyncDevice.prepare(&e.tree, 79900);
     try SyncConflict.prepare(&e.tree, 79910);
     // Android can open another main window within the same process.
@@ -267,7 +268,7 @@ fn group_rows(e: *ui.Engine, parent: i64, kind: GroupKind, base: i64) !void {
         }
         try ids.append(a, id);
     };
-    _ = try e.tree.stampKids(parent, ids.items);
+    if (!try e.tree.stampKids(parent, ids.items)) return error.InvalidTemplate;
 }
 
 fn add_comparison(account: []const u8, category: []const u8, amount: i64) !void {
@@ -306,7 +307,7 @@ fn category_chart(e: *ui.Engine) !void {
         }
         try ids.append(a, id);
     }
-    _ = try e.tree.stampKids(f.aid("category-chart"), ids.items);
+    if (!try e.tree.stampKids(f.aid("category-chart"), ids.items)) return error.InvalidTemplate;
 }
 fn comparison_panels(e: *ui.Engine) !void {
     const a = report_arena.allocator();
@@ -332,10 +333,10 @@ fn comparison_panels(e: *ui.Engine) !void {
             try group_actions.put(a, id, i);
             try ids.append(a, id);
         };
-        _ = try e.tree.stampKids(Comparison.id("rows", panel), ids.items);
+        if (!try e.tree.stampKids(Comparison.id("rows", panel), ids.items)) return error.InvalidTemplate;
         try panels.append(a, panel);
     }
-    _ = try e.tree.stampKids(f.aid("account-comparison"), panels.items);
+    if (!try e.tree.stampKids(f.aid("account-comparison"), panels.items)) return error.InvalidTemplate;
 }
 pub fn render_reports(e: *ui.Engine, rows: []const f.model.Expense) !void {
     try collect_groups(e, rows);
@@ -394,7 +395,7 @@ fn account_donut(e: *ui.Engine) !void {
     var chart_ids: std.ArrayList(i64) = .empty;
     try chart_ids.append(report_arena.allocator(), 580000);
     for (parent.kids.items) |child| try chart_ids.append(report_arena.allocator(), child.id);
-    _ = try e.tree.stampKids(parent.id, chart_ids.items);
+    if (!try e.tree.stampKids(parent.id, chart_ids.items)) return error.InvalidTemplate;
     program.begin();
     var sum: i64 = 0;
     for (groups.items) |g| if (g.kind == .variable_account) {
@@ -433,7 +434,7 @@ fn special_payments(e: *ui.Engine, rows: []const f.model.Expense) !void {
         try selected.append(a, row);
     };
     special_rows = selected.items;
-    _ = try e.tree.stampKids(f.aid("special-payments"), ids.items);
+    if (!try e.tree.stampKids(f.aid("special-payments"), ids.items)) return error.InvalidTemplate;
 }
 fn fixed_summary(e: *ui.Engine, rows: []const f.model.Expense) !void {
     var ids: std.ArrayList(i64) = .empty;
@@ -452,7 +453,7 @@ fn fixed_summary(e: *ui.Engine, rows: []const f.model.Expense) !void {
         try f.supporting(e, 359000, "None configured.");
         try ids.append(report_arena.allocator(), 359000);
     }
-    _ = try e.tree.stampKids(f.aid("fixed-report"), ids.items);
+    if (!try e.tree.stampKids(f.aid("fixed-report"), ids.items)) return error.InvalidTemplate;
 }
 
 fn fixed_report(e: *ui.Engine) !void {
@@ -483,7 +484,7 @@ fn fixed_report(e: *ui.Engine) !void {
     var paid: [48]u8 = undefined;
     const month = f.value(e, f.aid("month"));
     try f.set_text(e, Fixed.id("fixed-summary", 12000), try std.fmt.allocPrint(a, "{s} a month · {s} paid{s}{s}", .{ try f.reports.money(&plan, planned), try f.reports.money(&paid, total_paid), if (month.len > 0) " in " else "", if (month.len > 0) try @import("ui_dates.zig").month_label(a, month) else "" }));
-    _ = try e.tree.stampKids(Fixed.id("fixed-list", 12000), ids.items);
+    if (!try e.tree.stampKids(Fixed.id("fixed-list", 12000), ids.items)) return error.InvalidTemplate;
 }
 pub fn parse_queued(e: *ui.Engine) !void {
     if (oriel.target.is_android or parser_busy or f.s.busy or f.s.snapshot == null) return;
@@ -491,6 +492,7 @@ pub fn parse_queued(e: *ui.Engine) !void {
         const key = try e.gpa.dupe(u8, source.hash);
         errdefer e.gpa.free(key);
         try attempted.put(e.gpa, key, {});
+        errdefer _ = attempted.remove(key);
         parser_busy = true;
         errdefer parser_busy = false;
         try f.invoke(e, .background_parse, "parse_statement", .{ .hash = source.hash });
@@ -513,7 +515,7 @@ pub fn render_statements(e: *ui.Engine) !void {
         try f.mark_actions(e, StatementSource, base, .{ "action", "secondary" });
         try ids.append(e.gpa, base);
     }
-    _ = try e.tree.stampKids(Statements.id("statement-list", 13000), ids.items);
+    if (!try e.tree.stampKids(Statements.id("statement-list", 13000), ids.items)) return error.InvalidTemplate;
 }
 pub fn render_bulk(e: *ui.Engine) !void {
     try f.show(e, f.aid("bulk-preview"), bulk_edit != null);
@@ -554,7 +556,7 @@ fn bulk_preview(e: *ui.Engine) !void {
     bulk_edit = .{ .settings = config, .expected = prior, .targets = targets.items, .category = try a.dupe(u8, category) };
     const summary = try std.fmt.allocPrint(a, "{d} → “{s}”", .{ targets.items.len, category });
     try f.set_text(e, f.aid("bulk-summary"), summary);
-    _ = try e.tree.stampKids(f.aid("bulk-matches"), ids.items);
+    if (!try e.tree.stampKids(f.aid("bulk-matches"), ids.items)) return error.InvalidTemplate;
     try render_bulk(e);
     f.redraw(e);
 }
@@ -609,17 +611,26 @@ fn mapping_parent() i64 {
 fn mapping_kids(e: *ui.Engine) !void {
     var ids: [1000]i64 = undefined;
     for (0..mapping_count) |i| ids[i] = mapping_base + @as(i64, @intCast(i)) * mapping_stride;
-    _ = try e.tree.stampKids(mapping_parent(), ids[0..mapping_count]);
+    if (!try e.tree.stampKids(mapping_parent(), ids[0..mapping_count])) return error.InvalidTemplate;
 }
 pub fn open_category_rules(e: *ui.Engine) !void {
     try open_preferences(e, .categories);
 }
+fn reset_modal() void {
+    expected = "";
+    original = .{};
+    current_hash = "";
+    observations = &.{};
+    conflict = null;
+    _ = modal_arena.reset(.free_all);
+}
 fn open_preferences(e: *ui.Engine, chosen: Section) !void {
-    _ = modal_arena.reset(.retain_capacity);
+    reset_modal();
     mapping_count = 0;
     section = chosen;
     const a = modal_arena.allocator();
     expected = try a.dupe(u8, f.s.snapshot.?.value.settings);
+    try @import("core/json_limits.zig").check(expected);
     original = try std.json.parseFromSliceLeaky(legacy.Settings, a, expected, .{ .ignore_unknown_fields = true, .allocate = .alloc_always });
     try open(e, .preferences);
     inline for (.{ "budget", "fixed", "accounts", "categories", "vendors", "special" }) |name| try f.show(e, pid("pref-section-" ++ name), std.mem.eql(u8, name, @tagName(section)));
@@ -779,7 +790,7 @@ fn sync_action(e: *ui.Engine, action: []const u8, device: []const u8) !void {
     try f.invoke(e, .sync_action, "sync_control", .{ .action = action, .device = device, .link = link[0..len], .replace = replace_desktop });
 }
 fn open_statement(e: *ui.Engine, hash: []const u8, queued: bool) !void {
-    _ = modal_arena.reset(.retain_capacity);
+    reset_modal();
     current_hash = try modal_arena.allocator().dupe(u8, hash);
     if (queued) {
         f.s.busy = true;
@@ -841,7 +852,7 @@ fn render_observations(e: *ui.Engine) !void {
         try f.mark_action(e, Review.id("undo", base), "Undo");
         try ids.append(a, base);
     }
-    _ = try e.tree.stampKids(Statement.id("statement-rows", 14000), ids.items);
+    if (!try e.tree.stampKids(Statement.id("statement-rows", 14000), ids.items)) return error.InvalidTemplate;
     const summary = if (suggestion_count == open_count) try std.fmt.allocPrint(a, "All {d} already recorded · Confirm to link them", .{open_count}) else if (suggestion_count > 0) try std.fmt.allocPrint(a, "{d} of {d} already recorded · choose the rest", .{ suggestion_count, open_count }) else try std.fmt.allocPrint(a, "{d} rows", .{observations.len});
     try f.set_text(e, Statement.id("statement-review-status", 14000), summary);
 }
@@ -923,15 +934,15 @@ fn scanner_render(e: *ui.Engine) !void {
     if (state.custom) {
         const in_use = std.mem.eql(u8, state.active, "custom");
         try scanner_row(e, 492000, "Your model", "Loaded from a GGUF file", in_use, if (in_use) "" else "Use", true);
-        _ = try e.tree.stampKids(scid("scanner-custom-row"), &.{492000});
-    } else _ = try e.tree.stampKids(scid("scanner-custom-row"), &.{});
+        if (!try e.tree.stampKids(scid("scanner-custom-row"), &.{492000})) return error.InvalidTemplate;
+    } else if (!try e.tree.stampKids(scid("scanner-custom-row"), &.{})) return error.InvalidTemplate;
     if (state.system.supported) {
         const ready_system = std.mem.eql(u8, state.system.state, "available");
         const in_use = std.mem.eql(u8, state.active, "system");
         const downloadable = std.mem.eql(u8, state.system.state, "downloadable");
         const detail = if (ready_system) "Ready · no download needed" else if (downloadable) "Supported · needs a system download" else if (std.mem.eql(u8, state.system.state, "downloading")) "The system is downloading it" else if (state.system.reason.len > 0) state.system.reason else "Not available on this phone";
         try scanner_row(e, 494000, "Gemini Nano", detail, in_use, if (ready_system and !in_use) "Use" else if (downloadable) "Download" else "", false);
-        _ = try e.tree.stampKids(scid("scanner-system-row"), &.{494000});
+        if (!try e.tree.stampKids(scid("scanner-system-row"), &.{494000})) return error.InvalidTemplate;
     }
     inline for (.{ "model", "projector" }) |name| {
         var p = e.tree.get(scid(name)).?.props;
@@ -939,8 +950,8 @@ fn scanner_render(e: *ui.Engine) !void {
         p.op = if (state.vision_built) 1 else 0.38;
         try e.tree.updateUiProps(scid(name), p);
     }
-    _ = try e.tree.stampKids(scid("scanner-installed"), installed.items);
-    _ = try e.tree.stampKids(scid("scanner-models"), available.items);
+    if (!try e.tree.stampKids(scid("scanner-installed"), installed.items)) return error.InvalidTemplate;
+    if (!try e.tree.stampKids(scid("scanner-models"), available.items)) return error.InvalidTemplate;
 }
 pub fn click(e: *ui.Engine, id: i64) !bool {
     return switch (f.s.modal) {
@@ -1363,7 +1374,9 @@ fn resolved_settings(e: *ui.Engine, request: f.Request, _: []const u8) !void {
     try f.refresh(e);
 }
 fn resolved_pick_pdf(e: *ui.Engine, request: f.Request, json: []const u8) !void {
-    const a = modal_arena.allocator();
+    var temporary = std.heap.ArenaAllocator.init(e.gpa);
+    defer temporary.deinit();
+    const a = temporary.allocator();
     f.finish(request);
     const file = try std.json.parseFromSliceLeaky(?@import("main.zig").UiFile, a, json, .{ .allocate = .alloc_always });
     if (file) |v| {
@@ -1386,10 +1399,11 @@ fn resolved_parse_pdf(e: *ui.Engine, request: f.Request, _: []const u8) !void {
     try f.invoke(e, .observations, "statement_observations", .{ .hash = current_hash });
 }
 fn resolved_observations(e: *ui.Engine, _: f.Request, json: []const u8) !void {
+    if ((f.s.modal != .statements and f.s.modal != .statement) or current_hash.len == 0) return;
     const a = modal_arena.allocator();
     const hash = try e.gpa.dupe(u8, current_hash);
     defer e.gpa.free(hash);
-    _ = modal_arena.reset(.retain_capacity);
+    reset_modal();
     current_hash = try a.dupe(u8, hash);
     observations = try std.json.parseFromSliceLeaky([]statements.Observation, a, json, .{ .allocate = .alloc_always });
     try render_observations(e);
@@ -1421,9 +1435,9 @@ fn resolved_sync_status(e: *ui.Engine, _: f.Request, json: []const u8) !void {
         try ids.append(ca, base);
     }
     if (ids.items.len == 0) {
-        _ = try e.tree.stampKids(sid("sync-conflicts"), &.{});
+        if (!try e.tree.stampKids(sid("sync-conflicts"), &.{})) return error.InvalidTemplate;
         try f.set_text(e, sid("sync-conflicts"), "None");
-    } else _ = try e.tree.stampKids(sid("sync-conflicts"), ids.items);
+    } else if (!try e.tree.stampKids(sid("sync-conflicts"), ids.items)) return error.InvalidTemplate;
 }
 fn resolved_sync_transport(e: *ui.Engine, request: f.Request, json: []const u8) !void {
     if (request == .sync_action) f.finish(request);
@@ -1474,7 +1488,7 @@ fn resolved_sync_transport(e: *ui.Engine, request: f.Request, json: []const u8) 
             try f.mark_actions(e, SyncDevice, base, .{"disconnect"});
             try ids.append(ta, base);
         }
-        _ = try e.tree.stampKids(sid("sync-devices"), ids.items);
+        if (!try e.tree.stampKids(sid("sync-devices"), ids.items)) return error.InvalidTemplate;
     }
     if (request == .sync_action) {
         const cancelled = if (v.object.get("cancelled")) |c| c == .bool and c.bool else false;
@@ -1489,6 +1503,8 @@ fn resolved_sync_transport(e: *ui.Engine, request: f.Request, json: []const u8) 
     }
 }
 fn resolved_sync_conflict(e: *ui.Engine, _: f.Request, json: []const u8) !void {
+    if (f.s.modal != .sync) return;
+    reset_modal();
     const a = modal_arena.allocator();
     conflict = try std.json.parseFromSliceLeaky(sync_types.Conflict, a, try decoded(a, json), .{ .allocate = .alloc_always });
     const local = try std.json.parseFromSliceLeaky(std.json.Value, a, conflict.?.local_payload, .{ .allocate = .alloc_always });

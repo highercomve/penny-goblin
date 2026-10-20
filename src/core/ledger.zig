@@ -191,14 +191,25 @@ pub const Ledger = struct {
 
     pub fn documents(self: Ledger, allocator: Allocator, id: []const u8) ![]model.Document {
         if (!model.valid_id(id)) return error.InvalidId;
-        const query = try self.db.prepare("SELECT data_url,extraction FROM documents JOIN evidence ON hash=document_hash WHERE expense_id=?1");
+        const query = try self.db.prepare("SELECT data_url,extraction FROM documents JOIN evidence ON hash=document_hash WHERE expense_id=?1 LIMIT 1001");
         defer query.finalize();
         try query.bindText(1, id);
         var docs: std.ArrayList(model.Document) = .empty;
-        while (try query.step()) try docs.append(allocator, .{
-            .data_url = try query.text(allocator, 0),
-            .extraction = try query.text(allocator, 1),
-        });
+        errdefer {
+            for (docs.items) |doc| {
+                allocator.free(doc.data_url);
+                allocator.free(doc.extraction);
+            }
+            docs.deinit(allocator);
+        }
+        while (try query.step()) {
+            if (docs.items.len == 1000) return error.TooManyAttachments;
+            const data = try query.text(allocator, 0);
+            errdefer allocator.free(data);
+            const extraction = try query.text(allocator, 1);
+            errdefer allocator.free(extraction);
+            try docs.append(allocator, .{ .data_url = data, .extraction = extraction });
+        }
         return docs.toOwnedSlice(allocator);
     }
 
@@ -247,10 +258,15 @@ pub fn image_bytes(allocator: Allocator, data_url: []const u8) ![]const u8 {
     const length = decoder.calcSizeForSlice(encoded) catch return error.InvalidImage;
     if (length == 0 or length > 8 * 1024 * 1024) return error.ImageTooLarge;
     const bytes = try allocator.alloc(u8, length);
+    errdefer allocator.free(bytes);
     try decoder.decode(bytes, encoded);
     const signature: []const u8 = if (is_png) "\x89PNG\r\n\x1a\n" else "\xff\xd8\xff";
     if (!std.mem.startsWith(u8, bytes, signature)) return error.InvalidImage;
     return bytes;
+}
+
+test "invalid decoded image releases its allocation" {
+    try std.testing.expectError(error.InvalidImage, image_bytes(std.testing.allocator, "data:image/png;base64,bm90cG5n"));
 }
 
 test "optimistic revisions, atomic document deduplication, deletion tombstones" {

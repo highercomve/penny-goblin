@@ -69,6 +69,7 @@ pub fn encode(arena: std.mem.Allocator, value: anytype) ![]const u8 {
 }
 pub fn decode(comptime T: type, arena: std.mem.Allocator, json: []const u8) !T {
     if (json.len > 64 * 1024 * 1024) return error.SyncPayloadTooLarge;
+    try @import("json_limits.zig").check(json);
     return std.json.parseFromSliceLeaky(T, arena, json, .{ .max_value_len = 48 * 1024 * 1024 });
 }
 
@@ -111,7 +112,7 @@ fn document(db: ledger_mod.Ledger, arena: std.mem.Allocator, id: []const u8, val
 fn statement(db: ledger_mod.Ledger, arena: std.mem.Allocator, id: []const u8, value: Statement) !void {
     const hash = try statements.stage(db, arena, value.name, value.data_url);
     if (!std.mem.eql(u8, id, hash)) return error.DocumentHashMismatch;
-    if ((!std.mem.eql(u8, value.parser, "") and !std.mem.eql(u8, value.parser, "santander-web-v1")) or
+    if ((!std.mem.eql(u8, value.parser, "") and !statements.supported_parser(value.parser)) or
         (!std.mem.eql(u8, value.status, "queued") and !std.mem.eql(u8, value.status, "review"))) return error.InvalidStatement;
     const update = try db.db.prepare("UPDATE statements SET name=?2,parser=?3,status=?4 WHERE hash=?1");
     defer update.finalize();
@@ -120,6 +121,22 @@ fn statement(db: ledger_mod.Ledger, arena: std.mem.Allocator, id: []const u8, va
     try update.bindText(3, value.parser);
     try update.bindText(4, value.status);
     _ = try update.step();
+}
+
+test "BCI PDF parser identities survive replica materialization" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ "bci-card-v1", "bci-cartola-v1" }) |parser| {
+        const db = try ledger_mod.Ledger.open(":memory:");
+        defer db.close();
+        const data = "data:application/pdf;base64,JVBERi1zeW5j";
+        const hash = try a.dupe(u8, &model.digest("%PDF-sync"));
+        const json = try encode(a, Statement{ .name = "Synthetic BCI", .data_url = data, .parser = parser, .status = "review" });
+        try materialize(db, a, .{ .kind = .statement, .id = hash }, json);
+        const copy = try decode(Statement, a, try snapshot(db, a, .{ .kind = .statement, .id = hash }));
+        try std.testing.expectEqualStrings(parser, copy.parser);
+    }
 }
 
 fn observation(db: ledger_mod.Ledger, arena: std.mem.Allocator, id: []const u8, value: Observation) !void {

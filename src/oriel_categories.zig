@@ -19,17 +19,22 @@ var source: []const u8 = "";
 var expected: []const u8 = "";
 var draft: ?prefs.Edit = null;
 var chosen: []const u8 = "";
+var ready = false;
 pub fn id(comptime name: []const u8) i64 {
     return View.id(name, base);
 }
 pub fn prepare(e: *f.ui.Engine) !void {
+    shutdown();
     storage = .init(e.gpa);
+    ready = true;
     active = false;
     try View.prepare(&e.tree, 83000);
     try Row.prepare(&e.tree, 84000);
 }
 pub fn shutdown() void {
+    if (!ready) return;
     storage.deinit();
+    ready = false;
     active = false;
 }
 pub fn open(e: *f.ui.Engine, manage: bool) !void {
@@ -67,6 +72,8 @@ pub fn close(e: *f.ui.Engine) !void {
     f.redraw(e);
 }
 fn render(e: *f.ui.Engine) !void {
+    var scratch = std.heap.ArenaAllocator.init(e.gpa);
+    defer scratch.deinit();
     count = 0;
     const query = std.mem.trim(u8, f.value(e, id("search")), " \t\r\n");
     var ids: [100]i64 = undefined;
@@ -87,7 +94,7 @@ fn render(e: *f.ui.Engine) !void {
             payments += 1;
         };
         const current = std.mem.eql(u8, f.value(e, f.eid("field-category")), name);
-        const detail = if (managing) try std.fmt.allocPrint(storage.allocator(), "{d} payments", .{payments}) else "";
+        const detail = if (managing) try std.fmt.allocPrint(scratch.allocator(), "{d} payments", .{payments}) else "";
         _ = try Row.mount(&e.tree, ids[count], 84000, &.{ .{ .name = "text", .value = name }, .{ .name = "detail", .value = detail }, .{ .name = "trailing", .value = if (managing) "›" else if (current) "✓" else "" } });
         try f.show(e, Row.id("detail", ids[count]), managing);
         var props = e.tree.get(ids[count]).?.props;
@@ -97,10 +104,10 @@ fn render(e: *f.ui.Engine) !void {
         try f.mark_action(e, ids[count], name);
         count += 1;
     }
-    _ = try e.tree.stampKids(id("list"), ids[0..count]);
+    if (!try e.tree.stampKids(id("list"), ids[0..count])) return error.InvalidTemplate;
     try f.show(e, id("add"), query.len > 0 and !exact and !c.protected(query));
-    try f.set_text(e, id("add-label"), try std.fmt.allocPrint(storage.allocator(), "Add “{s}”", .{query}));
-    try f.set_text(e, id("status"), if (similar) |name| try std.fmt.allocPrint(storage.allocator(), "Similar category: {s}. Select it, or add a separate category.", .{name}) else if (count == 0) "No matching categories" else if (count == 100) "Showing 100 · search to narrow the list" else if (managing) "Choose a category to rename or merge" else "Select an existing category or search to add one");
+    try f.set_text(e, id("add-label"), try std.fmt.allocPrint(scratch.allocator(), "Add “{s}”", .{query}));
+    try f.set_text(e, id("status"), if (similar) |name| try std.fmt.allocPrint(scratch.allocator(), "Similar category: {s}. Select it, or add a separate category.", .{name}) else if (count == 0) "No matching categories" else if (count == 100) "Showing 100 · search to narrow the list" else if (managing) "Choose a category to rename or merge" else "Select an existing category or search to add one");
 }
 fn edit(e: *f.ui.Engine, name: []const u8) !void {
     if (c.protected(name)) {
@@ -160,10 +167,7 @@ pub fn event(e: *f.ui.Engine, target: i64, kind: []const u8, data: []const u8) !
 fn handle_event(e: *f.ui.Engine, target: i64, kind: []const u8, data: []const u8) !bool {
     if (!active) return false;
     if (std.mem.eql(u8, kind, "back")) {
-        if (editing and !pending) {
-            editing = false;
-            try open(e, managing);
-        } else try close(e);
+        try handle_back(e);
         return true;
     }
     if (pending) return true;
@@ -179,8 +183,16 @@ fn handle_event(e: *f.ui.Engine, target: i64, kind: []const u8, data: []const u8
     }
     if (!std.mem.eql(u8, kind, "click")) return false;
     var node = e.tree.get(target);
-    while (node) |n| : (node = n.parent) {
-        if (n.id == id("back")) return event(e, 0, "back", "");
+    var depth: usize = 0;
+    while (node) |n| : ({
+        node = n.parent;
+        depth += 1;
+    }) {
+        if (depth == 64) return error.InvalidTemplate;
+        if (n.id == id("back")) {
+            try handle_back(e);
+            return true;
+        }
         if (n.id == id("rules")) {
             try close(e);
             try @import("oriel_tools.zig").open_category_rules(e);
@@ -207,6 +219,12 @@ fn handle_event(e: *f.ui.Engine, target: i64, kind: []const u8, data: []const u8
         }
     }
     return true;
+}
+fn handle_back(e: *f.ui.Engine) !void {
+    if (editing and !pending) {
+        editing = false;
+        try open(e, managing);
+    } else try close(e);
 }
 pub fn resolved(e: *f.ui.Engine, ok: bool, json: []const u8) !void {
     pending = false;

@@ -17,10 +17,15 @@ var model_ready = false;
 var model_busy = false;
 var activity: std.ArrayList(u8) = .empty;
 var update_count: usize = 0;
-fn id(comptime name: []const u8) i64 { return Sheet.id(name, base); }
+var ready = false;
+fn id(comptime name: []const u8) i64 {
+    return Sheet.id(name, base);
+}
 pub fn prepare(e: *ui.Engine) !void {
+    shutdown();
     review = null;
     allocator = e.gpa;
+    ready = true;
     seen = .empty;
     running = false;
     update_count = 0;
@@ -35,6 +40,7 @@ fn clear_review() void {
     review = null;
 }
 pub fn shutdown() void {
+    if (!ready) return;
     clear_review();
     activity.deinit(allocator);
     activity = .empty;
@@ -42,10 +48,12 @@ pub fn shutdown() void {
     while (keys.next()) |key| allocator.free(key.*);
     seen.deinit(allocator);
     seen = .empty;
+    ready = false;
 }
 pub fn open(e: *ui.Engine) !void {
     if (f.s.busy or f.s.modal != .none or f.s.snapshot == null) return;
     shutdown();
+    ready = true;
     _ = try Sheet.mount(&e.tree, base, 80000, &.{});
     f.s.modal = .research;
     f.s.dirty = false;
@@ -75,9 +83,18 @@ pub fn click(e: *ui.Engine, node: i64) !bool {
         try f.disclosure(e, id("details-toggle"), id("details"), "Model & privacy details");
         return true;
     }
-    if (node == id("close")) { try f.request_close(e); return true; }
-    if (node == id("cancel")) { try stop(e); return true; }
-    if (node == id("model-cancel")) { try f.invoke(e, .cancel, "cancel_research_model", .{}); return true; }
+    if (node == id("close")) {
+        try f.request_close(e);
+        return true;
+    }
+    if (node == id("cancel")) {
+        try stop(e);
+        return true;
+    }
+    if (node == id("model-cancel")) {
+        try f.invoke(e, .cancel, "cancel_research_model", .{});
+        return true;
+    }
     inline for (.{ "download", "pick", "default" }) |action| if (node == id("model-" ++ action)) {
         if (f.s.busy or model_busy) return true;
         model_busy = true;
@@ -88,7 +105,10 @@ pub fn click(e: *ui.Engine, node: i64) !bool {
     };
     if (node == id("start")) {
         if (f.s.busy or model_busy) return true;
-        if (!model_ready) { try f.set_text(e, id("status"), "Choose or download a categorization model first."); return true; }
+        if (!model_ready) {
+            try f.set_text(e, id("status"), "Choose or download a categorization model first.");
+            return true;
+        }
         if (review) |current| for (current.value.proposals, 0..) |_, i| {
             if (f.value(e, Row.id("category", rows + @as(i64, @intCast(i)) * stride)).len > 0) {
                 try f.set_text(e, id("status"), "Apply suggestions or leave them unchanged before researching the next batch.");
@@ -112,7 +132,7 @@ pub fn click(e: *ui.Engine, node: i64) !bool {
         try f.set_text(e, id("activity"), "Connecting to research…");
         try f.show(e, id("start"), false);
         try f.show(e, id("activity-panel"), true);
-        _ = try e.tree.stampKids(id("results"), &.{});
+        if (!try e.tree.stampKids(id("results"), &.{})) return error.InvalidTemplate;
         f.s.busy = true;
         running = true;
         f.s.dirty = false;
@@ -131,7 +151,10 @@ pub fn click(e: *ui.Engine, node: i64) !bool {
             const choice = f.value(e, Row.id("category", rows + @as(i64, @intCast(i)) * stride));
             if (choice.len > 0) try selected.append(arena.allocator(), .{ .targets = group.targets, .category = choice });
         }
-        if (selected.items.len == 0) { try f.set_text(e, id("status"), "Choose at least one category to apply."); return true; }
+        if (selected.items.len == 0) {
+            try f.set_text(e, id("status"), "Choose at least one category to apply.");
+            return true;
+        }
         f.s.busy = true;
         try f.invoke(e, .research_apply, "apply_research", domain.Apply{ .expected_settings = review.?.value.expected_settings, .selections = selected.items });
         return true;
@@ -156,7 +179,10 @@ pub fn resolved(e: *ui.Engine, request: f.Request, ok: bool, json: []const u8) !
     if (request == .research_run) running = false;
     if (f.s.modal != .research) return;
     if (request == .research_model_status) {
-        if (!ok) { try f.report_error(e, id("model-status"), json); return; }
+        if (!ok) {
+            try f.report_error(e, id("model-status"), json);
+            return;
+        }
         const encoded = try std.json.parseFromSlice([]const u8, e.gpa, json, .{});
         defer encoded.deinit();
         const state = try std.json.parseFromSlice(@import("research_model.zig").Status, e.gpa, encoded.value, .{});
@@ -186,11 +212,14 @@ pub fn resolved(e: *ui.Engine, request: f.Request, ok: bool, json: []const u8) !
         try f.set_text(e, id("progress"), if (ok) "Batch complete · review suggestions below" else "Research stopped · see status above");
     }
     try f.show(e, id("cancel"), false);
-    if (!ok) { try f.report_error(e, id("status"), json); return; }
+    if (!ok) {
+        try f.report_error(e, id("status"), json);
+        return;
+    }
     if (request == .research_apply) {
         clear_review();
         f.s.dirty = false;
-        _ = try e.tree.stampKids(id("results"), &.{});
+        if (!try e.tree.stampKids(id("results"), &.{})) return error.InvalidTemplate;
         try f.show(e, id("apply"), false);
         try f.set_text(e, id("status"), "Selected payments categorized.");
         try f.refresh(e);
@@ -201,6 +230,7 @@ pub fn resolved(e: *ui.Engine, request: f.Request, ok: bool, json: []const u8) !
     defer encoded.deinit();
     clear_review();
     review = try std.json.parseFromSlice(domain.Review, e.gpa, encoded.value, .{ .allocate = .alloc_always });
+    errdefer clear_review();
     if (review.?.value.proposals.len > 10) return error.InvalidModelReply;
     for (review.?.value.proposals) |group| for (group.targets) |target| if (!seen.contains(target.id)) {
         const owned = try allocator.dupe(u8, target.id);
@@ -237,10 +267,10 @@ fn render(e: *ui.Engine) !void {
             try f.mark_actions(e, Source, source_id, .{ "toggle", "open" });
             try source_ids.append(a, source_id);
         }
-        _ = try e.tree.stampKids(Row.id("sources", row), source_ids.items);
+        if (!try e.tree.stampKids(Row.id("sources", row), source_ids.items)) return error.InvalidTemplate;
         try children.append(a, row);
     }
-    _ = try e.tree.stampKids(id("results"), children.items);
+    if (!try e.tree.stampKids(id("results"), children.items)) return error.InvalidTemplate;
     try f.show(e, id("apply"), review.?.value.proposals.len > 0);
     try f.set_text(e, id("status"), try std.fmt.allocPrint(a, "{d} merchants ready to review. {d} additional payments remain for another batch.", .{ review.?.value.proposals.len, review.?.value.remaining }));
     f.s.dirty = review.?.value.proposals.len > 0;

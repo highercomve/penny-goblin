@@ -17,8 +17,8 @@
   <script src="statements.js?v=8" defer></script>
   <script src="sync.js?v=8" defer></script>
   <script src="nav.js?v=10" defer></script>
-  <script src="scanner.js?v=8" defer></script>
-  <script src="research.js?v=1" defer></script>
+  <script src="scanner.js?v=9" defer></script>
+  <script src="research.js?v=2" defer></script>
   <script src="categories.js?v=1" defer></script>
   <script src="qa.js?v=8" defer></script>
 </head>
@@ -169,6 +169,10 @@
         <div class="card list settings-list">
           <button id="open-scanner" class="list-item"><svg><use href="#i-chip"/></svg><span class="two-line"><span>Receipt scanner</span><small id="settings-model-summary">Read receipts and vouchers on this device</small></span><svg class="trail"><use href="#i-chevron"/></svg></button>
         </div>
+        <h3 id="research-settings-header" class="list-header" hidden>Category research</h3>
+        <div id="research-settings" class="card list settings-list" hidden>
+          <button id="open-research-model" class="list-item"><svg><use href="#i-tag"/></svg><span class="two-line"><span>Research model</span><small id="settings-research-summary">Suggests categories on this computer</small></span><svg class="trail"><use href="#i-chevron"/></svg></button>
+        </div>
         <h3 class="list-header">Data</h3>
         <div class="card list settings-list">
           <button id="open-sync" class="list-item"><svg><use href="#i-sync"/></svg><span>Pairing & sync</span><svg class="trail"><use href="#i-chevron"/></svg></button>
@@ -313,6 +317,15 @@
     <h3 class="list-header">Conflicts</h3><div id="sync-conflicts" class="list"></div>
     <section id="sync-review" hidden><div class="comparison"><div><h4>This device</h4><pre id="sync-local"></pre></div><div><h4>Desktop</h4><pre id="sync-remote"></pre></div></div><div class="actions"><button id="sync-use-local" type="button" class="tonal">Keep mine</button><button id="sync-use-remote" type="button" class="filled">Use desktop</button></div></section>
   </dialog>
+  <dialog id="research-model-page" class="sheet" aria-labelledby="research-model-title">
+    <header class="dialog-bar"><button id="close-research-model" type="button" class="icon-button" aria-label="Close"><svg><use href="#i-close"/></svg></button><h2 id="research-model-title">Research model</h2><span></span></header>
+    <p id="research-model-summary" class="supporting" role="status"></p>
+    <section id="research-found-section"><h3 class="list-header">On this computer</h3><div id="research-found" class="card list"></div>
+      <p class="supporting">Models already downloaded by Penny Goblin, LM Studio, GhostPen or the Hugging Face cache. Using one copies nothing.</p></section>
+    <section id="research-download-section"><h3 class="list-header">Download</h3><div id="research-download" class="card list"></div></section>
+    <div class="actions"><button id="research-model-pick" type="button" class="text-button">Choose another GGUF file</button></div>
+    <p class="supporting">An instruction model of about 7–14B works best. It loads only while research runs, then unloads. Receipt scanning uses its own model.</p>
+  </dialog>
   <dialog id="research-dialog" class="sheet" aria-labelledby="research-title">
     <header class="dialog-bar"><button id="research-close" class="icon-button" type="button" aria-label="Close"><svg><use href="#i-close"/></svg></button><h2 id="research-title">Research categories</h2><button id="research-apply" class="filled" type="button" disabled>Apply selected</button></header>
     <p class="supporting">Find categories for up to 10 merchants in this period. Review before applying.</p>
@@ -321,7 +334,7 @@
       <details id="research-details" class="inline-details"><summary>Model &amp; privacy details</summary>
       <p class="supporting">Only merchant names and country context are searched online. Amounts, accounts and receipts stay private. Uncertain results stay uncategorized.</p>
       <p class="supporting">Qwen3.5 9B: 5.7 GB. Loads on desktop for each batch, then unloads. Receipt scanning uses its own model.</p>
-      <div id="research-model-controls" class="actions"><button id="research-model-download" type="button" class="tonal">Download Qwen3.5 9B</button><button id="research-model-pick" type="button" class="text-button">Choose GGUF</button><button id="research-model-default" type="button" class="text-button" hidden>Use Qwen3.5 9B</button><button id="research-model-cancel" type="button" class="text-button" hidden>Cancel download</button></div>
+      <div id="research-model-controls" class="actions"><button id="research-model-change" type="button" class="tonal">Change model</button></div>
       </details>
     </section>
     <div class="actions"><button id="research-start" class="tonal" type="button">Research merchants</button><button id="research-cancel" class="text-button" type="button" hidden>Cancel research</button></div>

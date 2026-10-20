@@ -1,11 +1,4 @@
 const std = @import("std");
-// Zig translate-c does not accept the Android NDK nullability annotations.
-const time_c = @cImport({
-    @cDefine("_Nonnull", "");
-    @cDefine("_Nullable", "");
-    @cDefine("_Null_unspecified", "");
-    @cInclude("time.h");
-});
 const oriel = @import("oriel");
 const app = @import("oriel_app");
 const ledger_mod = @import("core/ledger.zig");
@@ -58,13 +51,11 @@ pub const Snapshot = struct {
 
 pub const Commands = struct {
     pub const async_commands = .{
-        "research_categories", "apply_research", "research_model_status", "research_model_pick", "research_model_download", "research_model_default",
-        "snapshot",           "save_expense",           "delete_expense",      "import_legacy",      "save_budget",
-        "expense_documents",  "analyze_receipt",        "pick_model",          "export_report",      "prepare_statement",
-        "parse_statement",    "statement_observations", "reconcile_statement", "unlink_observation", "export_statement",
-        "expense_statements", "sync_status",            "sync_control",        "sync_conflict",      "sync_resolve",
-        "scanner_status",     "scanner_select",         "scanner_download",    "scanner_delete",     "scanner_system_download",
-        "ui_defaults",        "ui_pick_file",           "scanner_gpu",         "analyze_text",       "scanner_fast",
+        "research_categories", "apply_research",          "research_model_status", "research_model_pick",    "research_model_download", "research_model_default", "research_model_options", "research_model_use",
+        "snapshot",            "save_expense",            "delete_expense",        "import_legacy",          "save_budget",             "expense_documents",      "analyze_receipt",        "pick_model",
+        "export_report",       "prepare_statement",       "parse_statement",       "statement_observations", "reconcile_statement",     "unlink_observation",     "export_statement",       "expense_statements",
+        "sync_status",         "sync_control",            "sync_conflict",         "sync_resolve",           "scanner_status",          "scanner_select",         "scanner_select_shared",  "scanner_download",
+        "scanner_delete",      "scanner_system_download", "ui_defaults",           "ui_pick_file",           "scanner_gpu",             "analyze_text",           "scanner_fast",
     };
 
     pub fn sync_status(arena: std.mem.Allocator) ![]const u8 {
@@ -136,6 +127,8 @@ pub const Commands = struct {
 
     // These run on the main thread, just like tray callbacks.
     pub fn take_quick_action() ?QuickAction {
+        mutex.lockUncancelable(process_io);
+        defer mutex.unlock(process_io);
         const action = pending_action;
         pending_action = null;
         return action;
@@ -192,17 +185,34 @@ pub const Commands = struct {
         if (comptime oriel.target.is_android) return @import("research_remote.zig").model(arena);
         return std.json.Stringify.valueAlloc(arena, try research_model.status(process_io, arena), .{});
     }
-    pub fn research_model_pick(arena: std.mem.Allocator) !void { try research_model.pick(process_io, arena); }
-    pub fn research_model_default(arena: std.mem.Allocator) !void { try research_model.use_default(process_io, arena); }
-    pub fn research_model_download() !void { try research_model.download(process_io, std.heap.smp_allocator, emit_download); }
-    pub fn cancel_research_model() void { research_model.cancelDownload(); }
+    pub fn research_model_pick(arena: std.mem.Allocator) !void {
+        try research_model.pick(process_io, arena);
+    }
+    pub fn research_model_default(arena: std.mem.Allocator) !void {
+        try research_model.use_default(process_io, arena);
+    }
+    pub fn research_model_options(arena: std.mem.Allocator) ![]const u8 {
+        return std.json.Stringify.valueAlloc(arena, try research_model.options(process_io, arena), .{});
+    }
+    pub fn research_model_use(arena: std.mem.Allocator, args: struct { path: []const u8 }) !void {
+        try research_model.use(process_io, arena, args.path);
+    }
+    pub fn research_model_download() !void {
+        try research_model.download(process_io, std.heap.smp_allocator, emit_download);
+    }
+    pub fn cancel_research_model() void {
+        research_model.cancelDownload();
+    }
     pub fn open_research_source(arena: std.mem.Allocator, args: struct { url: []const u8 }) !void {
         try model.text(args.url, 2048, false);
         const uri = try std.Uri.parse(args.url);
         if (!std.ascii.eqlIgnoreCase(uri.scheme, "https") or uri.host == null or uri.user != null or uri.password != null) return error.InvalidUrl;
         oriel.App.openExternal((try arena.dupeZ(u8, args.url)).ptr);
     }
-    pub fn cancel_research() void { research_runtime.cancel(); @import("research_remote.zig").cancel(); }
+    pub fn cancel_research() void {
+        research_runtime.cancel();
+        @import("research_remote.zig").cancel();
+    }
     pub fn apply_research(arena: std.mem.Allocator, args: categorization.Apply) !usize {
         if (comptime oriel.target.is_android) return @import("research_remote.zig").apply(arena, args);
         mutex.lockUncancelable(process_io);
@@ -252,6 +262,9 @@ pub const Commands = struct {
     }
     pub fn scanner_select(arena: std.mem.Allocator, args: struct { id: []const u8 }) !void {
         try scanner.select(process_io, arena, args.id);
+    }
+    pub fn scanner_select_shared(arena: std.mem.Allocator, args: struct { model: []const u8, projector: []const u8 }) !void {
+        try scanner.selectShared(process_io, arena, args.model, args.projector);
     }
     pub fn scanner_download(_: std.mem.Allocator, args: struct { id: []const u8 }) !void {
         try scanner.download(process_io, std.heap.smp_allocator, args.id, emit_download);
@@ -340,7 +353,7 @@ pub const Commands = struct {
         const parsed = try statement_runtime.parse(process_io, arena, data, budget);
         mutex.lockUncancelable(process_io);
         defer mutex.unlock(process_io);
-        try statements.accept_parse(db, arena, args.hash, parsed);
+        try statements.accept_parse(try database(), arena, args.hash, parsed);
     }
 
     pub fn statement_observations(arena: std.mem.Allocator, args: struct { hash: []const u8 }) ![]statements.Observation {
@@ -453,12 +466,7 @@ fn scanReceipt(io: std.Io, arena: std.mem.Allocator, data_url: []const u8, taken
 
 /// The local calendar day of Unix time `seconds`, as YYYY-MM-DD.
 fn localDay(arena: std.mem.Allocator, seconds: i64) ![]const u8 {
-    var timestamp: time_c.time_t = @intCast(seconds);
-    var calendar: time_c.struct_tm = undefined;
-    if (comptime @import("builtin").os.tag == .windows) {
-        if (time_c._localtime64_s(&calendar, &timestamp) != 0) return error.InvalidDate;
-    } else if (time_c.localtime_r(&timestamp, &calendar) == null) return error.InvalidDate;
-    return std.fmt.allocPrint(arena, "{d:0>4}-{d:0>2}-{d:0>2}", .{ @as(u16, @intCast(calendar.tm_year + 1900)), @as(u8, @intCast(calendar.tm_mon + 1)), @as(u8, @intCast(calendar.tm_mday)) });
+    return @import("ui_dates.zig").local_day(arena, seconds);
 }
 
 /// A scan's date where it can't be the payment's: a model's invented one
@@ -519,8 +527,11 @@ fn on_tray_menu(id: []const u8, _: ?bool) void {
         return;
     }
     show_window();
-    if (std.mem.eql(u8, id, "expense")) pending_action = .expense else if (std.mem.eql(u8, id, "receipt")) pending_action = .receipt else if (std.mem.eql(u8, id, "sync")) pending_action = .sync;
-    if (pending_action != null) oriel.App.events(Events).emit(.quick_action, .{});
+    const action: QuickAction = if (std.mem.eql(u8, id, "expense")) .expense else if (std.mem.eql(u8, id, "receipt")) .receipt else if (std.mem.eql(u8, id, "sync")) .sync else return;
+    mutex.lockUncancelable(process_io);
+    pending_action = action;
+    mutex.unlock(process_io);
+    oriel.App.events(Events).emit(.quick_action, .{});
 }
 
 pub fn main(init: std.process.Init) !u8 {

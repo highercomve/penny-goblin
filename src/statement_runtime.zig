@@ -12,11 +12,9 @@ pub fn parse(io: std.Io, arena: std.mem.Allocator, data_url: []const u8, setting
     const directory = try std.fs.path.join(arena, &.{ root, "statement-helper" });
     try std.Io.Dir.cwd().createDirPath(io, directory);
     const helper = try @import("runtime_helper.zig").path(io, arena);
-    const pdf = try std.fs.path.join(arena, &.{ directory, "input.pdf" });
-    const config = try std.fs.path.join(arena, &.{ directory, "settings.json" });
-    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = pdf, .data = try statements.pdf_bytes(arena, data_url) });
+    const pdf = try @import("private_file.zig").create(io, arena, try std.fs.path.join(arena, &.{ directory, "input.pdf" }), try statements.pdf_bytes(arena, data_url), false);
     defer std.Io.Dir.cwd().deleteFile(io, pdf) catch {};
-    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = config, .data = settings });
+    const config = try @import("private_file.zig").create(io, arena, try std.fs.path.join(arena, &.{ directory, "settings.json" }), settings, false);
     defer std.Io.Dir.cwd().deleteFile(io, config) catch {};
     const result = try std.process.run(arena, io, .{
         .argv = &.{ helper, pdf, config },

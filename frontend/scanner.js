@@ -12,6 +12,7 @@ const megabytes = (mb) => mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} M
 function scannerLabel(id) {
   if (id === "system") return "the phone's model";
   if (id === "custom") return "your imported model";
+  if (id === "shared") return scannerState?.shared.find((pair) => pair.current)?.name || "a model from another app";
   return scannerState?.models.find((model) => model.id === id)?.label || "";
 }
 
@@ -75,6 +76,12 @@ function renderScanner() {
     } else if (model.installed) {
       if (state.active !== model.id) actions.push(scannerButton("Use", "tonal", () => chooseScanner(model.id)));
       actions.push(scannerButton("Delete", "text-button danger", () => deleteScannerModel(model)));
+    } else if (model.found && !model.partial_mb) {
+      // Another app keeps the same files: "downloading" checks and links them.
+      detail = `${model.note} · in ${model.found}, nothing to download`;
+      const button = scannerButton("Use", "tonal", () => downloadScannerModel(model));
+      button.disabled = !!state.downloading || !state.vision_built;
+      actions.push(button);
     } else {
       if (model.partial_mb) detail = `${model.note} · ${megabytes(model.partial_mb)} of ${megabytes(model.mb)} downloaded`;
       const button = scannerButton(model.partial_mb ? "Resume" : "Download", "tonal", () => downloadScannerModel(model));
@@ -90,10 +97,22 @@ function renderScanner() {
     return row;
   };
   const busy = (model) => state.downloading === model.id || scannerProgress[model.id]?.state === "downloading";
-  const local = state.models.filter((model) => model.installed || busy(model));
-  const available = state.models.filter((model) => !model.installed && !busy(model));
-  $("scanner-installed-section").hidden = !local.length;
-  $("scanner-installed").replaceChildren(...local.map(rowFor));
+  const local = state.models.filter((model) => model.installed || busy(model) || model.found);
+  const available = state.models.filter((model) => !model.installed && !busy(model) && !model.found);
+  // Vision models LM Studio, GhostPen or Hugging Face keep, used where they are.
+  const sharedRow = (pair) => {
+    const badge = node("span", "In use", "badge");
+    badge.hidden = !(state.active === "shared" && pair.current);
+    const actions = [badge];
+    if (badge.hidden) {
+      const button = scannerButton("Use", "tonal", () => chooseSharedScanner(pair));
+      button.disabled = !state.vision_built;
+      actions.push(button);
+    }
+    return scannerRow(pair.name, `${pair.app} · ${megabytes(pair.mb)} · with its projector`, actions);
+  };
+  $("scanner-installed-section").hidden = !local.length && !state.shared.length;
+  $("scanner-installed").replaceChildren(...local.map(rowFor), ...state.shared.map(sharedRow));
   $("scanner-available-section").hidden = !available.length;
   $("scanner-models").replaceChildren(...available.map(rowFor));
   // Your own GGUF pair: use or delete once both files are loaded.
@@ -114,6 +133,14 @@ async function chooseScanner(id) {
   if (scannerWorking) return;
   scannerWorking = true;
   try { await invoke("scanner_select", { id }); status("model-status", ""); }
+  catch (error) { status("model-status", errorText(error), true); }
+  finally { scannerWorking = false; await refreshScanner(); }
+}
+
+async function chooseSharedScanner(pair) {
+  if (scannerWorking) return;
+  scannerWorking = true;
+  try { await invoke("scanner_select_shared", { model: pair.model, projector: pair.projector }); status("model-status", `Scanning with ${pair.name}`); }
   catch (error) { status("model-status", errorText(error), true); }
   finally { scannerWorking = false; await refreshScanner(); }
 }

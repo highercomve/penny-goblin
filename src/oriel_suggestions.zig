@@ -25,7 +25,9 @@ fn list() i64 {
 fn choose(e: *ui.Engine, index: usize) !void {
     if (index >= count) return;
     const node = e.tree.get(base + @as(i64, @intCast(index))) orelse return;
-    try f.set_value(e, field_id, node.props.runs.?[0].t);
+    const runs = node.props.runs orelse return error.InvalidTemplate;
+    if (runs.len == 0) return error.InvalidTemplate;
+    try f.set_value(e, field_id, runs[0].t);
     try f.show(e, list(), false);
     selected = null;
 }
@@ -56,9 +58,10 @@ fn open(e: *ui.Engine) !void {
         _ = try View.mount(&e.tree, ids[index], 79800, &.{.{ .name = "text", .value = name }});
         try f.mark_action(e, ids[index], name);
     }
-    _ = try e.tree.stampKids(list(), ids[0..count]);
+    if (!try e.tree.stampKids(list(), ids[0..count])) return error.InvalidTemplate;
     try f.show(e, list(), count > 0);
-    const parent = e.tree.get(field_id).?.parent.?;
+    const field = e.tree.get(field_id) orelse return error.InvalidTemplate;
+    const parent = field.parent orelse return error.InvalidTemplate;
     var props = parent.props;
     props.z = if (count > 0) 10 else null;
     try e.tree.updateUiProps(parent.id, props);

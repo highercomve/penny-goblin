@@ -45,6 +45,7 @@ pub fn customPaths(arena: std.mem.Allocator) !struct { model: [:0]const u8, proj
 }
 
 fn present(io: std.Io, path: []const u8) bool {
+    model_files.independent_file(io, path) catch return false;
     const stat = std.Io.Dir.cwd().statFile(io, path, .{}) catch return false;
     return stat.size > 1 << 20;
 }
@@ -80,6 +81,67 @@ pub fn select(io: std.Io, arena: std.mem.Allocator, id: []const u8) !void {
     const dir = try appDir(arena);
     try std.Io.Dir.cwd().createDirPath(io, dir);
     try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ dir, choice_file }), .data = id });
+}
+
+// ---------------------------------------------------------------------------
+// Vision models other apps (LM Studio, GhostPen, Hugging Face) already keep,
+// used where they are: a model with a projector (mmproj) in its folder.
+
+pub const Shared = struct { model: [:0]const u8, projector: [:0]const u8, name: []const u8, app: []const u8, mb: u32, current: bool = false };
+const shared_file = "scanner-shared.json";
+
+fn sharedModels(io: std.Io, arena: std.mem.Allocator) ![]Shared {
+    var list: std.ArrayList(Shared) = .empty;
+    if (is_phone) return list.items;
+    const found = try model_files.scan(io, arena, try model_files.sharedRoots(arena));
+    const chosen = if (std.mem.eql(u8, readChoice(io, arena), "shared")) try readShared(io, arena) else null;
+    for (found) |model| {
+        if (!model_files.runnable(model)) continue;
+        const dir = std.fs.path.dirname(model.path) orelse continue;
+        const name = std.fs.path.stem(std.fs.path.basename(model.path));
+        // The projector beside it; one named after the model first
+        // (GhostPen's `<model>.mmproj.gguf`), else the folder's only one.
+        var projector: ?model_files.Found = null;
+        for (found) |other| {
+            const other_name = std.fs.path.basename(other.path);
+            if (!model_files.isProjector(other_name) or !std.mem.eql(u8, std.fs.path.dirname(other.path) orelse "", dir)) continue;
+            if (projector == null or std.mem.startsWith(u8, other_name, name)) projector = other;
+        }
+        const pair = projector orelse continue;
+        const item: Shared = .{ .model = try arena.dupeZ(u8, model.path), .projector = try arena.dupeZ(u8, pair.path), .name = name, .app = model.app, .mb = @intCast((model.size + pair.size) >> 20) };
+        try list.append(arena, item);
+        if (chosen) |c| list.items[list.items.len - 1].current = std.mem.eql(u8, c.model, item.model) and std.mem.eql(u8, c.projector, item.projector);
+    }
+    return list.items;
+}
+
+/// The catalog entry a shared pair duplicates (same model and projector
+/// sizes): offered as that entry, linked by a hash-checked "download".
+fn catalogMatch(pair: Shared) ?[]const u8 {
+    for (catalog) |entry| {
+        if (offered(entry) and std.mem.eql(u8, std.fs.path.basename(pair.model), entry.file) and (entry.size + entry.projector_size) >> 20 == pair.mb) return entry.id;
+    }
+    return null;
+}
+
+fn readShared(io: std.Io, arena: std.mem.Allocator) !?struct { model: [:0]const u8, projector: [:0]const u8 } {
+    const path = try std.fs.path.join(arena, &.{ try appDir(arena), shared_file });
+    const text = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(16 * 1024)) catch return null;
+    const pair = std.json.parseFromSliceLeaky(struct { model: []const u8, projector: []const u8 }, arena, text, .{ .allocate = .alloc_always }) catch return null;
+    return .{ .model = try arena.dupeZ(u8, pair.model), .projector = try arena.dupeZ(u8, pair.projector) };
+}
+
+/// Scan with a pair another app keeps: only one `status` lists, never an
+/// arbitrary path from the interface.
+pub fn selectShared(io: std.Io, arena: std.mem.Allocator, model: []const u8, projector: []const u8) !void {
+    for (try sharedModels(io, arena)) |pair| if (std.mem.eql(u8, pair.model, model) and std.mem.eql(u8, pair.projector, projector)) {
+        const dir = try appDir(arena);
+        try std.Io.Dir.cwd().createDirPath(io, dir);
+        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ dir, shared_file }), .data = try std.json.Stringify.valueAlloc(arena, .{ .model = model, .projector = projector }, .{}) });
+        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ dir, choice_file }), .data = "shared" });
+        return;
+    };
+    return error.UnknownModel;
 }
 
 const fast_file = "scanner-fast";
@@ -158,6 +220,11 @@ pub fn resolve(io: std.Io, arena: std.mem.Allocator) !Engine {
         if (present(io, paths.model) and present(io, paths.projector)) return .{ .local = .{ .model = paths.model, .projector = paths.projector } };
         return error.ModelNotDownloaded;
     }
+    if (std.mem.eql(u8, choice, "shared")) {
+        const pair = try readShared(io, arena) orelse return error.ModelNotFound;
+        if (present(io, pair.model) and present(io, pair.projector)) return .{ .local = .{ .model = pair.model, .projector = pair.projector } };
+        return error.ModelNotFound;
+    }
     const custom = try customPaths(arena);
     if (std.mem.eql(u8, choice, "custom")) {
         if (present(io, custom.model) and present(io, custom.projector)) return .{ .local = .{ .model = custom.model, .projector = custom.projector } };
@@ -182,6 +249,9 @@ pub const ModelStatus = struct {
     mb: u32,
     installed: bool,
     partial_mb: u32,
+    /// Another app on this computer has this model and projector (by size;
+    /// the download verifies the hash and links them instead): "" when none.
+    found: []const u8 = "",
 };
 
 pub const Status = struct {
@@ -192,6 +262,8 @@ pub const Status = struct {
     vision_built: bool,
     system: struct { supported: bool, state: []const u8, reason: []const u8 },
     models: []const ModelStatus,
+    /// Vision models other apps keep with their projector, usable in place.
+    shared: []const Shared = &.{},
     custom: bool,
     downloading: []const u8,
     /// A GPU that passed ggml's self-test ("" when none) and whether scans use it.
@@ -208,6 +280,9 @@ pub const Status = struct {
 pub fn status(io: std.Io, arena: std.mem.Allocator) !Status {
     var models: std.ArrayList(ModelStatus) = .empty;
     const dir = try modelsDir(arena);
+    const others = try sharedModels(io, arena);
+    var shared: std.ArrayList(Shared) = .empty;
+    for (others) |other| if (catalogMatch(other) == null) try shared.append(arena, other);
     for (catalog) |entry| {
         if (!offered(entry)) continue;
         const part = try std.fmt.allocPrint(arena, "{s}.part", .{try std.fs.path.join(arena, &.{ dir, entry.file })});
@@ -219,6 +294,9 @@ pub fn status(io: std.Io, arena: std.mem.Allocator) !Status {
             .mb = @intCast((entry.size + entry.projector_size) >> 20),
             .installed = installed(io, arena, entry),
             .partial_mb = @intCast(partial >> 20),
+            .found = for (others) |other| {
+                if (std.mem.eql(u8, catalogMatch(other) orelse "", entry.id)) break other.app;
+            } else "",
         });
     }
     const custom = try customPaths(arena);
@@ -226,6 +304,7 @@ pub fn status(io: std.Io, arena: std.mem.Allocator) !Status {
         .system => "system",
         .local => |paths| blk: {
             if (std.mem.eql(u8, paths.model, custom.model)) break :blk "custom";
+            if (std.mem.eql(u8, readChoice(io, arena), "shared")) break :blk "shared";
             for (catalog) |entry| if (std.mem.endsWith(u8, paths.model, entry.file)) break :blk entry.id;
             break :blk "";
         },
@@ -245,6 +324,7 @@ pub fn status(io: std.Io, arena: std.mem.Allocator) !Status {
         .vision_built = oriel.llama.available,
         .system = system,
         .models = models.items,
+        .shared = shared.items,
         .custom = present(io, custom.model) and present(io, custom.projector),
         .downloading = downloading,
         .gpu = if (oriel.llama.available and oriel.ggml_gpu.load(io) > 0) try arena.dupe(u8, oriel.ggml_gpu.gpuName() orelse oriel.ggml_gpu.backendName() orelse "GPU") else "",
@@ -322,8 +402,8 @@ fn fetchAll(io: std.Io, gpa: std.mem.Allocator, arena: std.mem.Allocator, dir: [
 pub fn delete(io: std.Io, arena: std.mem.Allocator, id: []const u8) !void {
     if (std.mem.eql(u8, id, "custom")) {
         const custom = try customPaths(arena);
-        std.Io.Dir.cwd().deleteFile(io, custom.model) catch {};
-        std.Io.Dir.cwd().deleteFile(io, custom.projector) catch {};
+        try delete_if_present(io, custom.model);
+        try delete_if_present(io, custom.projector);
         return;
     }
     const entry = find(id) orelse return error.UnknownModel;
@@ -332,7 +412,13 @@ pub fn delete(io: std.Io, arena: std.mem.Allocator, id: []const u8) !void {
     if (std.mem.eql(u8, downloading_id, id)) return error.Downloading;
     const paths = try entryPaths(arena, entry);
     for ([_][]const u8{ paths.model, paths.projector }) |path| {
-        std.Io.Dir.cwd().deleteFile(io, path) catch {};
-        std.Io.Dir.cwd().deleteFile(io, try std.fmt.allocPrint(arena, "{s}.part", .{path})) catch {};
+        try delete_if_present(io, path);
+        try delete_if_present(io, try std.fmt.allocPrint(arena, "{s}.part", .{path}));
     }
+}
+fn delete_if_present(io: std.Io, path: []const u8) !void {
+    std.Io.Dir.cwd().deleteFile(io, path) catch |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    };
 }
