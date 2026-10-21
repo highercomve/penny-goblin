@@ -87,7 +87,7 @@ bash scripts/build-site.sh # clean static website in public/
 ```
 
 The Cloudflare Pages workflow (`.github/workflows/cloudflare.yml`) builds the site
-and deploys main-branch changes to https://pennygoblin.foreachdeveloper.com/.
+and deploys main-branch changes to https://penny-goblin.foreachdeveloper.com/.
 Release builds are published on this repository's Releases page.
 
 ## Development and tests

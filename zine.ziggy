@@ -2,7 +2,7 @@
 .supermd = .{ .headings_h2 = true },
 .site = .simple(.{
     .title = "Penny Goblin",
-    .host_url = "https://pennygoblin.foreachdeveloper.com",
+    .host_url = "https://penny-goblin.foreachdeveloper.com",
     .url_path_prefix = "",
     .content_dir_path = "site/content",
     .layouts_dir_path = "site/layouts",
