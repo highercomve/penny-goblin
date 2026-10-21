@@ -3,7 +3,7 @@
 .date = .date("2026-10-18T00:00:00"),
 .layout = "page.shtml",
 ---
-Penny Goblin is a household ledger for **Linux and Android**, built with Zig and
+Penny Goblin is a household ledger for **Linux, Windows, macOS and Android**, built with Zig and
 Oriel. It is in early development. The application's source repository is
 private; its builds and this website are public.
 
@@ -13,9 +13,9 @@ Download [Penny Goblin 0.2.13](https://github.com/highercomve/penny-goblin/relea
 
 - [Linux x86_64 AppImage](https://github.com/highercomve/penny-goblin/releases/download/v0.2.13/penny-goblin-linux-x86_64-oriel.AppImage) (compiled Oriel interface; the scanner can use any GPU through Vulkan)
 - [Linux x86_64 AppImage, WebView interface](https://github.com/highercomve/penny-goblin/releases/download/v0.2.13/penny-goblin-linux-x86_64-webview.AppImage) (scans on NVIDIA GPUs with CUDA)
+- [Windows x86_64 installer](https://github.com/highercomve/penny-goblin/releases/download/v0.2.13/penny-goblin-windows-x86_64-setup.exe) (the scanner can use any GPU through Vulkan)
+- [macOS Apple silicon disk image](https://github.com/highercomve/penny-goblin/releases/download/v0.2.13/penny-goblin-macos-arm64.dmg) (the scanner runs on the GPU through Metal)
 - [Android arm64 APK](https://github.com/highercomve/penny-goblin/releases/download/v0.2.13/penny-goblin-android-arm64.apk)
-
-Windows and macOS packages are not yet available for the current release.
 
 Every version, its notes and the [SHA256SUMS](https://github.com/highercomve/penny-goblin/releases/download/v0.2.13/SHA256SUMS)
 of its files are on the [releases page](https://github.com/highercomve/penny-goblin/releases).
@@ -24,7 +24,9 @@ There is no app-store release yet.
 Linux builds need compatible GTK4 and WebKitGTK 6 system libraries; make the
 AppImage executable (`chmod +x`) before running it. The WebView AppImage
 scans receipts on an NVIDIA GPU when the NVIDIA driver and the CUDA 13
-runtime (cuBLAS) are installed, and on the CPU otherwise. Android builds require
+runtime (cuBLAS) are installed, and on the CPU otherwise. Windows builds need
+Windows 10 or 11 with the WebView2 runtime, which Windows 11 already includes.
+The macOS build needs macOS 13 or newer on Apple silicon. Android builds require
 Android 10 or newer. These APKs use development signing: an existing
 installation can only be upgraded by an APK with the same certificate. Keep
 your current data and pairing safe; use an isolated test device or profile when

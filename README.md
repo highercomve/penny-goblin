@@ -2,7 +2,7 @@
 
 <img src="brand/tray.svg" width="88" alt="Penny Goblin mascot">
 
-A private household ledger for Linux and Android. Scan a receipt or transfer
+A private household ledger for Linux, Windows, macOS and Android. Scan a receipt or transfer
 voucher, review the extracted fields, and save the payment. Your ledger lives
 on your devices; there is no hosted account or cloud ledger.
 

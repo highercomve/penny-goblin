@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title :text="$page.title"></title>
-<meta name="description" content="A friendly household ledger for Linux and Android. Scan receipts, review your spending and securely connect your own devices.">
+<meta name="description" content="A friendly household ledger for Linux, Windows, macOS and Android. Scan receipts, review your spending and securely connect your own devices.">
 <meta name="theme-color" content="#173d2b">
 <link rel="icon" href="$site.asset('goblin.svg').link()" type="image/svg+xml">
 <link rel="stylesheet" href="$site.asset('style.css').link()">
