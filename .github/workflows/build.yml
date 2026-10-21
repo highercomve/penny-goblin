@@ -248,15 +248,16 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   release:
-    # A version tag (v0.2.5) publishes its builds on the public site
-    # repository's Releases page: this source repository is private, and so
-    # would be its releases. Fixed asset names keep the website's
+    # A version tag (v0.2.5) publishes its builds on this repository's
+    # Releases page. Fixed asset names keep the website's
     # releases/latest/download/... links working for every version.
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [test, linux, windows, macos, android]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -277,51 +278,15 @@ jobs:
           awk -v v="$version" '/^## /{found = ($2 == v)} found && !/^## /' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "Penny Goblin $version." > notes.md
           printf '\nBuilt from %s. Linux needs GTK4 and WebKitGTK 6 (the WebKit build scans on NVIDIA GPUs with the CUDA 13 runtime); Windows needs the WebView2 runtime (Windows 10/11); macOS needs macOS 13 on Apple silicon; Android needs Android 10 or newer.\n' "${GITHUB_SHA::12}" >> notes.md
-      - name: Publish on penny-goblin-site
+      - name: Publish the release
         env:
-          # A token that can write the public site repository's releases
-          # (fine-grained: highercomve/penny-goblin-site, Contents read and write).
-          GH_TOKEN: ${{ secrets.SITE_RELEASE_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" --repo highercomve/penny-goblin-site >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" release/* --repo highercomve/penny-goblin-site --clobber
-            gh release edit "$GITHUB_REF_NAME" --repo highercomve/penny-goblin-site \
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release/* --clobber
+            gh release edit "$GITHUB_REF_NAME" \
               --title "Penny Goblin ${GITHUB_REF_NAME#v}" --notes-file notes.md --prerelease=false --latest
           else
-            gh release create "$GITHUB_REF_NAME" release/* --repo highercomve/penny-goblin-site \
+            gh release create "$GITHUB_REF_NAME" release/* \
               --title "Penny Goblin ${GITHUB_REF_NAME#v}" --notes-file notes.md --latest
           fi
-  website:
-    name: Zine website
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Zine 0.14.0
-        run: |
-          curl --fail --location --retry 3 https://github.com/kristoff-it/zine/releases/download/v0.14.0/x86_64-linux-musl.tar.xz -o /tmp/zine.tar.xz
-          echo '897642f46c3872a6311f2ab3d4c622f5f8625bfee8e1de2d0de42597c1385629  /tmp/zine.tar.xz' | sha256sum -c -
-          mkdir -p "$RUNNER_TEMP/zine"
-          tar -xJf /tmp/zine.tar.xz -C "$RUNNER_TEMP/zine"
-          echo "$RUNNER_TEMP/zine" >> "$GITHUB_PATH"
-      - run: bash scripts/build-site.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: penny-goblin-website
-          path: public/
-          if-no-files-found: error
-          retention-days: 14
-      - name: Load website-only deploy key
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        uses: webfactory/ssh-agent@v0.9.1
-        with:
-          ssh-private-key: ${{ secrets.WEBSITE_DEPLOY_KEY }}
-      - name: Trust GitHub SSH host keys from its HTTPS metadata
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          curl --fail --silent --show-error https://api.github.com/meta | python3 -c 'import json,sys; print("\n".join("github.com " + key for key in json.load(sys.stdin)["ssh_keys"]))' >> ~/.ssh/known_hosts
-      - name: Publish static website
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        run: bash scripts/publish-site.sh

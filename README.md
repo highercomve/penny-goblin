@@ -86,11 +86,9 @@ zine                       # local preview: http://localhost:1990
 bash scripts/build-site.sh # clean static website in public/
 ```
 
-CI builds the site as an artifact and publishes main-branch builds to
-https://highercomve.github.io/penny-goblin-site/. Only generated public HTML/CSS
-and brand assets are mirrored to `highercomve/penny-goblin-site`; application
-source and build artifacts stay private. The website job uses a deploy key scoped
-only to the public site repository. Pull requests never publish.
+The Cloudflare Pages workflow (`.github/workflows/cloudflare.yml`) builds the site
+and deploys main-branch changes to https://pennygoblin.foreachdeveloper.com/.
+Release builds are published on this repository's Releases page.
 
 ## Development and tests
 
