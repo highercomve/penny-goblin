@@ -7,7 +7,7 @@ Penny Goblin is a household ledger for **Linux, Windows, macOS and Android**, bu
 Oriel. It is in early development. The application's source repository is
 private; its builds and this website are public.
 
-# Download Penny Goblin
+# [Download Penny Goblin]($heading.id('download-penny-goblin'))
 
 Download [Penny Goblin 0.2.13](https://github.com/highercomve/penny-goblin/releases/tag/v0.2.13):
 
@@ -32,7 +32,7 @@ installation can only be upgraded by an APK with the same certificate. Keep
 your current data and pairing safe; use an isolated test device or profile when
 trying differently signed builds.
 
-# Your first payment
+# [Your first payment]($heading.id('your-first-payment'))
 
 1. Choose Scan, then take a photo or select a receipt or transfer voucher.
 2. Check the total after discounts, merchant, date and account. Correct any mistakes.
@@ -42,7 +42,7 @@ Scanner models are optional, downloaded separately and not included with the app
 Manual entry remains available. Scan accuracy and speed depend on the image,
 device and selected model.
 
-# Pair your devices
+# [Pair your devices]($heading.id('pair-your-devices'))
 
 Open pairing and synchronization on your desktop and pair the phone using its
 QR code or pairing link. The app authenticates and pins the desktop certificate.
@@ -52,7 +52,7 @@ Once paired, the phone can ask the desktop to scan an image or research
 uncategorized merchants. Category research uses the current period and payment
 filters. Its suggestions remain a draft until you review and select Apply.
 
-# Build it yourself
+# [Build it yourself]($heading.id('build-it-yourself'))
 
 Collaborators can clone the private repository and follow its README. The source
 pins Oriel 0.18.0 with a verified package hash, so builds do not depend on a

@@ -6,21 +6,21 @@
 Penny Goblin stores the household ledger on your devices. It does not require a
 hosted Penny Goblin account, and this website is separate from the application.
 
-# Scanning and models
+# [Scanning and models]($heading.id('scanning-and-models'))
 
 Android's text recognition runs on-device. Optional local models can extract
 receipt fields on your phone or desktop. If you choose a paired desktop scan,
 the receipt image is sent to that authenticated desktop over the encrypted
 connection. Model files are downloaded separately from their configured source.
 
-# Pairing and synchronization
+# [Pairing and synchronization]($heading.id('pairing-and-synchronization'))
 
 Pairing authenticates your desktop and pins its TLS certificate. Your devices
 must be reachable over a local network or your configured Tailscale connection.
 Treat pairing links and QR codes as private. Secure access to your devices and
 keep backups of the ledger and receipt evidence.
 
-# Optional online research
+# [Optional online research]($heading.id('optional-online-research'))
 
 Desktop category research sends merchant names and country context to online
 search and visits relevant sources. Payment amounts, accounts and receipt images
@@ -31,14 +31,14 @@ Research is optional. Blocked or uncertain results can stay uncategorized.
 The model does not save category changes: you review the evidence and explicitly
 apply selected suggestions.
 
-# This website
+# [This website]($heading.id('this-website'))
 
 This static website has no analytics scripts, tracking pixels, external fonts or
 account forms. It is hosted by GitHub Pages, whose infrastructure processes web
 requests under GitHub's policies. Links to GitHub or other services follow those
 services' policies. Illustrations use fictional example payments, not a real ledger.
 
-# Development limits
+# [Development limits]($heading.id('development-limits'))
 
 Penny Goblin is an early development project. OCR and models can misread images
 or suggest a wrong category. Review totals, dates and merchants before saving.
