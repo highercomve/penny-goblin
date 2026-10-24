@@ -85,6 +85,8 @@ main { padding: 0 16px; max-width: 960px; margin: 0 auto; }
 .center { text-align: center; }
 .grid { display: grid; gap: 12px; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; }
+.insights-heading { gap: 8px; }
+.insights-heading .chips { flex: 1 1 auto; min-width: 0; }
 
 /* Home */
 .hero { background: var(--primary-container); color: var(--on-primary-container); padding: 20px; border-radius: var(--radius-xl); }

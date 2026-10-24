@@ -320,6 +320,24 @@ fn html_text(w: *std.Io.Writer, text: []const u8) !void {
     };
 }
 /// Standalone export: money stays integer and every user-supplied cell is escaped.
+/// Median of `values` (sorted in place); an even count averages the two middle values.
+pub fn median(values: []i64) i64 {
+    if (values.len == 0) return 0;
+    std.mem.sort(i64, values, {}, std.sort.asc(i64));
+    const middle = values.len / 2;
+    return if (values.len % 2 == 1) values[middle] else @divTrunc(values[middle - 1] + values[middle], 2);
+}
+
+test "medians of monthly totals" {
+    var none = [_]i64{};
+    try std.testing.expectEqual(@as(i64, 0), median(&none));
+    var odd = [_]i64{ 5, 1, 3 };
+    try std.testing.expectEqual(@as(i64, 3), median(&odd));
+    // January 150, February 0, March 90, April 400.
+    var even = [_]i64{ 150, 0, 90, 400 };
+    try std.testing.expectEqual(@as(i64, 120), median(&even));
+}
+
 pub fn html_report(a: std.mem.Allocator, rows: []const model.Expense, config: Settings) ![]const u8 {
     var work = std.heap.ArenaAllocator.init(a);
     defer work.deinit();

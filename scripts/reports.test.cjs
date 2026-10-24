@@ -55,3 +55,16 @@ test("special-payment descriptions classify historical Other rows without editin
   assert.equal(report.uncategorized(row, settings), false);
   assert.equal(row.category, "Other");
 });
+
+test("category medians use monthly totals, with empty months as zero", () => {
+  assert.equal(report.median([]), 0n);
+  assert.equal(report.median([5n, 1n, 3n]), 3n);
+  assert.equal(report.median([4n, 1n, 3n, 10n]), 3n);
+  const rows = [
+    { date: "2026-01-05", amount: 100 }, { date: "2026-01-20", amount: 50 },
+    { date: "2026-03-02", amount: 90 }, { date: "2026-04-11", amount: 400 },
+  ];
+  // January 150, February 0, March 90, April 400.
+  assert.equal(report.monthlyMedian(rows, ["2026-01", "2026-02", "2026-03", "2026-04"]), 120n);
+  assert.equal(report.monthlyMedian(rows, ["2026-01", "2026-03", "2026-04"]), 150n);
+});

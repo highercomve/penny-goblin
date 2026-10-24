@@ -32,7 +32,7 @@ var bulk_edit: ?prefs.Edit = null;
 var bulk_arena: std.heap.ArenaAllocator = undefined;
 var bulk_saving = false;
 const GroupKind = enum { category, account, merchant, fixed, month, special, variable_account, variable_category, planned_category, comparison };
-const Group = struct { name: []const u8, amount: i64 = 0, count: usize = 0, kind: GroupKind, detail: []const u8 = "", account: []const u8 = "", category: []const u8 = "" };
+const Group = struct { name: []const u8, amount: i64 = 0, total: i64 = 0, median: i64 = 0, count: usize = 0, kind: GroupKind, detail: []const u8 = "", account: []const u8 = "", category: []const u8 = "" };
 const Section = enum { budget, fixed, accounts, categories, vendors, special };
 var report_arena: std.heap.ArenaAllocator = undefined;
 var modal_arena: std.heap.ArenaAllocator = undefined;
@@ -49,6 +49,9 @@ const Donut = ui.View(@embedFile("donut.oriel"));
 var groups: std.ArrayList(Group) = .empty;
 var group_actions: std.AutoHashMapUnmanaged(i64, usize) = .empty;
 var special_rows: []f.model.Expense = &.{};
+/// The Insights range's CLP payments and calendar months, for the render in progress.
+var insight_rows: []const f.model.Expense = &.{};
+var range_months: usize = 1;
 var mapping_count: usize = 0;
 var section: Section = .budget;
 var expected: []const u8 = "";
@@ -282,8 +285,40 @@ fn add_comparison(account: []const u8, category: []const u8, amount: i64) !void 
     const a = report_arena.allocator();
     try groups.append(a, .{ .kind = .comparison, .name = try std.fmt.allocPrint(a, "{s} · {s}", .{ account, category }), .account = try a.dupe(u8, account), .category = try a.dupe(u8, category), .amount = amount, .count = 1 });
 }
+fn is_variable(row: f.model.Expense) bool {
+    return f.reports.special(row, f.settings()) == null and !std.mem.startsWith(u8, row.category, "Fixed:") and f.reports.fixed_item(row, f.settings()) == null;
+}
 fn category_chart(e: *ui.Engine) !void {
     const a = report_arena.allocator();
+    // Medians use the range's months with any recorded payment, so months before
+    // the ledger begins do not pull a category's typical month towards zero.
+    var months: std.ArrayList([]const u8) = .empty;
+    for (insight_rows) |row| {
+        for (months.items) |month| {
+            if (std.mem.eql(u8, month, row.date[0..7])) break;
+        } else try months.append(a, row.date[0..7]);
+    }
+    const by_median = std.mem.eql(u8, f.value(e, f.aid("category-measure")), "median");
+    const totals = try a.alloc(i64, months.items.len);
+    for (groups.items) |*g| switch (g.kind) {
+        .variable_category => {
+            @memset(totals, 0);
+            for (insight_rows) |row| if (is_variable(row) and std.mem.eql(u8, row.category, g.name)) {
+                for (months.items, 0..) |month, m| if (std.mem.eql(u8, month, row.date[0..7])) {
+                    totals[m] += row.amount;
+                };
+            };
+            g.total = g.amount;
+            g.median = f.reports.median(totals);
+            g.amount = if (by_median) g.median else g.total;
+        },
+        .planned_category => {
+            g.median = g.amount;
+            g.total = g.amount * @as(i64, @intCast(range_months));
+            g.amount = if (by_median) g.median else g.total;
+        },
+        else => {},
+    };
     var indexes: std.ArrayList(usize) = .empty;
     for (groups.items, 0..) |g, i| if (g.kind == .variable_category or g.kind == .planned_category) try indexes.append(a, i);
     std.mem.sort(usize, indexes.items, groups.items, struct {
@@ -297,7 +332,13 @@ fn category_chart(e: *ui.Engine) !void {
         const g = groups.items[i];
         const id = 8000000 + @as(i64, @intCast(index)) * 16;
         var amount: [48]u8 = undefined;
-        const detail = if (g.kind == .planned_category) "Planned" else try std.fmt.allocPrint(a, "{d} payments", .{g.count});
+        var other: [48]u8 = undefined;
+        const detail = if (g.kind == .planned_category) (if (by_median) "Planned a month" else "Planned") else if (by_median)
+            try std.fmt.allocPrint(a, "{d} payments · total {s}", .{ g.count, try f.reports.money(&other, g.total) })
+        else if (months.items.len > 1)
+            try std.fmt.allocPrint(a, "{d} payments · median {s} a month", .{ g.count, try f.reports.money(&other, g.median) })
+        else
+            try std.fmt.allocPrint(a, "{d} payments", .{g.count});
         _ = try ChartRow.mount(&e.tree, id, 75600, &.{ .{ .name = "title", .value = g.name }, .{ .name = "detail", .value = detail }, .{ .name = "amount", .value = try f.reports.money(&amount, g.amount) } });
         var props = e.tree.get(ChartRow.id("bar", id)).?.props;
         props.w = .{ .pct = if (maximum > 0) @as(f32, @floatFromInt(g.amount)) / @as(f32, @floatFromInt(maximum)) * 100 else 0 };
@@ -340,8 +381,12 @@ fn comparison_panels(e: *ui.Engine) !void {
     }
     if (!try e.tree.stampKids(f.aid("account-comparison"), panels.items)) return error.InvalidTemplate;
 }
-pub fn render_reports(e: *ui.Engine, rows: []const f.model.Expense) !void {
-    try collect_groups(e, rows);
+/// Home's period feeds its category and account lists; Insights uses its own month range.
+pub fn render_reports(e: *ui.Engine, rows: []const f.model.Expense, insight: []const f.model.Expense, months: usize) !void {
+    insight_rows = insight;
+    range_months = @max(months, 1);
+    defer insight_rows = &.{};
+    try collect_groups(e, rows, insight);
     try group_rows(e, f.aid("category-report"), .category, 2000000);
     try group_rows(e, f.aid("account-report"), .account, 4000000);
     try group_rows(e, f.aid("account-chart"), .variable_account, 6000000);
@@ -349,24 +394,26 @@ pub fn render_reports(e: *ui.Engine, rows: []const f.model.Expense) !void {
     try category_chart(e);
     try comparison_panels(e);
     try group_rows(e, f.aid("merchant-report"), .merchant, 12000000);
-    try special_payments(e, rows);
+    try special_payments(e, insight);
     try group_rows(e, f.aid("month-report"), .month, 16000000);
-    try fixed_summary(e, rows);
+    try fixed_summary(e, insight);
     if (f.s.modal == .fixed) try fixed_report(e);
 }
-fn collect_groups(e: *ui.Engine, rows: []const f.model.Expense) !void {
+fn collect_groups(e: *ui.Engine, rows: []const f.model.Expense, insight: []const f.model.Expense) !void {
     _ = report_arena.reset(.retain_capacity);
     groups = .empty;
     group_actions = .empty;
     for (rows) |row| {
-        if (f.reports.special(row, f.settings()) == null and !std.mem.startsWith(u8, row.category, "Fixed:") and f.reports.fixed_item(row, f.settings()) == null) {
+        try add_group(.category, try f.reports.category_name(report_arena.allocator(), row, f.settings()), row.amount);
+        try add_group(.account, try f.reports.account_label(report_arena.allocator(), row.account, f.settings()), row.amount);
+    }
+    for (insight) |row| {
+        if (is_variable(row)) {
             try add_group(.variable_account, try f.reports.account_label(report_arena.allocator(), row.account, f.settings()), row.amount);
             try add_group(.variable_category, row.category, row.amount);
             const group = if (std.mem.eql(u8, f.value(e, f.aid("comparison-mode")), "combined")) "All accounts" else try f.reports.account_label(report_arena.allocator(), row.account, f.settings());
             try add_comparison(group, row.category, row.amount);
         }
-        try add_group(.category, try f.reports.category_name(report_arena.allocator(), row, f.settings()), row.amount);
-        try add_group(.account, try f.reports.account_label(report_arena.allocator(), row.account, f.settings()), row.amount);
         const merchant = try f.reports.merchant(report_arena.allocator(), row.payee, f.settings(), !std.mem.eql(u8, f.value(e, f.aid("merchant-grouping")), "exact"));
         const search = f.value(e, f.aid("merchant-search"));
         const category = f.value(e, f.aid("merchant-category"));
@@ -448,7 +495,8 @@ fn fixed_summary(e: *ui.Engine, rows: []const f.model.Expense) !void {
         var plan: [48]u8 = undefined;
         var detail: [128]u8 = undefined;
         const base = 360000 + @as(i64, @intCast(i)) * 16;
-        try report_row(e, base, commitment.name, try std.fmt.bufPrint(&detail, "Planned {s}", .{try f.reports.money(&plan, commitment.amount)}), paid, true);
+        // A range plans each fixed commitment once per calendar month.
+        try report_row(e, base, commitment.name, try std.fmt.bufPrint(&detail, "Planned {s}", .{try f.reports.money(&plan, commitment.amount * @as(i64, @intCast(range_months)))}), paid, true);
         try ids.append(report_arena.allocator(), base);
     }
     if (ids.items.len == 0) {
@@ -1002,7 +1050,7 @@ fn click_none(e: *ui.Engine, id: i64) !bool {
         defer arena.deinit();
         const a = arena.allocator();
         var rows: std.ArrayList(f.model.Expense) = .empty;
-        for (f.s.snapshot.?.value.expenses) |row| if (f.period(e).matches(row, f.settings())) try rows.append(a, row);
+        for (f.s.snapshot.?.value.expenses) |row| if (f.insights_matches(e, row)) try rows.append(a, row);
         try f.invoke(e, .report, "export_report", .{ .html = try f.reports.html_report(a, rows.items, f.settings()) });
         return true;
     }

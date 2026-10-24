@@ -7,12 +7,12 @@
   <meta name="theme-color" content="#111511" media="(prefers-color-scheme: dark)">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Penny Goblin</title>
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=9">
   <script src="progress.js?v=8" defer></script>
   <script src="merchants.js?v=8" defer></script>
-  <script src="reports.js?v=8" defer></script>
-  <script src="analysis.js?v=8" defer></script>
-  <script src="app.js?v=10" defer></script>
+  <script src="reports.js?v=9" defer></script>
+  <script src="analysis.js?v=9" defer></script>
+  <script src="app.js?v=11" defer></script>
   <script src="preferences.js?v=8" defer></script>
   <script src="statements.js?v=8" defer></script>
   <script src="sync.js?v=8" defer></script>
@@ -134,11 +134,19 @@
       </section>
 
       <section class="view" id="view-insights" aria-label="Insights" hidden>
-        <div class="section-heading"><span></span><button id="export-report" class="tonal">Export report</button></div>
+        <div class="section-heading insights-heading">
+          <div class="chips period-controls" aria-label="Insights period">
+            <label class="select-chip"><span class="visually-hidden">From</span><select id="insights-from"></select></label>
+            <label class="select-chip"><span class="visually-hidden">Through</span><select id="insights-to"></select></label>
+            <label class="select-chip"><span class="visually-hidden">Whole year</span><select id="insights-year"><option value="">Whole year</option></select></label>
+          </div>
+          <button id="export-report" class="tonal">Export report</button>
+        </div>
+        <p id="insights-period" class="supporting"></p>
         <p id="report-status" class="supporting" role="status"></p>
         <div class="grid">
           <section class="card"><h3 class="card-title">By cardholder</h3><div id="account-chart"></div></section>
-          <section class="card"><h3 class="card-title">By category</h3><label class="switch-row"><input id="chart-fixed" type="checkbox"><span>Include planned fixed</span></label><div id="category-chart" class="list"></div></section>
+          <section class="card"><div class="card-heading"><h3 class="card-title">By category</h3><label class="select-chip"><span class="visually-hidden">Measure</span><select id="category-measure"><option value="total">Total</option><option value="median">Monthly median</option></select></label></div><label class="switch-row"><input id="chart-fixed" type="checkbox"><span>Include planned fixed</span></label><div id="category-chart" class="list"></div></section>
         </div>
         <section class="card"><div class="card-heading"><h3 class="card-title">Comparison</h3><label class="select-chip"><span class="visually-hidden">Comparison</span><select id="comparison-mode"><option value="split">By cardholder</option><option value="combined">Combined</option></select></label></div><div id="account-comparison" class="comparison-grid"></div></section>
         <section class="card"><h3 class="card-title">Merchants</h3>

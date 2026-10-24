@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Insights has its own month range: choose From and Through months, or a whole
+  year at once. Fixed plans count once per month in the range.
+- By category can show each category's monthly median over the range, next to
+  its total.
+
 ## 0.2.15
 
 - Import this month's movements from a Santander, BCI or Bank of America window:

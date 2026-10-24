@@ -28,7 +28,7 @@ pub const item_style: i64 = 70000;
 pub const Page = enum { home, payments, insights, settings };
 pub const Modal = enum { none, editor, preferences, fixed, statements, statement, scanner, sync, research };
 pub const Request = enum(u32) { snapshot = 1, save, delete, new_id, pick_image, scan, documents, pick_legacy, import_legacy, pick_pdf, stage_pdf, parse_pdf, observations, reconcile, export_pdf, settings, scanner_status, scanner_action, sync_status, sync_transport, sync_action, sync_conflict, sync_resolve, report, quick_action, cancel, sources, background_parse, unlink, defaults, scanner_download, research_run, research_apply, research_source, research_model_status, research_model_action, category_edit, bank_import };
-const input_names = .{ "month", "account-filter", "search", "category-filter", "date-from", "date-through", "ledger-sort", "merchant-search", "merchant-category", "merchant-grouping", "merchant-sort", "comparison-mode" };
+const input_names = .{ "month", "account-filter", "search", "category-filter", "date-from", "date-through", "ledger-sort", "merchant-search", "merchant-category", "merchant-grouping", "merchant-sort", "comparison-mode", "insights-from", "insights-to", "insights-year", "category-measure" };
 pub const State = struct {
     io: std.Io = undefined,
     initialized: bool = false,
@@ -68,6 +68,7 @@ pub const State = struct {
     range_open: bool = false,
     bulk_open: bool = false,
     initialized_period: bool = false,
+    initialized_insights: bool = false,
     editor_generation: u16 = 0,
     sources: ?std.json.Parsed([]@import("core/statements.zig").PaymentSource) = null,
     notice_open: bool = false,
@@ -513,6 +514,7 @@ fn period_options(e: *ui.Engine) !void {
     defer arena.deinit();
     const a = arena.allocator();
     const rows = s.snapshot.?.value.expenses;
+    var months: []const []const u8 = &.{};
     inline for (.{ "month", "account-filter", "category-filter", "merchant-category" }, 0..) |name, which| {
         var list: std.ArrayList([]const u8) = .empty;
         try list.append(a, "");
@@ -559,8 +561,115 @@ fn period_options(e: *ui.Engine) !void {
             s.initialized_period = true;
         }
         try options(e, aid(name), list.items, labels, chosen);
+        if (which == 0) months = list.items[1..];
     }
+    try insights_options(e, a, months);
     remember_inputs(e);
+}
+/// Insights has its own month range: From and Through, or a whole year at once.
+fn insights_options(e: *ui.Engine, a: std.mem.Allocator, months: []const []const u8) !void {
+    const latest = if (months.len > 0) months[0] else "";
+    var from: []const u8 = try a.dupe(u8, value(e, aid("insights-from")));
+    var through: []const u8 = try a.dupe(u8, value(e, aid("insights-to")));
+    if (!s.initialized_insights) {
+        from = latest;
+        through = latest;
+        s.initialized_insights = months.len > 0;
+    }
+    if (!listed(months, from)) from = latest;
+    if (!listed(months, through)) through = latest;
+    const from_labels = try a.alloc([]const u8, months.len);
+    const through_labels = try a.alloc([]const u8, months.len);
+    var years: std.ArrayList([]const u8) = .empty;
+    try years.append(a, "");
+    for (months, 0..) |month, i| {
+        const label = try @import("ui_dates.zig").month_label(a, month);
+        from_labels[i] = try std.fmt.allocPrint(a, "From {s}", .{label});
+        through_labels[i] = try std.fmt.allocPrint(a, "Through {s}", .{label});
+        if (!listed(years.items, month[0..4])) try years.append(a, month[0..4]);
+    }
+    try options(e, aid("insights-from"), months, from_labels, from);
+    try options(e, aid("insights-to"), months, through_labels, through);
+    const year_labels = try a.dupe([]const u8, years.items);
+    year_labels[0] = "Whole year";
+    try options(e, aid("insights-year"), years.items, year_labels, "");
+    try sync_insights_year(e);
+}
+fn listed(values: []const []const u8, wanted: []const u8) bool {
+    for (values) |v| if (std.mem.eql(u8, v, wanted)) return true;
+    return false;
+}
+pub const MonthRange = struct { from: []const u8, through: []const u8 };
+pub fn insights_range(e: *ui.Engine) MonthRange {
+    const from = value(e, aid("insights-from"));
+    const through = value(e, aid("insights-to"));
+    return if (std.mem.order(u8, from, through) == .gt) .{ .from = through, .through = from } else .{ .from = from, .through = through };
+}
+pub fn insights_matches(e: *ui.Engine, row: model.Expense) bool {
+    const range = insights_range(e);
+    const account = value(e, aid("account-filter"));
+    if (account.len > 0 and !std.mem.eql(u8, account, row.account)) return false;
+    if (range.from.len == 0 or row.date.len < 7) return false;
+    const month = row.date[0..7];
+    return std.mem.order(u8, month, range.from) != .lt and std.mem.order(u8, month, range.through) != .gt;
+}
+/// Calendar months from `from` through `through` ("YYYY-MM"), both included.
+pub fn calendar_months(from: []const u8, through: []const u8) usize {
+    const index = struct {
+        fn of(month: []const u8) ?i64 {
+            if (month.len != 7 or month[4] != '-') return null;
+            const year = std.fmt.parseInt(i64, month[0..4], 10) catch return null;
+            const number = std.fmt.parseInt(i64, month[5..7], 10) catch return null;
+            return year * 12 + number - 1;
+        }
+    }.of;
+    const first = index(from) orelse return 1;
+    const last = index(through) orelse return 1;
+    return if (last < first) 1 else @intCast(last - first + 1);
+}
+/// The first and last recorded months of `year`.
+fn year_months(year: []const u8) ?MonthRange {
+    var first: ?[]const u8 = null;
+    var last: ?[]const u8 = null;
+    for (s.snapshot.?.value.expenses) |row| if (row.date.len >= 7 and std.mem.startsWith(u8, row.date, year)) {
+        const month = row.date[0..7];
+        if (first == null or std.mem.order(u8, month, first.?) == .lt) first = month;
+        if (last == null or std.mem.order(u8, month, last.?) == .gt) last = month;
+    };
+    return if (first) |value_first| .{ .from = value_first, .through = last.? } else null;
+}
+// The year chip names the whole year only while the range covers exactly its recorded months.
+fn sync_insights_year(e: *ui.Engine) !void {
+    const range = insights_range(e);
+    var year: []const u8 = "";
+    if (range.from.len == 7 and std.mem.eql(u8, range.from[0..4], range.through[0..4])) if (year_months(range.from[0..4])) |span| {
+        if (std.mem.eql(u8, span.from, range.from) and std.mem.eql(u8, span.through, range.through)) year = range.from[0..4];
+    };
+    var buf: [4]u8 = undefined;
+    @memcpy(buf[0..year.len], year);
+    try set_value(e, aid("insights-year"), buf[0..year.len]);
+}
+fn insights_changed(e: *ui.Engine, id: i64) !void {
+    var buf: [16]u8 = undefined;
+    const from = value(e, aid("insights-from"));
+    const through = value(e, aid("insights-to"));
+    if (id == aid("insights-from") and std.mem.order(u8, from, through) == .gt and from.len <= buf.len) {
+        @memcpy(buf[0..from.len], from);
+        try set_value(e, aid("insights-to"), buf[0..from.len]);
+    } else if (id == aid("insights-to") and std.mem.order(u8, through, from) == .lt and through.len <= buf.len) {
+        @memcpy(buf[0..through.len], through);
+        try set_value(e, aid("insights-from"), buf[0..through.len]);
+    } else if (id == aid("insights-year") and value(e, aid("insights-year")).len == 4) {
+        if (year_months(value(e, aid("insights-year")))) |span| {
+            var first: [7]u8 = undefined;
+            var last: [7]u8 = undefined;
+            @memcpy(&first, span.from[0..7]);
+            @memcpy(&last, span.through[0..7]);
+            try set_value(e, aid("insights-from"), &first);
+            try set_value(e, aid("insights-to"), &last);
+        }
+    }
+    try sync_insights_year(e);
 }
 fn remember_inputs(e: *ui.Engine) void {
     inline for (input_names, 0..) |name, i| {
@@ -663,7 +772,12 @@ pub fn render(e: *ui.Engine) !void {
     // Insights in CLP, as the budget; the list above shows every currency.
     var clp: std.ArrayList(model.Expense) = .empty;
     for (selected.items) |row| if (std.mem.eql(u8, row.currency, "CLP")) try clp.append(a, row);
-    try tools.render_reports(e, clp.items);
+    var insight: std.ArrayList(model.Expense) = .empty;
+    for (snapshot.expenses) |row| if (std.mem.eql(u8, row.currency, "CLP") and insights_matches(e, row)) try insight.append(a, row);
+    const range = insights_range(e);
+    const months = calendar_months(range.from, range.through);
+    try set_text(e, aid("insights-period"), if (range.from.len == 0) "No payments yet" else if (std.mem.eql(u8, range.from, range.through)) try @import("ui_dates.zig").month_label(a, range.from) else try std.fmt.allocPrint(a, "{s} – {s} · {d} months", .{ try @import("ui_dates.zig").month_label(a, range.from), try @import("ui_dates.zig").month_label(a, range.through), months }));
+    try tools.render_reports(e, clp.items, insight.items, months);
     try tools.render_statements(e);
     try overlay(e);
     redraw(e);
@@ -929,6 +1043,7 @@ fn handle_event(e: *ui.Engine, id: i64, kind: []const u8, data: []const u8) !boo
             if (id == eid("field-payee")) try category_rule_note(e);
         } else if (s.modal == .preferences) s.dirty = true else {
             if (id == aid("month") or id == aid("account-filter")) clear_drilldown(e);
+            if (id == aid("insights-from") or id == aid("insights-to") or id == aid("insights-year")) try insights_changed(e, id);
             remember_inputs(e);
             try render(e);
         }
@@ -2318,4 +2433,75 @@ test "Santander capture requires an account and stages review without saving a p
     try resolved(e, @intFromEnum(Request.observations), true, encoded);
     try std.testing.expect(s.modal == .statement and !s.busy);
     try std.testing.expectEqual(@as(usize, 0), s.snapshot.?.value.expenses.len);
+}
+
+test "Insights month range, whole year and category medians follow WebKit" {
+    const a = std.testing.allocator;
+    var host: TestHost = .{ .allocator = a };
+    defer host.deinit();
+    configure(std.testing.io);
+    const e = try ui.Engine.create(a, .{ .ctx = &host, .measure = TestHost.measure, .laid_out = TestHost.laid, .removed = TestHost.removed, .add_timer = TestHost.timer, .invoke = TestHost.dispatch, .focus = TestHost.focus }, &.{}, "{}", "main", "application.oriel", 1180, 820);
+    defer e.destroy();
+    try boot(e);
+    var rows = [_]model.Expense{
+        .{ .id = &model.digest("range-1"), .date = "2025-11-04", .amount = 700, .payee = "Old market", .account = "1234", .category = "Food", .revision = 1 },
+        .{ .id = &model.digest("range-2"), .date = "2026-01-10", .amount = 1000, .payee = "Market", .account = "1234", .category = "Food", .revision = 1 },
+        .{ .id = &model.digest("range-3"), .date = "2026-01-12", .amount = 300, .payee = "Cab", .account = "1234", .category = "Taxi", .revision = 1 },
+        .{ .id = &model.digest("range-4"), .date = "2026-02-03", .amount = 3000, .payee = "Market", .account = "1234", .category = "Food", .revision = 1 },
+        .{ .id = &model.digest("range-5"), .date = "2026-03-08", .amount = 2000, .payee = "Market", .account = "1234", .category = "Food", .revision = 1 },
+        .{ .id = &model.digest("range-6"), .date = "2026-03-09", .amount = 900, .payee = "Cab", .account = "1234", .category = "Taxi", .revision = 1 },
+    };
+    const snapshot: app.Snapshot = .{ .expenses = &rows, .settings = "{\"cards_config\":{\"1234\":\"Household\"},\"fixed_expenses_items\":[{\"name\":\"Rent\",\"amount\":500,\"keywords\":[\"RENT\"]}]}", .platform = "linux", .vision_available = false, .tray_running = false, .statements = &.{} };
+    const encoded = try std.json.Stringify.valueAlloc(a, snapshot, .{});
+    defer a.free(encoded);
+    try resolved(e, @intFromEnum(Request.snapshot), true, encoded);
+    try navigate(e, .insights);
+    const Chart = ui.View(@embedFile("category-row.oriel"));
+    const text = struct {
+        fn of(engine: *ui.Engine, id: i64) []const u8 {
+            const n = engine.tree.get(id).?;
+            const holder = if (n.kids.items.len > 0) n.kids.items[0] else n;
+            return holder.props.runs.?[0].t;
+        }
+    }.of;
+    try std.testing.expectEqualStrings("2026-03", value(e, aid("insights-from")));
+    try std.testing.expectEqualStrings("2026-03", value(e, aid("insights-to")));
+    try std.testing.expectEqualStrings("March 2026", text(e, aid("insights-period")));
+    try std.testing.expectEqualStrings("1 payments", text(e, Chart.id("detail", 8000000)));
+
+    _ = try handle_event(e, aid("insights-year"), "change", "\"2026\"");
+    try std.testing.expectEqualStrings("2026-01", value(e, aid("insights-from")));
+    try std.testing.expectEqualStrings("2026-03", value(e, aid("insights-to")));
+    try std.testing.expectEqualStrings("January 2026 – March 2026 · 3 months", text(e, aid("insights-period")));
+    try std.testing.expectEqualStrings("2026-03", value(e, aid("month")));
+    // Food: 1000, 3000, 2000 -> median 2000. Taxi: 300, 0, 900 -> median 300.
+    try std.testing.expectEqualStrings("Food", text(e, Chart.id("title", 8000000)));
+    try std.testing.expectEqualStrings("$6.000", text(e, Chart.id("amount", 8000000)));
+    try std.testing.expectEqualStrings("3 payments · median $2.000 a month", text(e, Chart.id("detail", 8000000)));
+    _ = try handle_event(e, aid("category-measure"), "change", "\"median\"");
+    try std.testing.expectEqualStrings("$2.000", text(e, Chart.id("amount", 8000000)));
+    try std.testing.expectEqualStrings("3 payments · total $6.000", text(e, Chart.id("detail", 8000000)));
+    try std.testing.expectEqualStrings("Taxi", text(e, Chart.id("title", 8000016)));
+    try std.testing.expectEqualStrings("$300", text(e, Chart.id("amount", 8000016)));
+    _ = try click(e, aid("chart-fixed"));
+    try std.testing.expectEqualStrings("$500", text(e, Chart.id("amount", 8000016)));
+    try std.testing.expectEqualStrings("Planned a month", text(e, Chart.id("detail", 8000016)));
+    _ = try handle_event(e, aid("category-measure"), "change", "\"total\"");
+    try std.testing.expectEqualStrings("Rent", text(e, Chart.id("title", 8000016)));
+    try std.testing.expectEqualStrings("$1.500", text(e, Chart.id("amount", 8000016)));
+    _ = try click(e, aid("chart-fixed"));
+
+    _ = try handle_event(e, aid("insights-from"), "change", "\"2025-11\"");
+    try std.testing.expectEqualStrings("", value(e, aid("insights-year")));
+    try std.testing.expectEqualStrings("November 2025 – March 2026 · 5 months", text(e, aid("insights-period")));
+    _ = try handle_event(e, aid("insights-from"), "change", "\"2026-03\"");
+    _ = try handle_event(e, aid("insights-to"), "change", "\"2026-01\"");
+    try std.testing.expectEqualStrings("2026-01", value(e, aid("insights-from")));
+    try std.testing.expectEqualStrings("2026-01", value(e, aid("insights-to")));
+
+    _ = try handle_event(e, aid("insights-year"), "change", "\"2025\"");
+    _ = try click(e, aid("export-report"));
+    try std.testing.expectEqualStrings("export_report", host.command);
+    try std.testing.expect(std.mem.indexOf(u8, host.args, "Old market") != null);
+    try std.testing.expect(std.mem.indexOf(u8, host.args, "Cab") == null);
 }

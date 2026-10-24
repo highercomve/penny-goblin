@@ -23,6 +23,7 @@ let cancelRequested = false;
 let scanFirst = false;
 let settings = {};
 let periodInitialized = false;
+let insightsInitialized = false;
 let drilldown = null;
 
 let snackbarTimer = 0;
@@ -151,6 +152,62 @@ function updatePeriodOptions() {
     $(id).value = values.includes(previous) ? previous : "";
   }
   periodInitialized = true;
+  updateInsightsOptions(months);
+}
+
+// Insights has its own month range: From and Through, or a whole year at once.
+function updateInsightsOptions(months) {
+  const from = insightsInitialized ? $("insights-from").value : months[0] || "";
+  const through = insightsInitialized ? $("insights-to").value : months[0] || "";
+  for (const [id, prefix, previous] of [["insights-from", "From", from], ["insights-to", "Through", through]]) {
+    $(id).replaceChildren(...months.map((month) => { const option = node("option", `${prefix} ${monthLabel(month)}`); option.value = month; return option; }));
+    $(id).value = months.includes(previous) ? previous : months[0] || "";
+  }
+  const years = [...new Set(months.map((month) => month.slice(0, 4)))];
+  $("insights-year").replaceChildren(...["", ...years].map((year) => { const option = node("option", year || "Whole year"); option.value = year; return option; }));
+  syncInsightsYear();
+  insightsInitialized = true;
+}
+
+function ledgerMonths() {
+  return [...new Set(snapshot.expenses.map((e) => e.date.slice(0, 7)))].sort();
+}
+
+function insightsRange() {
+  const from = $("insights-from").value, through = $("insights-to").value;
+  return from <= through ? { from, through } : { from: through, through: from };
+}
+
+/// Calendar months from `from` through `through`, both "YYYY-MM".
+function monthsBetween(from, through) {
+  const result = [];
+  if (!from || !through) return result;
+  let [year, month] = from.split("-").map(Number);
+  for (let value = from; value <= through; value = `${year}-${String(month).padStart(2, "0")}`) {
+    result.push(value);
+    if (++month > 12) { month = 1; year += 1; }
+  }
+  return result;
+}
+
+// The year chip names the whole year only while the range covers exactly its recorded months.
+function syncInsightsYear() {
+  const { from, through } = insightsRange();
+  const year = from.slice(0, 4);
+  const months = ledgerMonths().filter((month) => month.startsWith(year));
+  $("insights-year").value = year && year === through.slice(0, 4) && months[0] === from && months[months.length - 1] === through ? year : "";
+}
+
+function insightsPayments() {
+  const { from, through } = insightsRange(), account = $("account-filter").value;
+  return snapshot.expenses.filter((row) => (!account || row.account === account) && row.date.slice(0, 7) >= from && row.date.slice(0, 7) <= through);
+}
+
+function insightsLabel() {
+  const { from, through } = insightsRange();
+  if (!from) return "No payments yet";
+  const count = monthsBetween(from, through).length;
+  return from === through ? monthLabel(from) : `${monthLabel(from)} – ${monthLabel(through)} · ${count} months`;
 }
 
 function reportRow(label, amount, detail, onClick) {
@@ -199,10 +256,15 @@ function renderReports(periodRows) {
       `${group.rows.length} · ${report.actual ? Number(group.amount * 1000n / report.actual) / 10 : 0}%`, () => showGroup(group.name, group.rows))));
     if (!groups.length) $(id).append(node("p", "Nothing here yet.", "supporting"));
   }
-  renderMerchants(periodRows);
-  renderAnalysis(periodRows);
-  $("fixed-report").replaceChildren(...report.commitments.map((item) => reportRow(item.name, item.paid,
-    `Planned ${money.format(item.planned)}`,
+  const insightRows = insightsPayments().filter(isClp);
+  const range = insightsRange();
+  const calendarMonths = Math.max(1, monthsBetween(range.from, range.through).length);
+  $("insights-period").textContent = insightsLabel();
+  renderMerchants(insightRows);
+  renderAnalysis(insightRows, calendarMonths);
+  // A range plans each fixed commitment once per calendar month.
+  $("fixed-report").replaceChildren(...PennyReports.monthly(insightRows, settings).commitments.map((item) => reportRow(item.name, item.paid,
+    `Planned ${money.format(item.planned * BigInt(calendarMonths))}`,
     () => showGroup(`Fixed: ${item.name}`, item.rows))));
   // The Fixed tile's page: every commitment with its monthly plan and what this period paid.
   $("fixed-summary").textContent = `${money.format(report.planned)} a month · ${money.format(report.fixed)} paid${month ? ` in ${monthLabel(month)}` : ""}`;
@@ -210,7 +272,7 @@ function renderReports(periodRows) {
     item.rows.length ? `${money.format(item.paid)} paid · ${item.rows.length} payment${item.rows.length > 1 ? "s" : ""}` : "Monthly plan",
     item.rows.length ? () => closeThen($("fixed-page"), () => showGroup(`Fixed: ${item.name}`, item.rows)) : null)));
   if (!report.commitments.length) $("fixed-list").append(node("p", "None configured.", "supporting"));
-  if (!report.commitments.length) $("fixed-report").append(node("p", "None configured.", "supporting"));
+  if (!settings.fixed_expenses_items?.length) $("fixed-report").append(node("p", "None configured.", "supporting"));
   const historyRows = snapshot.expenses.filter((row) => !$("account-filter").value || row.account === $("account-filter").value);
   const history = PennyReports.group(historyRows, (row) => row.date.slice(0, 7)).sort((a, b) => b.name.localeCompare(a.name));
   $("month-report").replaceChildren(...history.map((group) => reportRow(monthLabel(group.name), group.amount,
@@ -692,6 +754,21 @@ for (const id of ["date-from", "date-through"]) $(id).addEventListener("change",
   if (snapshot) render();
 });
 $("search").addEventListener("input", () => snapshot && render());
+$("insights-from").addEventListener("change", () => {
+  if ($("insights-from").value > $("insights-to").value) $("insights-to").value = $("insights-from").value;
+  syncInsightsYear(); if (snapshot) render();
+});
+$("insights-to").addEventListener("change", () => {
+  if ($("insights-to").value < $("insights-from").value) $("insights-from").value = $("insights-to").value;
+  syncInsightsYear(); if (snapshot) render();
+});
+$("insights-year").addEventListener("change", () => {
+  const year = $("insights-year").value;
+  const months = ledgerMonths().filter((month) => month.startsWith(year));
+  if (year && months.length) { $("insights-from").value = months[0]; $("insights-to").value = months[months.length - 1]; }
+  else syncInsightsYear();
+  if (snapshot) render();
+});
 $("clear-filters").addEventListener("click", () => { $("month").value = $("account-filter").value = $("search").value = $("category-filter").value = $("date-from").value = $("date-through").value = ""; $("date-through").setCustomValidity(""); drilldown = null; if (snapshot) render(); });
 $("clear-drilldown").addEventListener("click", () => { if (typeof drilldownOrigin === "function" && drilldownOrigin()) history.back(); else endDrilldown(); });
 $("clear-ledger").addEventListener("click", () => { $("search").value = $("category-filter").value = ""; drilldown = null; if (snapshot) render(); });

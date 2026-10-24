@@ -75,10 +75,28 @@ const PennyReports = (() => {
     };
   }
 
+  // Median of BigInt amounts; an even count averages the two middle values.
+  function median(values) {
+    if (!values.length) return 0n;
+    const sorted = [...values].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2n;
+  }
+
+  // Each group's median monthly total over `months`; a month without payments counts as zero.
+  function monthlyMedian(rows, months) {
+    const totals = new Map(months.map((month) => [month, 0n]));
+    for (const row of rows) {
+      const month = row.date.slice(0, 7);
+      if (totals.has(month)) totals.set(month, totals.get(month) + BigInt(row.amount));
+    }
+    return median([...totals.values()]);
+  }
+
   function suggestCategory(payee, settings) {
     const fixed = fixedItem({ payee, category: "" }, settings);
     if (fixed) return `Fixed: ${fixed.name}`;
     return entries(settings.categories).find(([, words]) => words.some((word) => word && payee.toUpperCase().includes(word.toUpperCase())))?.[0] || null;
   }
-  return { sum, group, monthly, holder, merchant, special, category, uncategorized, fixedItem, suggestCategory };
+  return { sum, group, monthly, median, monthlyMedian, holder, merchant, special, category, uncategorized, fixedItem, suggestCategory };
 })();

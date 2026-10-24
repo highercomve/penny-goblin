@@ -6,7 +6,7 @@ function variablePayments(rows) {
   return rows.filter((row) => !PennyReports.special(row, settings) && !row.category.startsWith("Fixed:") && !PennyReports.fixedItem(row, settings));
 }
 
-function renderAnalysis(rows) {
+function renderAnalysis(rows, calendarMonths = 1) {
   const variable = variablePayments(rows);
   const accounts = PennyReports.group(variable, (row) => accountLabel(row.account));
   const total = PennyReports.sum(variable);
@@ -31,13 +31,20 @@ function renderAnalysis(rows) {
     row.prepend(dot);
     chart.append(row);
   });
-  const categories = PennyReports.group(variable, (row) => row.category);
+  // Medians use the range's months with any recorded payment, so months before
+  // the ledger begins do not pull a category's typical month towards zero.
+  const months = [...new Set(rows.map((row) => row.date.slice(0, 7)))].sort();
+  const byMedian = $("category-measure").value === "median";
+  const categories = PennyReports.group(variable, (row) => row.category).map((item) => ({ ...item, total: item.amount, median: PennyReports.monthlyMedian(item.rows, months) }));
   if ($("chart-fixed").checked) {
-    for (const item of settings.fixed_expenses_items || []) categories.push({ name: item.name, amount: BigInt(item.amount), rows: null });
+    for (const item of settings.fixed_expenses_items || []) categories.push({ name: item.name, total: BigInt(item.amount) * BigInt(calendarMonths), median: BigInt(item.amount), rows: null });
   }
-  categories.sort((a, b) => a.amount > b.amount ? -1 : a.amount < b.amount ? 1 : 0);
+  for (const item of categories) item.amount = byMedian ? item.median : item.total;
+  categories.sort((a, b) => a.amount > b.amount ? -1 : a.amount < b.amount ? 1 : a.name.localeCompare(b.name));
   $("category-chart").replaceChildren(...categories.map((item) => {
-    const row = reportRow(item.name, item.amount, item.rows ? `${item.rows.length} payments` : "Planned", item.rows ? () => showGroup(item.name, item.rows) : null);
+    const detail = !item.rows ? (byMedian ? "Planned a month" : "Planned") : byMedian ? `${item.rows.length} payments · total ${money.format(item.total)}` :
+      months.length > 1 ? `${item.rows.length} payments · median ${money.format(item.median)} a month` : `${item.rows.length} payments`;
+    const row = reportRow(item.name, item.amount, detail, item.rows ? () => showGroup(item.name, item.rows) : null);
     const bar = node("span", undefined, "data-bar");
     bar.style.width = `${categories[0]?.amount ? Number(item.amount * 10000n / categories[0].amount) / 100 : 0}%`;
     if (!item.rows) bar.classList.add("planned");
@@ -68,8 +75,9 @@ function reportDocument(all) {
   const style = doc.createElement("style");
   style.textContent = "body{font:15px sans-serif;color:#233e34;max-width:1100px;margin:40px auto;padding:0 20px}h1,h2{font-family:Georgia,serif}table{border-collapse:collapse;width:100%;margin:20px 0}th,td{padding:10px;text-align:left;border-bottom:1px solid #ddd}td:last-child{text-align:right}small{color:#657469}@media print{body{margin:0}thead{display:table-header-group}tr{break-inside:avoid}}";
   doc.head.append(style);
-  doc.body.append(node("h1", "Penny Goblin · Expense report"), node("p", `${$("period-title").textContent} · ${$("account-filter").selectedOptions[0].textContent}`), node("p", `Actual spending ${money.format(report.actual)} · ${rows.length} payments`));
-  if (!$("monthly-budget").hidden) doc.body.append(node("p", `Salary ${money.format(report.salary)} · actual remaining ${money.format(report.actualRemaining)} · legacy forecast ${money.format(report.legacyForecast)}`), node("small", "Forecast = salary − planned fixed − variable − special payments. Planned commitments are not actual payments."));
+  doc.body.append(node("h1", "Penny Goblin · Expense report"), node("p", `${insightsLabel()} · ${$("account-filter").selectedOptions[0].textContent}`), node("p", `Actual spending ${money.format(report.actual)} · ${rows.length} payments`));
+  const range = insightsRange();
+  if (range.from === range.through && !$("account-filter").value) doc.body.append(node("p", `Salary ${money.format(report.salary)} · actual remaining ${money.format(report.actualRemaining)} · legacy forecast ${money.format(report.legacyForecast)}`), node("small", "Forecast = salary − planned fixed − variable − special payments. Planned commitments are not actual payments."));
   const table = (headers, data) => {
     const result = doc.createElement("table"), head = doc.createElement("thead"), body = doc.createElement("tbody"), tr = doc.createElement("tr");
     headers.forEach((text) => tr.append(node("th", text))); head.append(tr);
@@ -84,12 +92,12 @@ function reportDocument(all) {
 }
 
 function setupAnalysis() {
-  for (const id of ["chart-fixed", "comparison-mode"]) $(id).addEventListener("change", () => snapshot && render());
+  for (const id of ["chart-fixed", "comparison-mode", "category-measure"]) $(id).addEventListener("change", () => snapshot && render());
   $("export-report").addEventListener("click", async () => {
     if (!snapshot) return;
     $("export-report").disabled = true;
     try {
-      const rows = selectedPayments();
+      const rows = insightsPayments();
       const saved = await invoke("export_report", { html: reportDocument(rows) });
       status("report-status", saved ? "Report saved" : "Cancelled");
     } catch (error) { status("report-status", errorText(error), true); }
