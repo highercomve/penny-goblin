@@ -271,6 +271,18 @@
   <dialog id="statements-page" class="sheet" aria-labelledby="statements-title">
     <header class="dialog-bar"><button id="close-statements" type="button" class="icon-button" aria-label="Close"><svg><use href="#i-close"/></svg></button><h2 id="statements-title">Bank statements</h2><label class="filled file-button">Add PDF<input id="statement-file" type="file" accept="application/pdf,.pdf"></label></header>
     <p id="statement-status" class="supporting" role="status"></p>
+    <section id="santander-import" class="card bank-import" hidden aria-label="Import bank movements">
+      <div class="bank-tabs" role="group" aria-label="Bank"><button id="bank-santander" type="button" aria-pressed="true">Santander</button><button id="bank-bci" type="button" aria-pressed="false">BCI</button><button id="bank-boa" type="button" aria-pressed="false">Bank of America</button></div>
+      <div class="bank-import-heading"><span class="bank-import-icon"><svg aria-hidden="true"><use href="#i-card"/></svg></span><div><h3 id="bank-import-title">Santander</h3><p id="bank-import-description" class="supporting">Import this month’s card charges</p></div><span id="bank-import-currency" class="bank-import-badge">CLP</span></div>
+      <label class="field">Save charges to<input id="santander-account" list="santander-accounts" maxlength="120" placeholder="Choose or enter a card" aria-describedby="santander-help"></label>
+      <datalist id="santander-accounts"></datalist>
+      <button id="bank-add-account" type="button" class="text-button">Add card or account</button>
+      <p id="santander-help" class="supporting">Choose the same card you’ll open at Santander.</p>
+      <ol class="bank-import-steps" aria-label="Import steps"><li>Sign in</li><li id="bank-import-step">Choose card</li><li>Review new charges</li></ol>
+      <button id="santander-connect" type="button" class="filled wide">Open Santander</button>
+      <p class="supporting bank-privacy">Private sign-in. Existing payments are checked before saving.</p>
+    </section>
+    <h3 class="statement-section-title">Saved statements</h3>
     <div id="statement-list" class="list"></div>
   </dialog>
 

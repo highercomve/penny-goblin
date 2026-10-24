@@ -27,7 +27,7 @@ Model weights are downloaded separately and are not included in this repository.
 
 ## Build on Linux
 
-Install Zig **0.16.0**, Python 3 with venv/pip, pkg-config, GTK4, WebKitGTK 6,
+Install Zig **0.16.0**, Python 3 with venv/pip and PyGObject, pkg-config, GTK4, WebKitGTK 6,
 Wayland development libraries, libxkbcommon, X11/XTest and DejaVu fonts.
 The pre-generated bindings target GNOME 50; CI uses current Arch Linux.
 For Ubuntu LTS, use the same Arch container or supply compatible bindings.
@@ -42,8 +42,9 @@ bash scripts/build-linux.sh webview
 The scripts write Linux executables, AppImages and SHA-256 checksums to `dist/`.
 AppImages still require compatible system GTK/WebKit libraries; they are not
 universal bundles for every Linux distribution. The build freezes the PDF/sync
-helper with PyInstaller; the optional research browser additionally needs system
-Python, PyGObject, GTK4 and WebKitGTK 6 at runtime.
+helper and Linux bank/research browser with PyInstaller, including their Python
+runtime and PyGObject. Users do not need Python or Python packages installed.
+The browsers share the application's system GTK4 and WebKitGTK 6 libraries.
 
 For local installation, `./install-local.sh` installs the launcher/icons and
 restarts the desktop app. It retains `~/.local/share/com.pennygoblin.app/`.
@@ -132,3 +133,83 @@ Third-party source retains its own licenses; see [notices](THIRD_PARTY_NOTICES.m
 Category is a primary payment field. Tap it to search categories from your entire ledger and keyword rules, select one, or explicitly add a new name. Similar spellings are shown to help avoid duplicates.
 
 Use **Settings → Categories** to rename a category or merge it into an existing one. Review the number of affected payments across all dates before applying. Keyword rules are combined, and a conflicting payment or settings change cancels the whole operation. **Other** and **Fixed:** categories retain their special meaning; edit fixed commitments in their own settings page. The **Rules** button opens keyword matching rules.
+
+### Bank of America current-month movements
+
+On the Linux desktop, open **Settings → Bank statements → Bank of America**,
+choose the ledger card or checking account, and select **Open Bank of America**.
+Sign in yourself, complete any bank verification, then download that account's
+activity as **CSV** inside the private bank window. Choose **Review movements**.
+Repeat separately for each account. PDF statements are not supported for this bank.
+
+The importer accepts checking exports with `Date,Description,Amount,Running Bal.`
+and card exports with `Posted Date,Reference Number,Payee,Amount` (optionally
+`Address` before `Amount`). It handles the checking summary preamble. Unknown
+layouts and malformed rows reject the whole export; no partial import is saved.
+Only current-calendar-month posted USD debits through today are offered.
+Deposits, credits/refunds and recognized card-payment descriptors are excluded.
+Transfers with other descriptions may need to be ignored during review.
+USD is stored exactly in cents and stays separate from CLP budgets.
+
+Existing payments are checked before review and again when saving. Repeat
+captures do not add duplicates; genuine repeated purchases remain separate.
+The browser uses a temporary private session restricted to Bank of America's
+HTTPS domains. CSV downloads are limited to 8 MB, parsed locally and deleted;
+only normalized movement evidence is retained. Credentials and cookies are
+never exported. Syncing this evidence requires updated desktop/mobile builds.
+
+### BCI current-month movements
+
+On the Linux desktop, open **Settings → Bank statements**, choose **BCI**, and
+select the ledger card or checking account under **Save charges to**. If it is
+missing, choose **Add card or account**, enter its name and cardholder, then
+save to return to the import with that account selected. Open BCI,
+sign in yourself, then download that account's movements PDF inside the private
+bank window. Choose **Review movements** after the download completes. Repeat
+for each card/account; choosing a different bank clears the previous account.
+
+Both BCI credit-card movements (facturados/no facturados) and checking-account
+cartolas use the existing offline PDF parser. Credit-card credits/refunds,
+checking-account deposits, card repayments and configured owner transfers are
+excluded. Only CLP expenses in the current calendar month through today are
+offered. This flow uses BCI's PDF export, without requiring a private API URL.
+
+Downloads are temporary, size-limited and restricted to BCI's bank domains.
+Only normalized rows are retained as JSON evidence. Existing ledger payments
+are matched before review and rechecked when saving; repeated captures remain
+idempotent, while legitimate identical purchases are retained separately.
+BCI source IDs are distinct from Santander. Updated desktop/mobile builds are
+needed to sync the new BCI evidence format.
+
+### Santander current-month movements
+
+On the Linux desktop, open **Bank statements → Open Santander**. Choose
+or enter the account/card used in your ledger, sign in yourself in the isolated
+WebKit window, and select the same card at Santander. The movements page opens
+after login; **Open card movements** is also available in the bank window.
+Choose **Review movements** once the correct card's movements are loaded.
+
+Penny Goblin imports current-calendar-month CLP debits into statement review.
+Opening balances and card repayments are excluded. Check possible matches to
+existing payments and confirm before anything is added to spending. Repeated
+payments with the same date, amount, currency, account and merchant (ignoring
+merchant case and punctuation) are matched once per occurrence and collapsed in
+the review. Their reviewed details are preserved; the save button counts only
+new charges. Matching is checked again inside the save transaction. Repeated
+captures preserve ignored rows, reviewed corrections, and genuine identical
+purchases. Without bank movement IDs, changed bank descriptions must be reviewed
+as possible matches rather than assumed identical.
+
+The bank browser uses a separate ephemeral WebKit session. Login fields, session
+cookies and authentication headers are never exported to Penny Goblin or saved
+by the importer. Only the exact movements API response is observed; normalized
+observations are retained as JSON evidence and sync through the existing protocol.
+The bank and research browsers are bundled executables; no system Python or
+PyGObject installation is needed. Login is currently Linux-only; reviewed payments/evidence sync to updated
+phones. Use **Save JSON** to export a captured source.
+
+Browser acceptance tests use synthetic local pages, never a real bank account:
+```sh
+zig build build-browser-helper -Dvision=false
+PENNY_BROWSER_HELPER="$PWD/zig-out/bin/penny-browser-helper" GDK_BACKEND=x11 GTK_A11Y=none dbus-run-session -- xvfb-run -a -s "-screen 0 1920x1080x24" /usr/bin/python3 scripts/santander_browser_test.py
+```

@@ -8,6 +8,7 @@
 /public/
 /.zine/
 /.helper-venv/
+/.browser-venv/
 __pycache__/
 *.pyc
 *.spec

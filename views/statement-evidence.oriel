@@ -17,7 +17,7 @@
       <text class="n5" shrink="0" font-size="12" font-weight="400" mono="true" font-family="monospace">{detail}</text>
     </view>
     <row id="save" justify="center" align="center" align-self="flex-start" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true">
-      <text class="n7" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Save PDF</text>
+      <text class="n7" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Save source</text>
     </row>
   </view>
 </view>

@@ -4,6 +4,8 @@ test {
     _ = @import("core/sync.zig");
     _ = @import("core/sync_state.zig");
     _ = @import("core/statements.zig");
+    _ = @import("core/santander.zig");
+    _ = @import("core/bank_import.zig");
     _ = @import("core/preferences.zig");
     _ = @import("core/model.zig");
     _ = @import("core/ledger.zig");

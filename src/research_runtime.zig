@@ -1,7 +1,6 @@
 //! Desktop tool harness. Browser and model cannot mutate the ledger.
 const std = @import("std");
 const oriel = @import("oriel");
-const app = @import("oriel_app");
 const domain = @import("core/categorization.zig");
 const reports = @import("core/reporting.zig");
 const research_model = @import("research_model.zig");
@@ -151,18 +150,7 @@ const Browser = struct {
     reader: std.Io.File.Reader,
     sequence: u32 = 1,
     fn init(io: std.Io, a: std.mem.Allocator) !Browser {
-        const root = try oriel.paths.appData(a, .{ .name = app.build.id });
-        const browser_bytes = @embedFile("helpers/research_browser.py");
-        const network_bytes = @embedFile("helpers/research_network.py");
-        const digest = @import("core/model.zig").digest(browser_bytes ++ network_bytes);
-        const dir = try std.fs.path.join(a, &.{ root, try std.fmt.allocPrint(a, "research-{s}", .{digest}) });
-        try std.Io.Dir.cwd().createDirPath(io, dir);
-        inline for (.{ .{ "research_browser.py", browser_bytes }, .{ "research_network.py", network_bytes } }) |entry| {
-            const path = try std.fs.path.join(a, &.{ dir, entry[0] });
-            // Content-addressed directory: these files never contain ledger data.
-            try @import("private_file.zig").publish(io, a, path, entry[1], false);
-        }
-        var child = try std.process.spawn(io, .{ .argv = &.{ "/usr/bin/python3", try std.fs.path.join(a, &.{ dir, "research_browser.py" }) }, .stdin = .pipe, .stdout = .pipe, .stderr = .ignore });
+        var child = try std.process.spawn(io, .{ .argv = &.{ try @import("runtime_helper.zig").browser_path(io, a), "--research" }, .stdin = .pipe, .stdout = .pipe, .stderr = .ignore });
         errdefer child.kill(io);
         const buffer = try a.alloc(u8, 256 * 1024);
         return .{ .child = child, .reader = child.stdout.?.readerStreaming(io, buffer) };

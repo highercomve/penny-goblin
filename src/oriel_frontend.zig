@@ -27,7 +27,7 @@ pub const editor_base: i64 = 10000;
 pub const item_style: i64 = 70000;
 pub const Page = enum { home, payments, insights, settings };
 pub const Modal = enum { none, editor, preferences, fixed, statements, statement, scanner, sync, research };
-pub const Request = enum(u32) { snapshot = 1, save, delete, new_id, pick_image, scan, documents, pick_legacy, import_legacy, pick_pdf, stage_pdf, parse_pdf, observations, reconcile, export_pdf, settings, scanner_status, scanner_action, sync_status, sync_transport, sync_action, sync_conflict, sync_resolve, report, quick_action, cancel, sources, background_parse, unlink, defaults, scanner_download, research_run, research_apply, research_source, research_model_status, research_model_action, category_edit };
+pub const Request = enum(u32) { snapshot = 1, save, delete, new_id, pick_image, scan, documents, pick_legacy, import_legacy, pick_pdf, stage_pdf, parse_pdf, observations, reconcile, export_pdf, settings, scanner_status, scanner_action, sync_status, sync_transport, sync_action, sync_conflict, sync_resolve, report, quick_action, cancel, sources, background_parse, unlink, defaults, scanner_download, research_run, research_apply, research_source, research_model_status, research_model_action, category_edit, bank_import };
 const input_names = .{ "month", "account-filter", "search", "category-filter", "date-from", "date-through", "ledger-sort", "merchant-search", "merchant-category", "merchant-grouping", "merchant-sort", "comparison-mode" };
 pub const State = struct {
     io: std.Io = undefined,
@@ -49,6 +49,7 @@ pub const State = struct {
     /// The page a drill-down was opened from; Back and its chip return there.
     drill_from: ?Page = null,
     return_to_editor: bool = false,
+    return_to_statements: bool = false,
     editor_dirty: bool = false,
     inputs: [input_names.len][512]u8 = undefined,
     input_lens: [input_names.len]usize = @splat(0),
@@ -94,7 +95,7 @@ pub fn settings() reports.Settings {
 }
 pub fn invoke(e: *ui.Engine, request: Request, command: []const u8, args: anytype) !void {
     switch (request) {
-        .save, .delete, .new_id, .pick_image, .scan, .pick_legacy, .import_legacy, .pick_pdf, .stage_pdf, .parse_pdf, .reconcile, .settings, .scanner_action, .sync_action, .sync_resolve, .unlink, .research_run, .research_apply => {
+        .save, .delete, .new_id, .pick_image, .scan, .pick_legacy, .import_legacy, .pick_pdf, .stage_pdf, .parse_pdf, .reconcile, .settings, .scanner_action, .sync_action, .sync_resolve, .unlink, .research_run, .research_apply, .bank_import => {
             if (s.busy) s.busy_owner = request;
         },
         else => {},
@@ -111,7 +112,7 @@ pub fn invoke(e: *ui.Engine, request: Request, command: []const u8, args: anytyp
         .stage_pdf => try progress.task(e, .statement, "Saving statement", null),
         .parse_pdf => try progress.task(e, .statement, "Parsing statement", null),
         .report => try progress.task(e, .report, "Exporting report", null),
-        .export_pdf => try progress.task(e, .report, "Saving PDF", null),
+        .export_pdf => try progress.task(e, .report, "Saving source", null),
         else => {},
     }
     errdefer progress.resolved(e, request) catch {};
@@ -479,6 +480,11 @@ pub fn close_modal(e: *ui.Engine) !void {
         s.dirty = s.editor_dirty;
         e.tree.get(editor_base).?.stamp_owned = true;
         try ui.setVisible(&e.tree, editor_base, true);
+    } else if (s.return_to_statements) {
+        s.return_to_statements = false;
+        s.modal = .statements;
+        e.tree.get(13000).?.stamp_owned = true;
+        try ui.setVisible(&e.tree, 13000, true);
     }
     try overlay(e);
     redraw(e);
@@ -2208,4 +2214,108 @@ test "special rule editor reuses equivalent descriptions and preserves conflicti
     defer edit.deinit();
     try std.testing.expectEqual(@as(usize, 1), edit.value.settings.special_cases.object.count());
     try std.testing.expect(edit.value.settings.special_cases.object.contains("TRASPASO A DEUDA NACIONAL"));
+}
+
+test "a missing bank card is saved through Accounts and Back returns to bank import" {
+    const a = std.testing.allocator;
+    var host: TestHost = .{ .allocator = a };
+    defer host.deinit();
+    configure(std.testing.io);
+    const e = try ui.Engine.create(a, .{ .ctx = &host, .measure = TestHost.measure, .laid_out = TestHost.laid, .removed = TestHost.removed, .add_timer = TestHost.timer, .invoke = TestHost.dispatch, .focus = TestHost.focus }, &.{}, "{}", "main", "application.oriel", 1180, 820);
+    defer e.destroy();
+    try boot(e);
+    const config = "{\"salary\":1234,\"cards_config\":{}}";
+    const snapshot: app.Snapshot = .{ .expenses = &.{}, .settings = config, .platform = "linux", .vision_available = false, .tray_running = false, .statements = &.{}, .santander_available = true };
+    const json = try std.json.Stringify.valueAlloc(a, snapshot, .{});
+    defer a.free(json);
+    try resolved(e, @intFromEnum(Request.snapshot), true, json);
+    _ = try handle_event(e, aid("open-statements"), "click", "0");
+    const Statements = ui.View(@embedFile("statements-page.oriel"));
+    const Preferences = ui.View(@embedFile("preferences-dialog.oriel"));
+    const Mapping = ui.View(@embedFile("mapping.oriel"));
+    _ = try handle_event(e, Statements.id("bank-bci", 13000), "click", "0");
+    try set_value(e, Statements.id("santander-account", 13000), "TEST BCI card");
+    _ = try handle_event(e, Statements.id("bank-add-account", 13000), "click", "0");
+    try std.testing.expect(s.modal == .preferences and s.return_to_statements);
+    try std.testing.expectEqualStrings("TEST BCI card", value(e, Mapping.id("key", 20000000)));
+    try request_close(e);
+    _ = try click(e, Notice.id("confirm", 19000));
+    try std.testing.expect(s.modal == .statements and !s.return_to_statements);
+    try std.testing.expectEqualStrings("TEST BCI card", value(e, Statements.id("santander-account", 13000)));
+    _ = try handle_event(e, Statements.id("bank-add-account", 13000), "click", "0");
+    try set_value(e, Mapping.id("value", 20000000), "Test cardholder");
+    _ = try handle_event(e, Preferences.id("save-preferences", 11000), "click", "0");
+    try std.testing.expectEqualStrings("save_budget", host.command);
+    const edit = try std.json.parseFromSlice(@import("core/preferences.zig").Edit, a, host.args, .{});
+    defer edit.deinit();
+    try std.testing.expectEqualStrings(config, edit.value.expected);
+    try std.testing.expectEqual(@as(i64, 1234), edit.value.settings.salary);
+    try std.testing.expectEqualStrings("Test cardholder", edit.value.settings.cards_config.object.get("TEST BCI card").?.string);
+    try resolved(e, @intFromEnum(Request.settings), true, "0");
+    try std.testing.expect(s.modal == .statements and !s.return_to_statements);
+    try std.testing.expectEqualStrings("TEST BCI card", value(e, Statements.id("santander-account", 13000)));
+    _ = try handle_event(e, Statements.id("santander-connect", 13000), "click", "0");
+    try std.testing.expectEqualStrings("import_bci", host.command);
+    try std.testing.expect(std.mem.indexOf(u8, host.args, "TEST BCI card") != null);
+    try resolved(e, @intFromEnum(Request.bank_import), false, "BankCancelled");
+}
+
+test "Santander capture requires an account and stages review without saving a payment" {
+    const a = std.testing.allocator;
+    var host: TestHost = .{ .allocator = a };
+    defer host.deinit();
+    configure(std.testing.io);
+    const e = try ui.Engine.create(a, .{ .ctx = &host, .measure = TestHost.measure, .laid_out = TestHost.laid, .removed = TestHost.removed, .add_timer = TestHost.timer, .invoke = TestHost.dispatch, .focus = TestHost.focus }, &.{}, "{}", "main", "application.oriel", 1180, 820);
+    defer e.destroy();
+    try boot(e);
+    const snapshot: app.Snapshot = .{ .expenses = &.{}, .settings = "{}", .platform = "linux", .vision_available = false, .tray_running = false, .statements = &.{}, .santander_available = true };
+    const json = try std.json.Stringify.valueAlloc(a, snapshot, .{});
+    defer a.free(json);
+    try resolved(e, @intFromEnum(Request.snapshot), true, json);
+    _ = try handle_event(e, aid("open-statements"), "click", "0");
+    const Statements = ui.View(@embedFile("statements-page.oriel"));
+    try std.testing.expect(!e.tree.get(Statements.id("santander-import", 13000)).?.props.none);
+    const before = host.request;
+    _ = try handle_event(e, Statements.id("santander-connect", 13000), "click", "0");
+    try std.testing.expectEqual(before, host.request);
+    try std.testing.expect(!s.busy);
+    try set_value(e, Statements.id("santander-account", 13000), "1234");
+    _ = try handle_event(e, Statements.id("santander-connect", 13000), "click", "0");
+    try std.testing.expect(s.busy);
+    try std.testing.expectEqualStrings("import_santander", host.command);
+    try std.testing.expect(std.mem.indexOf(u8, host.args, "1234") != null);
+    try resolved(e, @intFromEnum(Request.bank_import), true, "{\"hash\":null,\"added\":0}");
+    try std.testing.expect(!s.busy and s.modal == .statements);
+    _ = try handle_event(e, Statements.id("santander-connect", 13000), "click", "0");
+    try resolved(e, @intFromEnum(Request.bank_import), false, "SantanderCancelled");
+    try std.testing.expect(!s.busy and s.modal == .statements);
+    _ = try handle_event(e, Statements.id("bank-bci", 13000), "click", "0");
+    try std.testing.expectEqualStrings("", value(e, Statements.id("santander-account", 13000)));
+    _ = try handle_event(e, Statements.id("santander-connect", 13000), "click", "0");
+    try std.testing.expect(!s.busy);
+    try set_value(e, Statements.id("santander-account", 13000), "BCI checking");
+    _ = try handle_event(e, Statements.id("santander-connect", 13000), "click", "0");
+    try std.testing.expectEqualStrings("import_bci", host.command);
+    try resolved(e, @intFromEnum(Request.bank_import), false, "BciCancelled");
+    try std.testing.expect(!s.busy and s.modal == .statements);
+    _ = try handle_event(e, Statements.id("bank-boa", 13000), "click", "0");
+    try std.testing.expectEqualStrings("", value(e, Statements.id("santander-account", 13000)));
+    _ = try handle_event(e, Statements.id("santander-connect", 13000), "click", "0");
+    try std.testing.expect(!s.busy);
+    try set_value(e, Statements.id("santander-account", 13000), "BofA checking");
+    _ = try handle_event(e, Statements.id("santander-connect", 13000), "click", "0");
+    try std.testing.expectEqualStrings("import_boa", host.command);
+    try resolved(e, @intFromEnum(Request.bank_import), false, "BankCancelled");
+    try std.testing.expect(!s.busy and s.modal == .statements);
+    _ = try handle_event(e, Statements.id("santander-connect", 13000), "click", "0");
+    const imported = try std.json.Stringify.valueAlloc(a, @import("core/statements.zig").BankImport{ .hash = &model.digest("bank-source"), .added = 1 }, .{});
+    defer a.free(imported);
+    try resolved(e, @intFromEnum(Request.bank_import), true, imported);
+    try std.testing.expectEqualStrings("statement_observations", host.command);
+    const obs = [_]@import("core/statements.zig").Observation{.{ .id = &model.digest("bank-observation"), .source = .{ .date = "2026-10-19", .payee = "TEST SHOP", .amount = 1234, .currency = "USD", .account = "BofA checking", .category = "Other" }, .expense_id = null, .ignored = false }};
+    const encoded = try std.json.Stringify.valueAlloc(a, obs, .{});
+    defer a.free(encoded);
+    try resolved(e, @intFromEnum(Request.observations), true, encoded);
+    try std.testing.expect(s.modal == .statement and !s.busy);
+    try std.testing.expectEqual(@as(usize, 0), s.snapshot.?.value.expenses.len);
 }

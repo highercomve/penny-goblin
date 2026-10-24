@@ -4,6 +4,7 @@ let preferencesExpected = "";
 let preferencesOriginal = {};
 let preferencesDirty = false;
 let preferencesSaving = false;
+let preferencesSaved = null;
 let bulkDraft = null;
 const preferenceSections = [
   ["accounts", "Account or card", "Cardholder", "cards_config"],
@@ -45,6 +46,7 @@ function addPreferenceMapping(section, key = "", value = "") {
     row.querySelectorAll("input")[0].readOnly = true;
     row.querySelectorAll("input")[1].required = false;
   }
+  return row;
 }
 
 function addFixedPreference(item = { name: "", amount: 0, keywords: [] }) {
@@ -53,9 +55,10 @@ function addFixedPreference(item = { name: "", amount: 0, keywords: [] }) {
   preferenceRow("preferences-fixed", [preferenceInput("Name", item.name), preferenceInput("Monthly amount (CLP)", item.amount, 120, "number"), keywords]);
 }
 
-function openPreferences(section = "budget", rules = false) {
+function openPreferences(section = "budget", rules = false, onSaved = null) {
   if (section === "categories" && !rules) { openCategoryPicker(true); return; }
   if (!snapshot || $("preferences-dialog").open) return;
+  preferencesSaved = onSaved;
   // One settings page at a time; saving still writes the whole validated settings document.
   for (const page of $("preferences-fields").children) page.classList.toggle("active", page.dataset.section === section);
   $("preferences-title").textContent = preferenceTitles[section] || "Budget";
@@ -132,10 +135,14 @@ async function savePreferences(event) {
   preferencesSaving = mutationPending = true;
   $("preferences-fields").disabled = $("save-preferences").disabled = $("close-preferences").disabled = true;
   try {
-    await invoke("save_budget", { settings: readPreferences(), expected: preferencesExpected });
+    const next = readPreferences();
+    await invoke("save_budget", { settings: next, expected: preferencesExpected });
+    const onSaved = preferencesSaved;
+    preferencesSaved = null;
     preferencesDirty = false;
     $("preferences-dialog").close();
     await reload("Saved");
+    if (onSaved) onSaved(next);
   } catch (error) { status("preferences-status", errorText(error), true); }
   finally {
     preferencesSaving = mutationPending = false;
@@ -145,6 +152,7 @@ async function savePreferences(event) {
 
 async function closePreferences() {
   if (preferencesSaving || (preferencesDirty && !(await ask("Discard changes?", "Discard")))) return;
+  preferencesSaved = null;
   $("preferences-dialog").close();
 }
 

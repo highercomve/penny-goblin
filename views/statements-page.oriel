@@ -1,5 +1,6 @@
 <style>
   statements-page: grow=1 basis=0 width=640 height=auto min-height=0 max-width=1180 max-height=772 padding=0,24,24,24 color-scheme=light background=#eaeee4 radius=28 unset="position inset z"
+  santander-account: background=#ffffff color=#191d19 border-color=#747c74
   n2: margin=0,-24,8,-24 padding=8,16,0,8 background=#eaeee4
   n4: icon-color=#434a43 viewbox=0,0,24,24
   n6: color=#191d19
@@ -10,6 +11,7 @@
   statement-status: color=#434a43
   @media (prefers-color-scheme: dark) {
     statements-page: color-scheme=dark background=#1d211d
+    santander-account: background=#30362f color=#e0e4dc border-color=#8b938a
     n2: background=#1d211d
     n4: icon-color=#c2c9c0 viewbox=0,0,24,24
     n6: color=#e0e4dc
@@ -54,5 +56,21 @@
     </row>
   </row>
   <text id="statement-status" class="statement-status" shrink="0" margin="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">Status</text>
+  <view id="santander-import" display="none" padding="16" row-gap="12" radius="16">
+    <row column-gap="8">
+      <button id="bank-santander" class="n7" grow="1" min-height="44" radius="22"><text id="bank-santander-label" class="n8" font-size="14">✓ Santander</text></button>
+      <button id="bank-bci" class="n7" grow="1" min-height="44" radius="22"><text id="bank-bci-label" class="n8" font-size="14">BCI</text></button>
+      <button id="bank-boa" class="n7" grow="1" min-height="44" radius="22"><text id="bank-boa-label" class="n8" font-size="14">Bank of America</text></button>
+    </row>
+    <text id="bank-import-title" class="n6" font-size="20" font-weight="500">Santander</text>
+    <text id="bank-import-description" class="statement-status" font-size="14">Import this month’s card charges</text>
+    <text class="statement-status" font-size="13">Save charges to</text>
+    <input id="santander-account" class="santander-account" width="100%" min-height="56" padding="16" radius="12" border-width="1" font-size="16" label="Bank card or account" placeholder="Choose or enter the card or account" />
+    <button id="bank-add-account" class="n7" min-height="44" padding="12" radius="22"><text class="n8" font-size="14">Add card or account</text></button>
+    <text id="bank-import-help" class="statement-status" font-size="13">Choose the same card you’ll open at Santander.</text>
+    <text id="bank-import-steps" class="statement-status" font-size="13">1  Sign in    ·    2  Choose card    ·    3  Review new charges</text>
+    <button id="santander-connect" class="n7" min-height="48" padding="12,24,12,24" radius="24"><text id="bank-connect-label" class="n8" font-size="14" font-weight="500">Open Santander</text></button>
+    <text class="statement-status" font-size="13">Private sign-in. Existing payments are checked before saving.</text>
+  </view>
   <view id="statement-list" />
 </view>

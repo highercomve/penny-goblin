@@ -1,7 +1,7 @@
 """Desktop research browser feasibility prototype; not connected to the ledger.
 
 Run under scripts/headless.sh. stdin/stdout carry one JSON object per line.
-Requires system Python, PyGObject, GTK4 and WebKitGTK 6. No app IPC bridge is
+Distributed with a bundled Python/PyGObject runtime; uses system GTK4/WebKitGTK 6. No app IPC bridge is
 installed. This is browser isolation, not a general network sandbox.
 """
 import argparse
@@ -69,6 +69,9 @@ class Browser:
             self.session.set_proxy_settings(WebKit.NetworkProxyMode.CUSTOM, proxy)
         self.view = WebKit.WebView(network_session=self.session)
         settings = self.view.get_settings()
+        # Text research needs no GPU compositor; keep it independent of the
+        # desktop's NVIDIA/Wayland graphics path (and the model's CUDA backend).
+        settings.set_hardware_acceleration_policy(WebKit.HardwareAccelerationPolicy.NEVER)
         settings.set_enable_html5_database(False)
         settings.set_enable_webrtc(False)
         settings.set_enable_media_stream(False)
