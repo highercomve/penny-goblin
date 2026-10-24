@@ -111,8 +111,15 @@ fn document(db: ledger_mod.Ledger, arena: std.mem.Allocator, id: []const u8, val
 fn statement(db: ledger_mod.Ledger, arena: std.mem.Allocator, id: []const u8, value: Statement) !void {
     const hash = try statements.stage(db, arena, value.name, value.data_url);
     if (!std.mem.eql(u8, id, hash)) return error.DocumentHashMismatch;
-    if ((!std.mem.eql(u8, value.parser, "") and !std.mem.eql(u8, value.parser, "santander-web-v1")) or
+    if ((!std.mem.eql(u8, value.parser, "") and !statements.known_parser(value.parser)) or
         (!std.mem.eql(u8, value.status, "queued") and !std.mem.eql(u8, value.status, "review"))) return error.InvalidStatement;
+    const bank = statements.bank_data(value.data_url) != null;
+    if (bank != statements.is_bank_parser(value.parser) or
+        (bank and !std.mem.eql(u8, value.status, "review"))) return error.InvalidStatement;
+    if (bank) {
+        const source = try statements.bank_source(arena, try statements.source_bytes(arena, value.data_url));
+        if (!std.mem.eql(u8, value.parser, statements.parser_for(source.bank))) return error.InvalidStatement;
+    }
     const update = try db.db.prepare("UPDATE statements SET name=?2,parser=?3,status=?4 WHERE hash=?1");
     defer update.finalize();
     try update.bindText(1, id);
@@ -124,9 +131,32 @@ fn statement(db: ledger_mod.Ledger, arena: std.mem.Allocator, id: []const u8, va
 
 fn observation(db: ledger_mod.Ledger, arena: std.mem.Allocator, id: []const u8, value: Observation) !void {
     if (!model.valid_id(value.statement_hash) or value.position < 0 or value.position >= 10000) return error.InvalidStatement;
-    const identity = try std.fmt.allocPrint(arena, "statement-v1:{s}:{d}", .{ value.statement_hash, value.position });
-    if (!std.mem.eql(u8, id, &model.digest(identity))) return error.InvalidId;
-    try model.validate(.{ .id = id, .date = value.source.date, .amount = value.source.amount, .payee = value.source.payee, .account = value.source.account, .category = value.source.category });
+    {
+        // Never copy a whole PDF into memory for every ordinary observation.
+        // Bank source validation is temporary, not retained for the sync batch.
+        var validation = std.heap.ArenaAllocator.init(arena);
+        defer validation.deinit();
+        const scratch = validation.allocator();
+        const query = try db.db.prepare("SELECT CASE WHEN parser IN (?2,?3,?4) THEN data_url ELSE '' END FROM statements WHERE hash=?1");
+        defer query.finalize();
+        try query.bindText(1, value.statement_hash);
+        try query.bindText(2, statements.bank_parser);
+        try query.bindText(3, statements.bci_bank_parser);
+        try query.bindText(4, statements.boa_bank_parser);
+        if (!try query.step()) return error.StatementNotFound;
+        const bank_data = try query.text(scratch, 0);
+        if (bank_data.len > 0) {
+            const bank = try statements.bank_source(scratch, try statements.source_bytes(scratch, bank_data));
+            const index: usize = @intCast(value.position);
+            if (index >= bank.rows.len) return error.InvalidStatement;
+            const ids = try statements.bank_ids_for(scratch, bank.bank, bank.rows);
+            if (!std.mem.eql(u8, id, &ids[index]) or !std.mem.eql(u8, try encode(scratch, value.source), try encode(scratch, bank.rows[index]))) return error.InvalidId;
+        } else {
+            const identity = try std.fmt.allocPrint(scratch, "statement-v1:{s}:{d}", .{ value.statement_hash, value.position });
+            if (!std.mem.eql(u8, id, &model.digest(identity))) return error.InvalidId;
+        }
+    }
+    try model.validate(.{ .id = id, .date = value.source.date, .amount = value.source.amount, .currency = value.source.currency, .payee = value.source.payee, .account = value.source.account, .category = value.source.category });
     const raw = try encode(arena, value.source);
     const query = try db.db.prepare("SELECT source_json,expense_id FROM observations WHERE id=?1");
     defer query.finalize();
@@ -193,5 +223,32 @@ fn validate_links(db: ledger_mod.Ledger, arena: std.mem.Allocator, ids: []const 
             const existing = try query.text(arena, 0);
             if (existing.len > 0 and !std.mem.eql(u8, existing, owner)) return error.EvidenceConflict;
         }
+    }
+}
+
+test "normalized bank evidence syncs without sessions and rejects forged observation IDs" {
+    for (std.meta.tags(statements.Bank)) |bank| {
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const original = try ledger_mod.Ledger.open(":memory:");
+        defer original.close();
+        const replica = try ledger_mod.Ledger.open(":memory:");
+        defer replica.close();
+        const row: statements.Row = .{ .date = "2026-10-18", .amount = 1200, .currency = bank.currency(), .payee = "TEST SHOP", .account = "1234", .category = "Other" };
+        const imported = try statements.stage_bank_for(original, a, bank, "2026-10", &.{row});
+        const source_key: Key = .{ .kind = .statement, .id = imported.hash.? };
+        try replica.db.exec("BEGIN IMMEDIATE");
+        errdefer replica.db.exec("ROLLBACK") catch {};
+        try materialize(replica, a, source_key, try snapshot(original, a, source_key));
+        const obs = (try statements.observations(original, a, imported.hash.?))[0];
+        const key: Key = .{ .kind = .observation, .id = obs.id };
+        const json = try snapshot(original, a, key);
+        try materialize(replica, a, key, json);
+        try std.testing.expectError(error.InvalidId, materialize(replica, a, .{ .kind = .observation, .id = &model.digest("forged") }, json));
+        try replica.db.exec("COMMIT");
+        try std.testing.expectEqual(@as(usize, 1), (try statements.observations(replica, a, imported.hash.?)).len);
+        try std.testing.expectEqualStrings(bank.currency(), (try statements.observations(replica, a, imported.hash.?))[0].source.currency);
+        try std.testing.expectEqual(@as(usize, 0), (try replica.list(a)).len);
     }
 }

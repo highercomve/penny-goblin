@@ -54,17 +54,18 @@ pub const Snapshot = struct {
     vision_available: bool,
     tray_running: bool,
     statements: []statements.Source,
+    santander_available: bool = false,
 };
 
 pub const Commands = struct {
     pub const async_commands = .{
-        "research_categories", "apply_research", "research_model_status", "research_model_pick", "research_model_download", "research_model_default",
-        "snapshot",           "save_expense",           "delete_expense",      "import_legacy",      "save_budget",
-        "expense_documents",  "analyze_receipt",        "pick_model",          "export_report",      "prepare_statement",
-        "parse_statement",    "statement_observations", "reconcile_statement", "unlink_observation", "export_statement",
-        "expense_statements", "sync_status",            "sync_control",        "sync_conflict",      "sync_resolve",
-        "scanner_status",     "scanner_select",         "scanner_download",    "scanner_delete",     "scanner_system_download",
-        "ui_defaults",        "ui_pick_file",           "scanner_gpu",         "analyze_text",       "scanner_fast",
+        "research_categories", "apply_research",   "research_model_status",  "research_model_pick",     "research_model_download", "research_model_default",
+        "snapshot",            "save_expense",     "delete_expense",         "import_legacy",           "save_budget",             "expense_documents",
+        "analyze_receipt",     "pick_model",       "export_report",          "prepare_statement",       "import_santander",        "import_bci",
+        "import_boa",          "parse_statement",  "statement_observations", "reconcile_statement",     "unlink_observation",      "export_statement",
+        "expense_statements",  "sync_status",      "sync_control",           "sync_conflict",           "sync_resolve",            "scanner_status",
+        "scanner_select",      "scanner_download", "scanner_delete",         "scanner_system_download", "ui_defaults",             "ui_pick_file",
+        "scanner_gpu",         "analyze_text",     "scanner_fast",
     };
 
     pub fn sync_status(arena: std.mem.Allocator) ![]const u8 {
@@ -131,6 +132,7 @@ pub const Commands = struct {
             .vision_available = oriel.llama.available,
             .tray_running = if (oriel.tray.available) tray != null else false,
             .statements = try statements.sources(db, arena),
+            .santander_available = oriel.target.os == .linux and !oriel.target.is_android,
         };
     }
 
@@ -192,17 +194,28 @@ pub const Commands = struct {
         if (comptime oriel.target.is_android) return @import("research_remote.zig").model(arena);
         return std.json.Stringify.valueAlloc(arena, try research_model.status(process_io, arena), .{});
     }
-    pub fn research_model_pick(arena: std.mem.Allocator) !void { try research_model.pick(process_io, arena); }
-    pub fn research_model_default(arena: std.mem.Allocator) !void { try research_model.use_default(process_io, arena); }
-    pub fn research_model_download() !void { try research_model.download(process_io, std.heap.smp_allocator, emit_download); }
-    pub fn cancel_research_model() void { research_model.cancelDownload(); }
+    pub fn research_model_pick(arena: std.mem.Allocator) !void {
+        try research_model.pick(process_io, arena);
+    }
+    pub fn research_model_default(arena: std.mem.Allocator) !void {
+        try research_model.use_default(process_io, arena);
+    }
+    pub fn research_model_download() !void {
+        try research_model.download(process_io, std.heap.smp_allocator, emit_download);
+    }
+    pub fn cancel_research_model() void {
+        research_model.cancelDownload();
+    }
     pub fn open_research_source(arena: std.mem.Allocator, args: struct { url: []const u8 }) !void {
         try model.text(args.url, 2048, false);
         const uri = try std.Uri.parse(args.url);
         if (!std.ascii.eqlIgnoreCase(uri.scheme, "https") or uri.host == null or uri.user != null or uri.password != null) return error.InvalidUrl;
         oriel.App.openExternal((try arena.dupeZ(u8, args.url)).ptr);
     }
-    pub fn cancel_research() void { research_runtime.cancel(); @import("research_remote.zig").cancel(); }
+    pub fn cancel_research() void {
+        research_runtime.cancel();
+        @import("research_remote.zig").cancel();
+    }
     pub fn apply_research(arena: std.mem.Allocator, args: categorization.Apply) !usize {
         if (comptime oriel.target.is_android) return @import("research_remote.zig").apply(arena, args);
         mutex.lockUncancelable(process_io);
@@ -311,6 +324,49 @@ pub const Commands = struct {
         return true;
     }
 
+    /// Human login happens outside the ledger lock. The bank response is
+    /// validated and staged as observations; only reconciliation writes payments.
+    pub fn import_santander(arena: std.mem.Allocator, args: struct { account: []const u8 }) !statements.BankImport {
+        try model.text(args.account, 120, false);
+        const response = try @import("santander_runtime.zig").capture(process_io, arena);
+        const today = try localDay(arena, std.Io.Clock.real.now(process_io).toSeconds());
+        mutex.lockUncancelable(process_io);
+        defer mutex.unlock(process_io);
+        const db = try database();
+        const config = try std.json.parseFromSliceLeaky(@import("core/reporting.zig").Settings, arena, try db.setting(arena, "budget"), .{ .ignore_unknown_fields = true });
+        const rows = try @import("core/santander.zig").parse(arena, response, args.account, today, config);
+        return statements.stage_bank(db, arena, today[0..7], rows);
+    }
+
+    pub fn import_bci(arena: std.mem.Allocator, args: struct { account: []const u8 }) !statements.BankImport {
+        try model.text(args.account, 120, false);
+        const pdf = (try @import("bank_download_runtime.zig").capture(process_io, arena, .bci)).pdf;
+        const budget = blk: {
+            mutex.lockUncancelable(process_io);
+            defer mutex.unlock(process_io);
+            break :blk try (try database()).setting(arena, "budget");
+        };
+        const parsed = try statement_runtime.parse(process_io, arena, pdf, budget);
+        const today = try localDay(arena, std.Io.Clock.real.now(process_io).toSeconds());
+        const rows = try @import("core/bank_import.zig").current_rows(arena, .bci, parsed, args.account, today);
+        mutex.lockUncancelable(process_io);
+        defer mutex.unlock(process_io);
+        return statements.stage_bank_for(try database(), arena, .bci, today[0..7], rows);
+    }
+
+    pub fn import_boa(arena: std.mem.Allocator, args: struct { account: []const u8 }) !statements.BankImport {
+        try model.text(args.account, 120, false);
+        const captured = (try @import("bank_download_runtime.zig").capture(process_io, arena, .boa)).rows;
+        const today = try localDay(arena, std.Io.Clock.real.now(process_io).toSeconds());
+        const rows = try @import("core/bank_import.zig").current_rows(arena, .boa, .{ .parser = "boa-csv-v1", .rows = captured }, args.account, today);
+        mutex.lockUncancelable(process_io);
+        defer mutex.unlock(process_io);
+        const db = try database();
+        const config = try std.json.parseFromSliceLeaky(@import("core/reporting.zig").Settings, arena, try db.setting(arena, "budget"), .{ .ignore_unknown_fields = true });
+        for (rows) |*row| row.category = (try @import("core/reporting.zig").suggest_category(arena, row.payee, config)) orelse "Other";
+        return statements.stage_bank_for(db, arena, .boa, today[0..7], rows);
+    }
+
     pub fn prepare_statement(arena: std.mem.Allocator, args: struct { name: []const u8, data_url: []const u8 }) ![]const u8 {
         mutex.lockUncancelable(process_io);
         defer mutex.unlock(process_io);
@@ -337,6 +393,7 @@ pub const Commands = struct {
         };
         mutex.unlock(process_io);
         if (observed.len > 0) return;
+        if (statements.bank_data(data) != null) return error.InvalidStatement;
         const parsed = try statement_runtime.parse(process_io, arena, data, budget);
         mutex.lockUncancelable(process_io);
         defer mutex.unlock(process_io);
@@ -346,7 +403,7 @@ pub const Commands = struct {
     pub fn statement_observations(arena: std.mem.Allocator, args: struct { hash: []const u8 }) ![]statements.Observation {
         mutex.lockUncancelable(process_io);
         defer mutex.unlock(process_io);
-        return statements.observations(try database(), arena, args.hash);
+        return statements.review(try database(), arena, args.hash);
     }
 
     pub fn reconcile_statement(arena: std.mem.Allocator, args: struct { hash: []const u8, decisions: []const statements.Decision }) !usize {
@@ -373,8 +430,8 @@ pub const Commands = struct {
             defer mutex.unlock(process_io);
             break :blk try statements.content(try database(), arena, args.hash);
         };
-        const bytes = try statements.pdf_bytes(arena, data);
-        const path = try oriel.dialog.saveFile(arena, .{ .title = "Save original statement (.pdf)" }) orelse return false;
+        const bytes = try statements.source_bytes(arena, data);
+        const path = try oriel.dialog.saveFile(arena, .{ .title = if (statements.bank_data(data) != null) "Save bank movements (.json)" else "Save original statement (.pdf)" }) orelse return false;
         try oriel.dialog.writeFile(process_io, path, bytes);
         return true;
     }

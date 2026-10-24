@@ -47,20 +47,28 @@ class Fixture(http.server.BaseHTTPRequestHandler):
 
 
 class ResearchBrowserTest(unittest.TestCase):
+    def test_bundled_runtime_has_tls(self):
+        helper = os.environ.get("PENNY_BROWSER_HELPER")
+        if not helper:
+            self.skipTest("Requires the packaged browser")
+        result = subprocess.run([helper, "--check-runtime"], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), {"tls": True})
+
     @classmethod
     def setUpClass(cls):
         cls.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
         cls.worker = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.worker.start()
         read_fd, write_fd = os.pipe()
+        command = [os.environ["PENNY_BROWSER_HELPER"], "--research"] if os.environ.get("PENNY_BROWSER_HELPER") else ["/usr/bin/python3", str(ROOT / "src/helpers/research_browser.py")]
         cls.process = subprocess.Popen([
-            "/home/projects/personal/oriel/scripts/headless.sh", "bash", "-c",
-            f'exec "$@" >&{write_fd}', "bash", "/usr/bin/python3",
-            str(ROOT / "src/helpers/research_browser.py"), "--fixture-url",
+            "dbus-run-session", "--", "xvfb-run", "-a", "-s", "-screen 0 1920x1080x24", "bash", "-c",
+            f'exec "$@" >&{write_fd}', "bash", *command, "--fixture-url",
             f"http://127.0.0.1:{cls.server.server_port}/",
         ], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
             pass_fds=(write_fd,),
-            env={**os.environ, "GSK_RENDERER": "cairo"})
+            env={**os.environ, "GSK_RENDERER": "cairo", "GDK_BACKEND": "x11", "GTK_A11Y": "none"})
         os.close(write_fd)
         cls.output = os.fdopen(read_fd, "rb", buffering=0)
 

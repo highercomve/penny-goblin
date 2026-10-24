@@ -202,6 +202,27 @@ dialog.sheet::backdrop { background: rgb(0 0 0 / 32%); }
 
 /* Statements */
 .statement-source { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px; border-radius: var(--radius-l); background: var(--surface-low); margin-bottom: 8px; }
+.bank-import { display: flex; flex-direction: column; gap: 16px; padding: 24px; }
+.bank-tabs { display: flex; gap: 4px; border-radius: 24px; padding: 4px; background: var(--surface-container); }
+.bank-tabs button { flex: 1; color: var(--on-surface-variant); }
+.bank-tabs button[aria-pressed=true] { background: var(--secondary-container); color: var(--on-secondary-container); }
+.bank-import-heading { display: flex; gap: 12px; align-items: center; }
+.bank-import-heading h3 { font-size: 20px; font-weight: 500; margin-bottom: 2px; }
+.bank-import-icon { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 14px; background: var(--secondary-container); color: var(--primary); }
+.bank-import-badge { margin-left: auto; color: var(--on-surface-variant); border: 1px solid var(--outline-variant); border-radius: 8px; padding: 4px 8px; font-size: 12px; }
+.bank-import .field { margin: 0; gap: 8px; font-size: 13px; }
+.bank-import #santander-help { margin-top: -10px; }
+.bank-import-steps { display: flex; list-style: none; gap: 12px; padding: 0; margin: 0; counter-reset: bank-step; }
+.bank-import-steps li { flex: 1; font-size: 12px; color: var(--on-surface-variant); }
+.bank-import-steps li::before { counter-increment: bank-step; content: counter(bank-step); display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 6px; border-radius: 50%; background: var(--secondary-container); color: var(--on-secondary-container); }
+.bank-import .filled { min-height: 48px; }
+.bank-privacy { text-align: center; font-size: 12px; }
+.statement-section-title { font-size: 14px; font-weight: 500; color: var(--on-surface-variant); margin: 24px 0 12px; }
+#statement-status:not(:empty) { margin: 0 0 16px; padding: 12px 16px; border-radius: 12px; background: var(--secondary-container); }
+#statement-status.error { background: color-mix(in srgb, var(--error) 10%, var(--surface-container)); }
+.statement-existing { margin-top: 16px; border-top: 1px solid var(--outline-variant); padding-top: 12px; }
+.statement-existing > summary { cursor: pointer; padding: 8px 0 16px; font-size: 14px; color: var(--on-surface-variant); }
+.statement-existing .statement-observation { opacity: .85; }
 .statement-source strong { flex: 1 1 100%; font-weight: 500; overflow-wrap: anywhere; }
 .statement-source small { flex: 1; font-size: 13px; color: var(--on-surface-variant); }
 .statement-observation { padding: 12px; border-radius: var(--radius-l); background: var(--surface-low); margin-bottom: 8px; font-size: 14px; }

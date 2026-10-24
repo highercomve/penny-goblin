@@ -44,9 +44,19 @@ jobs:
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
           GDK_BACKEND: x11
           GTK_A11Y: none
+          GSK_RENDERER: cairo
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
         run: |
+          zig build build-browser-helper -Dvision=false
+          export PENNY_BROWSER_HELPER="$PWD/zig-out/bin/penny-browser-helper"
+          python scripts/research_browser_test.py
           dbus-run-session -- xvfb-run -a -s "-screen 0 1920x1080x24" python scripts/research_ui_test.py
           dbus-run-session -- xvfb-run -a -s "-screen 0 1920x1080x24" python scripts/categories_ui_test.py
+          dbus-run-session -- xvfb-run -a -s "-screen 0 1920x1080x24" python scripts/santander_browser_test.py
+          dbus-run-session -- xvfb-run -a -s "-screen 0 1920x1080x24" python scripts/bci_browser_test.py
+          python scripts/boa_parser_test.py
+          dbus-run-session -- xvfb-run -a -s "-screen 0 1920x1080x24" python scripts/boa_browser_test.py
   linux:
     name: Linux x86_64 (${{ matrix.renderer }})
     runs-on: ubuntu-latest
@@ -60,7 +70,7 @@ jobs:
     steps:
       - name: Install platform dependencies
         # Vulkan headers, loader and glslc: the Oriel build's libggml-vulkan.so.
-        run: pacman -Syu --noconfirm --needed git pkgconf gtk4 webkitgtk-6.0 wayland wayland-protocols libxkbcommon libxtst libx11 dbus ttf-dejavu python python-pip squashfs-tools curl vulkan-headers spirv-headers vulkan-icd-loader shaderc
+        run: pacman -Syu --noconfirm --needed git pkgconf gtk4 webkitgtk-6.0 wayland wayland-protocols libxkbcommon libxtst libx11 dbus ttf-dejavu python python-pip python-gobject squashfs-tools curl vulkan-headers spirv-headers vulkan-icd-loader shaderc
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
         with:

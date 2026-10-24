@@ -55,6 +55,7 @@ var expected: []const u8 = "";
 var original: legacy.Settings = .{};
 var current_hash: []const u8 = "";
 var observations: []statements.Observation = &.{};
+var statement_bank: statements.Bank = .santander;
 var scanner: ?Scanner.Status = null;
 var delete_model_buf: [32]u8 = undefined;
 var delete_model_len: usize = 0;
@@ -82,6 +83,7 @@ pub fn prepare(e: *ui.Engine) !void {
     group_actions = .empty;
     special_rows = &.{};
     observations = &.{};
+    statement_bank = .santander;
     scanner = null;
     delete_model_len = 0;
     download_id_len = 0;
@@ -178,7 +180,7 @@ pub fn open(e: *ui.Engine, modal: f.Modal) !void {
     switch (modal) {
         .preferences => try f.mark_actions(e, Preferences, 11000, .{ "close-preferences", "save-preferences", "add-fixed", "add-account", "add-category", "add-vendor", "add-special" }),
         .fixed => try f.mark_actions(e, Fixed, 12000, .{ "close-fixed", "edit-fixed" }),
-        .statements => try f.mark_actions(e, Statements, 13000, .{ "close-statements", "statement-file" }),
+        .statements => try f.mark_actions(e, Statements, 13000, .{ "close-statements", "statement-file", "santander-connect", "bank-add-account", "bank-santander", "bank-bci", "bank-boa" }),
         .statement => try f.mark_actions(e, Statement, 14000, .{ "close-statement", "confirm-statement" }),
         .scanner => try f.mark_actions(e, Scan, 15000, .{ "close-scanner", "model", "projector", "scanner-fast", "scanner-gpu" }),
         .sync => try f.mark_actions(e, Sync, 16000, .{ "close-sync", "sync-start", "sync-stop", "sync-restart", "sync-pairing", "sync-now", "sync-unpair", "sync-scan", "sync-connect", "sync-replace", "sync-use-local", "sync-use-remote", "sync-service-toggle", "sync-paste-toggle", "sync-link-details-toggle" }),
@@ -499,6 +501,8 @@ pub fn parse_queued(e: *ui.Engine) !void {
 }
 pub fn render_statements(e: *ui.Engine) !void {
     if (f.s.modal != .statements or f.s.snapshot == null) return;
+    try f.show(e, Statements.id("santander-import", 13000), f.s.snapshot.?.value.santander_available);
+    try render_bank_choice(e);
     var ids: std.ArrayList(i64) = .empty;
     defer ids.deinit(e.gpa);
     for (f.s.snapshot.?.value.statements, 0..) |source, i| {
@@ -510,6 +514,7 @@ pub fn render_statements(e: *ui.Engine) !void {
         props.dis = queued and (std.mem.eql(u8, f.s.snapshot.?.value.platform, "android") or std.mem.eql(u8, f.s.snapshot.?.value.platform, "ios"));
         props.op = if (props.dis) 0.38 else 1;
         try e.tree.updateUiProps(StatementSource.id("action", base), props);
+        try f.set_text(e, StatementSource.id("secondary", base), if (source.format == .json) "Save JSON" else "Save PDF");
         try f.mark_actions(e, StatementSource, base, .{ "action", "secondary" });
         try ids.append(e.gpa, base);
     }
@@ -791,7 +796,6 @@ fn render_observations(e: *ui.Engine) !void {
     try open(e, .statement);
     var ids: std.ArrayList(i64) = .empty;
     const a = modal_arena.allocator();
-    var suggested: std.StringHashMapUnmanaged(void) = .empty;
     var suggestion_count: usize = 0;
     var open_count: usize = 0;
     for (f.s.snapshot.?.value.statements) |source| if (std.mem.eql(u8, source.hash, current_hash)) {
@@ -802,7 +806,7 @@ fn render_observations(e: *ui.Engine) !void {
         const base = review_base + @as(i64, @intCast(i)) * review_stride;
         var buf: [48]u8 = undefined;
         const title = try std.fmt.allocPrint(a, "{s} · {s}", .{ obs.source.date, obs.source.payee });
-        const detail = try std.fmt.allocPrint(a, "{s} · {s} · {s}", .{ try f.reports.money(&buf, obs.source.amount), try f.reports.account_label(a, obs.source.account, f.settings()), obs.source.category });
+        const detail = try std.fmt.allocPrint(a, "{s} · {s} · {s}", .{ try f.reports.amount_text(&buf, obs.source.amount, obs.source.currency), try f.reports.account_label(a, obs.source.account, f.settings()), obs.source.category });
         _ = try Review.mount(&e.tree, base, 73000, &.{ .{ .name = "title", .value = title }, .{ .name = "detail", .value = detail } });
         var values: std.ArrayList([]const u8) = .empty;
         var labels: std.ArrayList([]const u8) = .empty;
@@ -814,13 +818,11 @@ fn render_observations(e: *ui.Engine) !void {
         };
         var choice: []const u8 = if (obs.expense_id) |id| id else if (obs.ignored) "ignore" else if (values.items.len > 3) "" else "create";
         if (obs.expense_id == null and !obs.ignored) open_count += 1;
-        if (obs.expense_id == null and !obs.ignored) for (f.s.snapshot.?.value.expenses) |row| {
-            if (row.amount == obs.source.amount and std.mem.eql(u8, row.date, obs.source.date) and std.mem.eql(u8, row.payee, obs.source.payee) and std.mem.eql(u8, row.account, obs.source.account) and !suggested.contains(row.id)) {
-                choice = row.id;
-                try suggested.put(a, row.id, {});
-                suggestion_count += 1;
-                break;
-            }
+        if (obs.expense_id == null and !obs.ignored) if (obs.match) |match| {
+            choice = match.id;
+            try values.append(a, match.id);
+            try labels.append(a, "Already recorded in your ledger");
+            suggestion_count += 1;
         };
         if (obs.expense_id) |id| {
             try values.append(a, id);
@@ -856,7 +858,9 @@ fn reconcile(e: *ui.Engine) !void {
         if (std.mem.eql(u8, choice, "ignore")) d.action = .ignore else if (!std.mem.eql(u8, choice, "create")) {
             d.action = .link;
             d.expense_id = choice;
-            for (f.s.snapshot.?.value.expenses) |row| if (std.mem.eql(u8, row.id, choice)) {
+            if (obs.match != null and std.mem.eql(u8, obs.match.?.id, choice)) {
+                d.expected_revision = obs.match.?.revision;
+            } else for (f.s.snapshot.?.value.expenses) |row| if (std.mem.eql(u8, row.id, choice)) {
                 d.expected_revision = row.revision;
                 break;
             };
@@ -1114,7 +1118,70 @@ fn click_fixed(e: *ui.Engine, id: i64) !bool {
 
     return false;
 }
+fn render_bank_choice(e: *ui.Engine) !void {
+    var arena = std.heap.ArenaAllocator.init(e.gpa);
+    defer arena.deinit();
+    const bank = statement_bank;
+    try f.set_text(e, Statements.id("bank-import-title", 13000), bank.name());
+    try f.set_text(e, Statements.id("bank-import-description", 13000), if (bank == .santander) "Import this month’s card charges" else if (bank == .boa) "Import this month’s card or account charges in USD" else "Import this month’s card or account charges");
+    try f.set_text(e, Statements.id("bank-import-help", 13000), try std.fmt.allocPrint(arena.allocator(), "Choose the same card or account you’ll open at {s}.", .{bank.name()}));
+    try f.set_text(e, Statements.id("bank-import-steps", 13000), switch (bank) {
+        .bci => "1  Sign in    ·    2  Download PDF    ·    3  Review new charges",
+        .boa => "1  Sign in    ·    2  Download CSV    ·    3  Review new charges",
+        .santander => "1  Sign in    ·    2  Choose card    ·    3  Review new charges",
+    });
+    try f.set_text(e, Statements.id("bank-connect-label", 13000), try std.fmt.allocPrint(arena.allocator(), "Open {s}", .{bank.name()}));
+    try f.set_text(e, Statements.id("bank-santander-label", 13000), if (bank == .santander) "✓ Santander" else "Santander");
+    try f.set_text(e, Statements.id("bank-bci-label", 13000), if (bank == .bci) "✓ BCI" else "BCI");
+    try f.set_text(e, Statements.id("bank-boa-label", 13000), if (bank == .boa) "✓ Bank of America" else "Bank of America");
+}
+
 fn click_statements(e: *ui.Engine, id: i64) !bool {
+    if (id == Statements.id("bank-add-account", 13000)) {
+        if (f.s.busy) return true;
+        var name: [120]u8 = undefined;
+        const account = f.value(e, Statements.id("santander-account", 13000));
+        try f.model.text(account, name.len, true);
+        @memcpy(name[0..account.len], account);
+        // Preserve the bank sheet while the account editor owns the overlay,
+        // just as the receipt scanner preserves the payment editor.
+        e.tree.get(13000).?.stamp_owned = false;
+        try f.close_modal(e);
+        try open_preferences(e, .accounts);
+        f.s.return_to_statements = true;
+        const already_configured = original.cards_config == .object and original.cards_config.object.contains(name[0..account.len]);
+        try mapping(e, if (already_configured) "" else name[0..account.len], "", 0);
+        try mapping_kids(e);
+        f.s.dirty = true;
+        return true;
+    }
+    if (id == Statements.id("bank-santander", 13000) or id == Statements.id("bank-bci", 13000) or id == Statements.id("bank-boa", 13000)) {
+        if (f.s.busy) return true;
+        const bank: statements.Bank = if (id == Statements.id("bank-bci", 13000)) .bci else if (id == Statements.id("bank-boa", 13000)) .boa else .santander;
+        if (bank != statement_bank) {
+            statement_bank = bank;
+            try f.set_value(e, Statements.id("santander-account", 13000), "");
+            try f.set_text(e, Statements.id("statement-status", 13000), "");
+            try render_bank_choice(e);
+        }
+        return true;
+    }
+    if (id == Statements.id("santander-connect", 13000)) {
+        if (f.s.busy or !f.s.snapshot.?.value.santander_available) return true;
+        const account = std.mem.trim(u8, f.value(e, Statements.id("santander-account", 13000)), " \\t\\r\\n");
+        if (account.len == 0) {
+            try f.set_text(e, Statements.id("statement-status", 13000), "Choose the bank card or account first.");
+            return true;
+        }
+        f.s.busy = true;
+        try f.set_text(e, Statements.id("statement-status", 13000), switch (statement_bank) {
+            .bci => "Sign in to BCI, then download the card or account’s movements PDF in the bank window.",
+            .boa => "Sign in to Bank of America, then download the card or account’s activity CSV in the bank window.",
+            .santander => "Sign in in the Santander window, then open card movements. Close it to cancel.",
+        });
+        try f.invoke(e, .bank_import, statement_bank.command(), .{ .account = account });
+        return true;
+    }
     if (id == Statements.id("close-statements", 13000)) {
         try f.close_modal(e);
         return true;
@@ -1320,6 +1387,17 @@ pub fn resolved(e: *ui.Engine, request: f.Request, ok: bool, json: []const u8) !
         .report => try resolved_report(e, request, json),
         .settings, .reconcile => try resolved_settings(e, request, json),
         .pick_pdf => try resolved_pick_pdf(e, request, json),
+        .bank_import => {
+            f.finish(request);
+            const result = try std.json.parseFromSliceLeaky(statements.BankImport, modal_arena.allocator(), json, .{ .allocate = .alloc_always });
+            if (result.hash) |hash| {
+                current_hash = hash;
+                try f.refresh(e);
+                try f.invoke(e, .observations, "statement_observations", .{ .hash = hash });
+            } else {
+                try f.set_text(e, Statements.id("statement-status", 13000), "No new charges in the current month.");
+            }
+        },
         .stage_pdf => try resolved_stage_pdf(e, request, json),
         .parse_pdf => try resolved_parse_pdf(e, request, json),
         .observations => try resolved_observations(e, request, json),
@@ -1354,6 +1432,10 @@ fn resolved_report(e: *ui.Engine, _: f.Request, json: []const u8) !void {
 }
 fn resolved_settings(e: *ui.Engine, request: f.Request, _: []const u8) !void {
     f.finish(request);
+    if (f.s.return_to_statements and section == .accounts and mapping_count > 0) {
+        const base = mapping_base + @as(i64, @intCast(mapping_count - 1)) * mapping_stride;
+        if (!e.tree.get(base).?.props.none) try f.set_value(e, Statements.id("santander-account", 13000), f.value(e, Mapping.id("key", base)));
+    }
     if (bulk_saving) {
         bulk_saving = false;
         bulk_edit = null;

@@ -41,13 +41,33 @@ function errorText(error) {
   const code = String(error?.message || error);
   if (error?.name === "RuleConflict") return code;
   const messages = {
+    BankBrowserUnavailable: "The bank window could not open or closed unexpectedly. Try connecting again.",
+    BankBrowserBusy: "A bank download window is already open. Finish or close it first.",
+    BankDesktopOnly: "Open the bank on the Linux desktop. Reviewed imports sync to your phone.",
+    BankLoginTimedOut: "The bank session timed out. Connect again to sign in.",
+    BankCancelled: "Bank import cancelled. No payments were added.",
+    InvalidBankExport: "Unsupported bank export. Use a BCI movements PDF in CLP or a Bank of America activity CSV in USD.",
+    BciBrowserUnavailable: "The BCI browser could not open or closed unexpectedly. Try connecting again.",
+    BciBrowserBusy: "A BCI window is already open. Finish or close it first.",
+    BciDesktopOnly: "Connect to BCI on the Linux desktop. Reviewed imports sync to your phone.",
+    BciLoginTimedOut: "The BCI session timed out. Connect again to sign in.",
+    BciCancelled: "BCI import cancelled. No payments were added.",
+    InvalidBciResponse: "Choose a supported BCI movements PDF: credit-card movements or a checking-account cartola in CLP.",
+    DuplicateStatementPayment: "A matching payment is already in your ledger. Reopen the statement review to refresh its matches; no duplicate was saved.",
+    SantanderBrowserUnavailable: "The Santander browser could not open or closed unexpectedly. Try again; if this continues, reinstall the latest Linux build.",
+    SantanderBrowserBusy: "A Santander window is already open. Finish or close it first.",
+    SantanderDesktopOnly: "Connect to Santander on the Linux desktop. Reviewed imports sync to your phone.",
+    SantanderLoginTimedOut: "The Santander session timed out. Connect again to sign in.",
+    SantanderCancelled: "Santander import cancelled. No payments were added.",
+    InvalidSantanderResponse: "Santander returned unsupported movements. No payments were added.",
+
     NotPaired: "Pair this phone with your desktop in Settings → Synchronization first.",
     DesktopUnavailable: "Cannot reach the paired desktop. Keep Penny Goblin open there and check Wi-Fi or Tailscale. Research can be resumed.",
     ResearchJobNotFound: "The desktop job expired or restarted. Start research again.",
     DesktopScannerBusy: "The desktop is already scanning or researching. Try again when it finishes.",
     RemoteResearchFailed: "Desktop research failed. See the activity log; expenses are unchanged.",
     CategorizationModelRequired: "Choose or download a categorization model in Research categories. Receipt scanning uses a separate model.",
-    ResearchBrowserUnavailable: "Research needs system Python with PyGObject, GTK4 and WebKitGTK 6. Your expenses are unchanged.",
+    ResearchBrowserUnavailable: "The research browser could not open. Try again; if this continues, reinstall the latest Linux build. Your expenses are unchanged.",
     ResearchBrowserProtocol: "The research browser could not return a readable response. Your expenses are unchanged.",
     ScannerNotSetUp: "Choose a downloaded or imported local model in Settings → Receipt scanner.",
     NoCategories: "Add categories in Settings before researching expenses.",
@@ -462,7 +482,7 @@ async function openEditor(expense = null, receipt = false) {
     for (const source of sources) {
       const details = node("details", undefined, "inline-details");
       details.append(node("summary", `Statement · ${source.name}`), node("pre", source.source_json));
-      const save = node("button", "Save PDF", "text-button"); save.type = "button";
+      const save = node("button", "Save source", "text-button"); save.type = "button";
       save.addEventListener("click", () => invoke("export_statement", { hash: source.statement_hash }).catch((error) => status("editor-status", errorText(error), true)));
       details.append(save); $("saved-evidence").append(details);
     }

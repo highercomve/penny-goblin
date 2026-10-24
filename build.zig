@@ -35,9 +35,24 @@ pub fn build(b: *std.Build) void {
         break :blk output;
     };
     const helper_files = b.addWriteFiles();
-    const helper_root = helper_files.add("helper.zig", if (mobile) "pub const bytes = \"\";" else "pub const bytes = @embedFile(\"statement-helper.bin\");");
+    const helper_root = helper_files.add("helper.zig", if (mobile) "pub const bytes = \"\"; pub const browser_bytes = @import(\"browser\").bytes;" else "pub const bytes = @embedFile(\"statement-helper.bin\"); pub const browser_bytes = @import(\"browser\").bytes;");
     if (helper_file) |file| _ = helper_files.addCopyFile(file, "statement-helper.bin");
+    const browser_file: ?std.Build.LazyPath = if (target.result.os.tag == .linux and !mobile) blk: {
+        const command = b.addSystemCommand(&.{"python3"});
+        command.addFileArg(b.path("scripts/build-browser-helper.py"));
+        command.addArg("--output");
+        const output = command.addOutputFileArg("browser-helper.bin");
+        for ([_][]const u8{ "browser_helper.py", "santander_browser.py", "bank_chrome.py", "bank_download_browser.py", "bci_browser.py", "boa_browser.py", "boa_parser.py", "research_browser.py", "research_network.py" }) |name|
+            command.addFileArg(b.path(b.fmt("src/helpers/{s}", .{name})));
+        break :blk output;
+    } else null;
+    const browser_root = helper_files.add("browser.zig", if (browser_file != null) "pub const bytes = @embedFile(\"browser-helper.bin\");" else "pub const bytes = \"\";");
+    if (browser_file) |file| {
+        _ = helper_files.addCopyFile(file, "browser-helper.bin");
+        b.step("build-browser-helper", "Build the self-contained Linux bank/research browser").dependOn(&b.addInstallFile(file, "bin/penny-browser-helper").step);
+    }
     const helper_module = b.createModule(.{ .root_source_file = helper_root });
+    helper_module.addImport("browser", b.createModule(.{ .root_source_file = browser_root }));
 
     // Oriel's built-in modules and plugins. Switch on what the app uses:
     // anything left off is neither compiled nor linked. Say it once for
@@ -232,7 +247,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/verify_research.zig"),
         .target = target,
         .optimize = .ReleaseSafe,
-        .imports = &.{ .{ .name = "oriel", .module = dep.module("oriel") }, .{ .name = "oriel_app", .module = app_module } },
+        .imports = &.{ .{ .name = "oriel", .module = dep.module("oriel") }, .{ .name = "oriel_app", .module = app_module }, .{ .name = "penny_helper", .module = helper_module } },
     }) });
     const verify_research = b.addRunArtifact(research_verifier);
     if (b.args) |args| verify_research.addArgs(args);

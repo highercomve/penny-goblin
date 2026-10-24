@@ -27,6 +27,22 @@ def fixture_pdf():
 
 
 class StatementHelperTest(unittest.TestCase):
+    def test_real_bci_card_and_checking_pdfs_exclude_credits_and_card_repayments(self):
+        from bci_fixtures import pdf as bci_pdf
+        for card in (True, False):
+            with self.subTest(card=card), tempfile.TemporaryDirectory(prefix="penny-bci-proof-") as directory:
+                root = Path(directory)
+                source, settings = root / "fixture.pdf", root / "settings.json"
+                source.write_bytes(bci_pdf(card))
+                settings.write_text(json.dumps({"categories": {"Food": ["TEST BCI SHOP"]}}))
+                result = subprocess.run([sys.executable, str(ROOT / "src/helpers/statement_helper.py"), str(source), str(settings)], capture_output=True, text=True, timeout=20)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                parsed = json.loads(result.stdout)
+                self.assertEqual(parsed["parser"], "bci-card-v1" if card else "bci-cartola-v1")
+                self.assertEqual(len(parsed["rows"]), 1)
+                self.assertEqual(parsed["rows"][0]["amount"], 1200)
+                self.assertEqual(parsed["rows"][0]["payee"], "TEST BCI SHOP")
+
     def test_real_pdf_in_isolated_parser(self):
         with tempfile.TemporaryDirectory(prefix="penny-pdf-proof-") as directory:
             root = Path(directory)

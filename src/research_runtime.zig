@@ -1,7 +1,6 @@
 //! Desktop tool harness. Browser and model cannot mutate the ledger.
 const std = @import("std");
 const oriel = @import("oriel");
-const app = @import("oriel_app");
 const domain = @import("core/categorization.zig");
 const reports = @import("core/reporting.zig");
 const research_model = @import("research_model.zig");
@@ -18,7 +17,9 @@ const instruction = "You categorize Chilean household expenses. Choose only a ca
     "payment_processor, when present, only took the card payment (a POS terminal or gateway such as Mercado Pago); categorize the merchant business, never the processor. " ++
     "Do not infer a person's occupation from their name. Keep unused category empty; unused link is 0. /no_think";
 
-pub fn cancel() void { cancelled.store(true, .release); }
+pub fn cancel() void {
+    cancelled.store(true, .release);
+}
 pub fn run(io: std.Io, a: std.mem.Allocator, input: domain.Review, emit: *const fn (Event) void) !domain.Review {
     if (comptime oriel.target.os != .linux or oriel.target.is_android or !oriel.llama.available) return error.DesktopResearchUnavailable;
     if (running.swap(true, .acq_rel)) return error.ResearchAlreadyRunning;
@@ -34,7 +35,10 @@ pub fn run(io: std.Io, a: std.mem.Allocator, input: domain.Review, emit: *const 
     if (categories.items.len > 100) return error.TooManyCategories;
     const proposals = try a.dupe(domain.Proposal, input.proposals);
     var needs_model = false;
-    for (proposals) |proposal| if (proposal.category.len == 0) { needs_model = true; break; };
+    for (proposals) |proposal| if (proposal.category.len == 0) {
+        needs_model = true;
+        break;
+    };
     if (!needs_model) return .{ .expected_settings = input.expected_settings, .proposals = proposals, .remaining = input.remaining };
     emit(.{ .completed = 0, .total = proposals.len, .stage = "Loading desktop model" });
     const model_path = try research_model.resolve(io, a);
@@ -81,12 +85,24 @@ fn investigate(io: std.Io, a: std.mem.Allocator, session: anytype, browser: *Bro
         const action = std.json.parseFromSliceLeaky(Action, a, text, .{ .allocate = .alloc_always }) catch return error.InvalidModelReply;
         if (action.reason.len > 1200 or action.category.len > 120) return error.InvalidModelReply;
         const detail = if (action.tool == .search) try std.fmt.allocPrint(a, "Query: {s} · {s}", .{ try domain.search_query(a, proposal.merchant), action.reason }) else if (action.tool == .propose) try std.fmt.allocPrint(a, "{s}: {s}", .{ action.category, action.reason }) else action.reason;
-        const stage: []const u8 = switch (action.tool) { .search => "Searching web", .follow_link => "Opening result", .propose => "Category suggestion", .abstain => "Needs manual review" };
+        const stage: []const u8 = switch (action.tool) {
+            .search => "Searching web",
+            .follow_link => "Opening result",
+            .propose => "Category suggestion",
+            .abstain => "Needs manual review",
+        };
         emit(.{ .completed = index, .total = total, .stage = stage, .merchant = proposal.merchant, .tool = @tagName(action.tool), .detail = detail });
-        if (action.tool == .abstain) { proposal.reason = action.reason; proposal.sources = try sources.toOwnedSlice(a); return; }
+        if (action.tool == .abstain) {
+            proposal.reason = action.reason;
+            proposal.sources = try sources.toOwnedSlice(a);
+            return;
+        }
         if (action.tool == .propose) {
             var valid = false;
-            for (categories) |category| if (std.mem.eql(u8, category, action.category)) { valid = true; break; };
+            for (categories) |category| if (std.mem.eql(u8, category, action.category)) {
+                valid = true;
+                break;
+            };
             if (!valid or sources.items.len == 0) return error.InsufficientEvidence;
             proposal.category = action.category;
             proposal.reason = action.reason;
@@ -134,23 +150,14 @@ const Browser = struct {
     reader: std.Io.File.Reader,
     sequence: u32 = 1,
     fn init(io: std.Io, a: std.mem.Allocator) !Browser {
-        const root = try oriel.paths.appData(a, .{ .name = app.build.id });
-        const browser_bytes = @embedFile("helpers/research_browser.py");
-        const network_bytes = @embedFile("helpers/research_network.py");
-        const digest = @import("core/model.zig").digest(browser_bytes ++ network_bytes);
-        const dir = try std.fs.path.join(a, &.{ root, try std.fmt.allocPrint(a, "research-{s}", .{digest}) });
-        try std.Io.Dir.cwd().createDirPath(io, dir);
-        inline for (.{ .{ "research_browser.py", browser_bytes }, .{ "research_network.py", network_bytes } }) |entry| {
-            const path = try std.fs.path.join(a, &.{ dir, entry[0] });
-            // Content-addressed directory: these files never contain ledger data.
-            try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = entry[1] });
-        }
-        var child = try std.process.spawn(io, .{ .argv = &.{ "/usr/bin/python3", try std.fs.path.join(a, &.{ dir, "research_browser.py" }) }, .stdin = .pipe, .stdout = .pipe, .stderr = .ignore });
+        var child = try std.process.spawn(io, .{ .argv = &.{ try @import("runtime_helper.zig").browser_path(io, a), "--research" }, .stdin = .pipe, .stdout = .pipe, .stderr = .ignore });
         errdefer child.kill(io);
         const buffer = try a.alloc(u8, 256 * 1024);
         return .{ .child = child, .reader = child.stdout.?.readerStreaming(io, buffer) };
     }
-    fn deinit(self: *Browser, io: std.Io) void { self.child.kill(io); }
+    fn deinit(self: *Browser, io: std.Io) void {
+        self.child.kill(io);
+    }
     fn call(self: *Browser, io: std.Io, a: std.mem.Allocator, request: []const u8) !std.json.Value {
         if (cancelled.load(.acquire)) return error.Cancelled;
         try self.child.stdin.?.writeStreamingAll(io, request);
@@ -177,10 +184,10 @@ fn schema_for(a: std.mem.Allocator, step: usize, has_page: bool, categories: []c
     const tools = properties.object.getPtr("tool").?.object.getPtr("enum").?;
     tools.* = .{ .array = std.json.Array.init(a) };
     const names: []const []const u8 = if (!has_page) &.{ "search", "abstain" } else if (step == 5) &.{ "propose", "abstain" } else &.{ "follow_link", "propose", "abstain" };
-    for (names) |name| try tools.array.append( .{ .string = name });
+    for (names) |name| try tools.array.append(.{ .string = name });
     var allowed: std.json.Value = .{ .array = std.json.Array.init(a) };
-    try allowed.array.append( .{ .string = "" });
-    for (categories) |category| try allowed.array.append( .{ .string = category });
+    try allowed.array.append(.{ .string = "" });
+    for (categories) |category| try allowed.array.append(.{ .string = category });
     try properties.object.getPtr("category").?.object.put(a, "enum", allowed);
     return std.json.Stringify.valueAlloc(a, schema, .{});
 }

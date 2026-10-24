@@ -7,8 +7,9 @@ pub const Row = struct { date: []const u8, amount: i64, payee: []const u8, accou
 /// The statement parsers whose rows are accepted (statement_helper.py).
 const parsers = [_][]const u8{ "santander-web-v1", "bci-card-v1", "bci-cartola-v1" };
 pub const Parsed = struct { parser: []const u8, rows: []const Row };
-pub const Source = struct { hash: []const u8, name: []const u8, status: []const u8 };
-pub const Observation = struct { id: []const u8, source: Row, expense_id: ?[]const u8, ignored: bool };
+pub const Source = struct { hash: []const u8, name: []const u8, status: []const u8, format: enum { pdf, json } = .pdf };
+pub const Match = struct { id: []const u8, revision: i64 };
+pub const Observation = struct { id: []const u8, source: Row, expense_id: ?[]const u8, ignored: bool, match: ?Match = null };
 pub const PaymentSource = struct { id: []const u8, statement_hash: []const u8, name: []const u8, source_json: []const u8 };
 pub const Decision = struct {
     observation_id: []const u8,
@@ -56,6 +57,59 @@ test "statement candidates respect account and three calendar days across bounda
     try std.testing.expect(!candidate(source, payment));
 }
 
+test "bank review matches formatting variants once and only creates missing charges" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const db = try ledger_mod.Ledger.open(":memory:");
+    defer db.close();
+    const saved: model.Expense = .{ .id = &model.digest("manual-prime"), .date = "2026-10-18", .amount = 6490, .payee = "Amazon Prime", .account = "9526", .category = "Subscriptions", .notes = "Keep my review" };
+    _ = try db.save(a, .{ .expense = saved });
+    const row: Row = .{ .date = saved.date, .amount = saved.amount, .payee = "AMAZON*PRIME", .account = saved.account, .category = "Other" };
+    const first = try stage_bank(db, a, "2026-10", &.{row});
+    const planned = try review(db, a, first.hash.?);
+    try std.testing.expectEqualStrings(saved.id, planned[0].match.?.id);
+    try std.testing.expectError(error.DuplicateStatementPayment, reconcile(db, a, first.hash.?, &.{.{ .observation_id = planned[0].id, .action = .create }}));
+    _ = try reconcile(db, a, first.hash.?, &.{.{ .observation_id = planned[0].id, .action = .link, .expense_id = saved.id, .expected_revision = planned[0].match.?.revision }});
+    const linked = (try db.get(a, saved.id)).?;
+    try std.testing.expectEqualStrings(saved.notes, linked.notes);
+    try std.testing.expectEqualStrings(saved.category, linked.category);
+    try std.testing.expectEqualStrings(saved.payee, linked.payee);
+    const second = try stage_bank(db, a, "2026-10", &.{ row, row });
+    const extra = try review(db, a, second.hash.?);
+    try std.testing.expectEqual(@as(usize, 1), extra.len);
+    try std.testing.expect(extra[0].match == null);
+    _ = try reconcile(db, a, second.hash.?, &.{.{ .observation_id = extra[0].id, .action = .create }});
+    try std.testing.expectEqual(@as(usize, 2), (try db.list(a)).len);
+    try std.testing.expectEqual(@as(usize, 0), (try stage_bank(db, a, "2026-10", &.{ row, row })).added);
+}
+
+test "save rechecks bank duplicates against concurrent imports without broad merchant guesses" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const db = try ledger_mod.Ledger.open(":memory:");
+    defer db.close();
+    const row: Row = .{ .date = "2026-10-18", .amount = 1000, .payee = "Shop A", .account = "9526", .category = "Other" };
+    const batch = try stage_bank(db, a, "2026-10", &.{row});
+    const initial = try review(db, a, batch.hash.?);
+    try std.testing.expect(initial[0].match == null);
+    var payment = expense(row, &model.digest("concurrent"));
+    payment.payee = "SHOP-A";
+    _ = try db.save(a, .{ .expense = payment });
+    try std.testing.expectError(error.DuplicateStatementPayment, reconcile(db, a, batch.hash.?, &.{.{ .observation_id = initial[0].id, .action = .create }}));
+    try std.testing.expectEqual(@as(usize, 1), (try db.list(a)).len);
+    var different = row;
+    different.date = "2026-10-19";
+    try std.testing.expect(!std.mem.eql(u8, (try match_key(a, row)).?, (try match_key(a, different)).?));
+    different = row;
+    different.account = "1914";
+    try std.testing.expect(!std.mem.eql(u8, (try match_key(a, row)).?, (try match_key(a, different)).?));
+    different = row;
+    different.payee = "Shop B";
+    try std.testing.expect(!std.mem.eql(u8, (try match_key(a, row)).?, (try match_key(a, different)).?));
+}
+
 pub fn pdf_bytes(arena: std.mem.Allocator, data_url: []const u8) ![]u8 {
     const prefix = "data:application/pdf;base64,";
     if (!std.mem.startsWith(u8, data_url, prefix) or data_url.len > 44 * 1024 * 1024) return error.InvalidPdf;
@@ -70,7 +124,7 @@ pub fn pdf_bytes(arena: std.mem.Allocator, data_url: []const u8) ![]u8 {
 
 pub fn stage(db: ledger_mod.Ledger, arena: std.mem.Allocator, name: []const u8, data_url: []const u8) ![]const u8 {
     try model.text(name, 255, false);
-    const hash = try arena.dupe(u8, &model.digest(try pdf_bytes(arena, data_url)));
+    const hash = try arena.dupe(u8, &model.digest(try source_bytes(arena, data_url)));
     const stmt = try db.db.prepare("INSERT INTO statements(hash,name,data_url) VALUES (?1,?2,?3) ON CONFLICT(hash) DO NOTHING");
     defer stmt.finalize();
     try stmt.bindText(1, hash);
@@ -81,12 +135,12 @@ pub fn stage(db: ledger_mod.Ledger, arena: std.mem.Allocator, name: []const u8, 
 }
 
 pub fn sources(db: ledger_mod.Ledger, arena: std.mem.Allocator) ![]Source {
-    const query = try db.db.prepare("SELECT hash,name,status FROM statements ORDER BY rowid DESC LIMIT 1001");
+    const query = try db.db.prepare("SELECT hash,name,status,parser FROM statements ORDER BY rowid DESC LIMIT 1001");
     defer query.finalize();
     var rows: std.ArrayList(Source) = .empty;
     while (try query.step()) {
         if (rows.items.len == 1000) return error.TooManyStatements;
-        try rows.append(arena, .{ .hash = try query.text(arena, 0), .name = try query.text(arena, 1), .status = try query.text(arena, 2) });
+        try rows.append(arena, .{ .hash = try query.text(arena, 0), .name = try query.text(arena, 1), .status = try query.text(arena, 2), .format = if (is_bank_parser(try query.text(arena, 3))) .json else .pdf });
     }
     return rows.toOwnedSlice(arena);
 }
@@ -165,11 +219,59 @@ fn expense(row: Row, id: []const u8) model.Expense {
     return .{ .id = id, .date = row.date, .amount = row.amount, .currency = row.currency, .payee = row.payee, .account = row.account, .category = row.category };
 }
 
+// Identity deliberately keeps the exact date, amount, currency and account.
+// Merchant case/punctuation are formatting; broad brand aliases and nearby
+// dates remain possible matches requiring a decision, never automatic matches.
+fn match_key(a: std.mem.Allocator, row: Row) !?[]const u8 {
+    var name: std.ArrayList(u8) = .empty;
+    for (row.payee) |byte| {
+        if (std.ascii.isAlphanumeric(byte) or byte >= 128) try name.append(a, std.ascii.toUpper(byte));
+    }
+    if (name.items.len == 0) return null;
+    const json = try std.json.Stringify.valueAlloc(a, .{ row.date, row.amount, row.currency, row.account, name.items }, .{});
+    return try a.dupe(u8, &model.digest(json));
+}
+
+pub fn review(db: ledger_mod.Ledger, a: std.mem.Allocator, hash: []const u8) ![]Observation {
+    const rows = try observations(db, a, hash);
+    var used: std.StringHashMapUnmanaged(void) = .empty;
+    defer used.deinit(a);
+    for (rows) |row| if (row.expense_id) |id| try used.put(a, id, {});
+    // A payment already claimed by a bank occurrence cannot satisfy a second
+    // identical purchase in a later capture. PDF evidence may still share it.
+    const claimed = try db.db.prepare("SELECT o.expense_id FROM observations o JOIN statements s ON s.hash=o.statement_hash WHERE s.parser IN (?1,?3,?4) AND o.expense_id IS NOT NULL AND s.parser=(SELECT parser FROM statements WHERE hash=?2)");
+    defer claimed.finalize();
+    try claimed.bindText(1, bank_parser);
+    try claimed.bindText(2, hash);
+    try claimed.bindText(3, bci_bank_parser);
+    try claimed.bindText(4, boa_bank_parser);
+    while (try claimed.step()) try used.put(a, try claimed.text(a, 0), {});
+    var buckets: std.StringHashMapUnmanaged(std.ArrayList(model.Expense)) = .empty;
+    defer buckets.deinit(a);
+    for (try db.list(a)) |payment| {
+        if (used.contains(payment.id)) continue;
+        const key = try match_key(a, .{ .date = payment.date, .amount = payment.amount, .currency = payment.currency, .payee = payment.payee, .account = payment.account, .category = payment.category }) orelse continue;
+        const slot = try buckets.getOrPut(a, key);
+        if (!slot.found_existing) slot.value_ptr.* = .empty;
+        try slot.value_ptr.append(a, payment);
+    }
+    for (rows) |*row| {
+        if (row.expense_id != null or row.ignored) continue;
+        const key = try match_key(a, row.source) orelse continue;
+        const bucket = buckets.getPtr(key) orelse continue;
+        if (bucket.items.len == 0) continue;
+        const payment = bucket.items[bucket.items.len - 1];
+        bucket.items.len -= 1;
+        row.match = .{ .id = payment.id, .revision = payment.revision };
+    }
+    return rows;
+}
+
 pub fn reconcile(db: ledger_mod.Ledger, arena: std.mem.Allocator, hash: []const u8, decisions: []const Decision) !usize {
     if (decisions.len > 10000) return error.TooManyExpenses;
     try db.db.exec("BEGIN IMMEDIATE");
     errdefer db.db.exec("ROLLBACK") catch {};
-    const observed = try observations(db, arena, hash);
+    const observed = try review(db, arena, hash);
     var by_id: std.StringHashMapUnmanaged(Observation) = .empty;
     defer by_id.deinit(arena);
     for (observed) |row| try by_id.put(arena, row.id, row);
@@ -186,11 +288,14 @@ pub fn reconcile(db: ledger_mod.Ledger, arena: std.mem.Allocator, hash: []const 
         }
         const target = if (decision.action == .create) row.id else decision.expense_id;
         if (decision.action == .create) {
+            // Recheck inside the write transaction: another device/import may
+            // have saved this charge after the review screen was opened.
+            if (row.match != null) return error.DuplicateStatementPayment;
             const rev = try db.write_expense(expense(row.source, target), 0);
             try db.record_change(target, rev);
         } else if (decision.action == .link) {
             const payment = payments.get(target) orelse return error.ExpenseNotFound;
-            if (payment.amount != row.source.amount or !std.mem.eql(u8, payment.currency, "CLP")) return error.ReconciliationAmountMismatch;
+            if (payment.amount != row.source.amount or !std.mem.eql(u8, payment.currency, row.source.currency)) return error.ReconciliationAmountMismatch;
             if (decision.expected_revision < 1 or decision.expected_revision == std.math.maxInt(i64)) return error.InvalidRevision;
             const rev = try db.write_expense(payment, decision.expected_revision);
             try db.record_change(target, rev);
@@ -281,4 +386,267 @@ pub fn unlink(db: ledger_mod.Ledger, arena: std.mem.Allocator, id: []const u8, e
     try update.bindText(1, id);
     _ = try update.step();
     try db.db.exec("COMMIT");
+}
+
+/// Bank snapshots contain normalized observations only; never a login/session.
+pub const bank_parser = "santander-live-v1";
+pub const bci_bank_parser = "bci-live-v1";
+pub const boa_bank_parser = "boa-live-v1";
+pub const bank_prefix = "data:application/vnd.penny-goblin.santander+json;base64,";
+pub const bank_prefix_generic = "data:application/vnd.penny-goblin.bank+json;base64,";
+pub const Bank = enum {
+    santander,
+    bci,
+    boa,
+
+    pub fn name(bank: Bank) []const u8 {
+        return switch (bank) {
+            .santander => "Santander",
+            .bci => "BCI",
+            .boa => "Bank of America",
+        };
+    }
+
+    pub fn currency(bank: Bank) []const u8 {
+        return if (bank == .boa) "USD" else "CLP";
+    }
+
+    pub fn command(bank: Bank) []const u8 {
+        return switch (bank) {
+            .santander => "import_santander",
+            .bci => "import_bci",
+            .boa => "import_boa",
+        };
+    }
+};
+pub const BankSource = struct { schema: u8 = 1, bank: Bank = .santander, month: []const u8, rows: []const Row };
+pub const BankImport = struct { hash: ?[]const u8 = null, added: usize = 0 };
+
+pub fn parser_for(bank: Bank) []const u8 {
+    return switch (bank) {
+        .santander => bank_parser,
+        .bci => bci_bank_parser,
+        .boa => boa_bank_parser,
+    };
+}
+
+pub fn is_bank_parser(parser: []const u8) bool {
+    for (std.meta.tags(Bank)) |bank| if (std.mem.eql(u8, parser, parser_for(bank))) return true;
+    return false;
+}
+
+pub fn bank_data(data_url: []const u8) ?[]const u8 {
+    for ([_][]const u8{ bank_prefix, bank_prefix_generic }) |prefix| {
+        if (std.mem.startsWith(u8, data_url, prefix)) return data_url[prefix.len..];
+    }
+    return null;
+}
+
+pub fn known_parser(parser: []const u8) bool {
+    for (parsers) |name| if (std.mem.eql(u8, name, parser)) return true;
+    return is_bank_parser(parser);
+}
+
+pub fn source_bytes(a: std.mem.Allocator, data_url: []const u8) ![]const u8 {
+    const encoded = bank_data(data_url) orelse return pdf_bytes(a, data_url);
+    if (encoded.len > 4 * 1024 * 1024) return error.InvalidStatement;
+    const decoder = std.base64.standard.Decoder;
+    const bytes = try a.alloc(u8, try decoder.calcSizeForSlice(encoded));
+    try decoder.decode(bytes, encoded);
+    const source = try bank_source(a, bytes);
+    if (std.mem.startsWith(u8, data_url, bank_prefix) and source.bank != .santander) return error.InvalidStatement;
+    return bytes;
+}
+
+pub fn bank_source(a: std.mem.Allocator, json: []const u8) !BankSource {
+    if (json.len > 3 * 1024 * 1024) return error.InvalidStatement;
+    // Unknown fields are rejected: no tokens, headers or raw bank payloads.
+    const value = try std.json.parseFromSliceLeaky(BankSource, a, json, .{});
+    if (value.schema != 1 or value.month.len != 7 or value.rows.len == 0 or value.rows.len > 10000) return error.InvalidStatement;
+    const first = try std.fmt.allocPrint(a, "{s}-01", .{value.month});
+    if (!model.valid_date(first)) return error.InvalidStatement;
+    for (value.rows) |row| {
+        try model.validate(expense(row, &model.digest("validation")));
+        if (!std.mem.eql(u8, row.date[0..7], value.month) or !std.mem.eql(u8, row.currency, value.bank.currency())) return error.InvalidStatement;
+    }
+    return value;
+}
+
+/// No upstream movement ID exists. Fingerprint date/amount/merchant/account
+/// and its occurrence in the snapshot, preserving two genuine equal purchases.
+/// Categories and reviewed payment corrections are not movement identity.
+pub fn bank_ids(a: std.mem.Allocator, rows: []const Row) ![][64]u8 {
+    return bank_ids_for(a, .santander, rows);
+}
+
+pub fn bank_ids_for(a: std.mem.Allocator, bank: Bank, rows: []const Row) ![][64]u8 {
+    const ids = try a.alloc([64]u8, rows.len);
+    var counts: std.StringHashMapUnmanaged(usize) = .empty;
+    defer counts.deinit(a);
+    for (rows, 0..) |row, i| {
+        const key = try std.json.Stringify.valueAlloc(a, .{ .date = row.date, .amount = row.amount, .payee = row.payee, .account = row.account, .currency = row.currency }, .{});
+        const slot = try counts.getOrPut(a, key);
+        if (!slot.found_existing) slot.value_ptr.* = 0;
+        slot.value_ptr.* += 1;
+        ids[i] = model.digest(try std.fmt.allocPrint(a, "{s}-movements-v1:{s}:{d}", .{ @tagName(bank), key, slot.value_ptr.* }));
+    }
+    return ids;
+}
+
+/// Stage only new observations. Overlapping snapshots, ignored observations,
+/// edited payments and deleted payments never turn into another new charge.
+pub fn stage_bank(db: ledger_mod.Ledger, a: std.mem.Allocator, month: []const u8, rows: []const Row) !BankImport {
+    return stage_bank_for(db, a, .santander, month, rows);
+}
+
+pub fn stage_bank_for(db: ledger_mod.Ledger, a: std.mem.Allocator, bank: Bank, month: []const u8, rows: []const Row) !BankImport {
+    if (rows.len == 0) return .{};
+    // Keep Santander's existing wire representation and source hashes intact.
+    const json = if (bank == .santander)
+        try std.json.Stringify.valueAlloc(a, .{ .schema = @as(u8, 1), .month = month, .rows = rows }, .{})
+    else
+        try std.json.Stringify.valueAlloc(a, BankSource{ .bank = bank, .month = month, .rows = rows }, .{});
+    _ = try bank_source(a, json);
+    const ids = try bank_ids_for(a, bank, rows);
+    try db.db.exec("BEGIN IMMEDIATE");
+    errdefer db.db.exec("ROLLBACK") catch {};
+    var added: usize = 0;
+    const fresh = try a.alloc(bool, rows.len);
+    for (ids, 0..) |id, i| {
+        const query = try db.db.prepare("SELECT 1 FROM observations WHERE id=?1");
+        defer query.finalize();
+        try query.bindText(1, &id);
+        fresh[i] = !try query.step();
+        if (fresh[i]) added += 1;
+    }
+    if (added == 0) {
+        try db.db.exec("COMMIT");
+        return .{};
+    }
+    const encoded = try a.alloc(u8, std.base64.standard.Encoder.calcSize(json.len));
+    const data_url = try std.fmt.allocPrint(a, "{s}{s}", .{ if (bank == .santander) bank_prefix else bank_prefix_generic, std.base64.standard.Encoder.encode(encoded, json) });
+    const hash = try stage(db, a, try std.fmt.allocPrint(a, "{s} {s} · {s}", .{ bank.name(), bank.currency(), month }), data_url);
+    for (rows, ids, 0..) |row, id, i| {
+        if (!fresh[i]) continue;
+        const insert = try db.db.prepare("INSERT INTO observations(id,statement_hash,position,source_json) VALUES (?1,?2,?3,?4)");
+        defer insert.finalize();
+        try insert.bindText(1, &id);
+        try insert.bindText(2, hash);
+        try insert.bindInt(3, @intCast(i));
+        try insert.bindText(4, try std.json.Stringify.valueAlloc(a, row, .{}));
+        _ = try insert.step();
+    }
+    const update = try db.db.prepare("UPDATE statements SET status='review',parser=?2 WHERE hash=?1");
+    defer update.finalize();
+    try update.bindText(1, hash);
+    try update.bindText(2, parser_for(bank));
+    _ = try update.step();
+    try db.db.exec("COMMIT");
+    return .{ .hash = hash, .added = added };
+}
+
+test "banks have separate capture identities and retain Santander fingerprint compatibility" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const row: Row = .{ .date = "2026-10-18", .amount = 1200, .payee = "TEST SHOP", .account = "1234", .category = "Other" };
+    const santander = try bank_ids(a, &.{row});
+    const bci = try bank_ids_for(a, .bci, &.{row});
+    try std.testing.expect(!std.mem.eql(u8, &santander[0], &bci[0]));
+    const key = try std.json.Stringify.valueAlloc(a, .{ .date = row.date, .amount = row.amount, .payee = row.payee, .account = row.account, .currency = row.currency }, .{});
+    const old_id = model.digest(try std.fmt.allocPrint(a, "santander-movements-v1:{s}:1", .{key}));
+    try std.testing.expectEqualSlices(u8, &old_id, &santander[0]);
+    const db = try ledger_mod.Ledger.open(":memory:");
+    defer db.close();
+    const captured = try stage_bank_for(db, a, .bci, "2026-10", &.{row});
+    const captured_sources = try sources(db, a);
+    try std.testing.expectEqual(@as(usize, 1), captured_sources.len);
+    try std.testing.expect(captured_sources[0].format == .json);
+    try std.testing.expectEqual(@as(usize, 0), (try stage_bank_for(db, a, .bci, "2026-10", &.{row})).added);
+    const observed = try review(db, a, captured.hash.?);
+    try std.testing.expectEqualSlices(u8, &bci[0], observed[0].id);
+}
+
+test "Bank of America USD review matches once, saves cents and does not replay" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const db = try ledger_mod.Ledger.open(":memory:");
+    defer db.close();
+    const row: Row = .{ .date = "2026-10-18", .amount = 1234, .currency = "USD", .payee = "TEST SHOP", .account = "BofA checking", .category = "Other" };
+    var saved = expense(row, &model.digest("existing-bofa"));
+    saved.category = "Reviewed category";
+    _ = try db.save(a, .{ .expense = saved });
+    const captured = try stage_bank_for(db, a, .boa, "2026-10", &.{ row, row });
+    var obs = try review(db, a, captured.hash.?);
+    try std.testing.expect(obs[0].match != null and obs[1].match == null);
+    _ = try reconcile(db, a, captured.hash.?, &.{.{ .observation_id = obs[0].id, .action = .link, .expense_id = obs[0].match.?.id, .expected_revision = obs[0].match.?.revision }});
+    _ = try reconcile(db, a, captured.hash.?, &.{.{ .observation_id = obs[1].id, .action = .create }});
+    const payments = try db.list(a);
+    try std.testing.expectEqual(@as(usize, 2), payments.len);
+    for (payments) |payment| {
+        try std.testing.expectEqualStrings("USD", payment.currency);
+        try std.testing.expectEqual(@as(i64, 1234), payment.amount);
+    }
+    try std.testing.expectEqual(@as(usize, 0), (try stage_bank_for(db, a, .boa, "2026-10", &.{ row, row })).added);
+    obs = try review(db, a, captured.hash.?);
+    try std.testing.expect(obs[0].expense_id != null and obs[1].expense_id != null);
+    var clp = row;
+    clp.currency = "CLP";
+    try std.testing.expectError(error.InvalidStatement, stage_bank_for(db, a, .boa, "2026-10", &.{clp}));
+}
+
+test "bank capture replay, overlapping snapshots and identical purchases remain reviewable and idempotent" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const db = try ledger_mod.Ledger.open(":memory:");
+    defer db.close();
+    const row: Row = .{ .date = "2026-10-18", .amount = 1200, .payee = "TEST SHOP", .account = "1234", .category = "Other" };
+    const first = try stage_bank(db, a, "2026-10", &.{ row, row });
+    try std.testing.expectEqual(@as(usize, 2), first.added);
+    try std.testing.expectEqual(@as(usize, 0), (try db.list(a)).len); // Staging never spends.
+    const obs = try observations(db, a, first.hash.?);
+    _ = try reconcile(db, a, first.hash.?, &.{ .{ .observation_id = obs[0].id, .action = .create }, .{ .observation_id = obs[1].id, .action = .ignore } });
+    var payment = (try db.list(a))[0];
+    payment.payee = "Reviewed shop";
+    _ = try db.save(a, .{ .expense = payment, .expected_revision = payment.revision });
+    try std.testing.expectEqual(@as(usize, 0), (try stage_bank(db, a, "2026-10", &.{ row, row })).added);
+    var newer = row;
+    newer.date = "2026-10-19";
+    const second = try stage_bank(db, a, "2026-10", &.{ newer, row, row });
+    try std.testing.expectEqual(@as(usize, 1), second.added);
+    try std.testing.expectEqual(@as(usize, 1), (try observations(db, a, second.hash.?)).len);
+    // The extra occurrence is a real third equal purchase, not a duplicate.
+    try std.testing.expectEqual(@as(usize, 1), (try stage_bank(db, a, "2026-10", &.{ row, row, row })).added);
+    const saved = (try db.list(a))[0];
+    try std.testing.expectEqualStrings("Reviewed shop", saved.payee);
+    try db.remove(saved.id, saved.revision);
+    try std.testing.expectEqual(@as(usize, 0), (try stage_bank(db, a, "2026-10", &.{ row, row, row })).added);
+}
+
+test "bank source validation rejects credentials and wrong-month rows" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const db = try ledger_mod.Ledger.open(":memory:");
+    defer db.close();
+    const row: Row = .{ .date = "2026-09-18", .amount = 1200, .payee = "TEST SHOP", .account = "1234", .category = "Other" };
+    try std.testing.expectError(error.InvalidStatement, stage_bank(db, a, "2026-10", &.{row}));
+    try std.testing.expectEqual(@as(usize, 0), (try sources(db, a)).len);
+    try std.testing.expectError(error.UnknownField, bank_source(a, "{\"schema\":1,\"month\":\"2026-10\",\"rows\":[],\"cookie\":\"never retained\"}"));
+}
+
+test "bank source preparation and transaction clean up on allocation failure" {
+    const T = struct {
+        fn run(gpa: std.mem.Allocator) !void {
+            var arena = std.heap.ArenaAllocator.init(gpa);
+            defer arena.deinit();
+            const db = try ledger_mod.Ledger.open(":memory:");
+            defer db.close();
+            const row: Row = .{ .date = "2026-10-18", .amount = 1200, .payee = "TEST SHOP", .account = "1234", .category = "Other" };
+            _ = try stage_bank(db, arena.allocator(), "2026-10", &.{ row, row });
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, T.run, .{});
 }
