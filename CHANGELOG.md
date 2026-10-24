@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.15
+
+- Import this month's movements from a Santander, BCI or Bank of America window:
+  sign in, then review only the charges not already recorded. The bank windows
+  and category research no longer need system Python.
+- Phones accept bank-window statements when syncing.
+
+## 0.2.14
+
+- Quick scan recognizes delivery-app receipt merchant labels, explicit CLP totals,
+  and unambiguous month-first dates such as `10/22/26`.
+- Prefer the payment timestamp over the screenshot clock and normalize AM/PM times.
+
 ## 0.2.13
 
 - Security and memory safety audit fixes:

@@ -62,9 +62,10 @@ pub fn extract(arena: std.mem.Allocator, text_rows: []const []const u8) !Result 
     value.amount = total(text_rows, lower);
     for (text_rows) |row| if (value.date.len == 0) {
         value.date = try findDate(arena, row);
+        if (value.date.len > 0) value.time = try findTime(arena, row);
     };
     for (text_rows) |row| if (value.time.len == 0) {
-        value.time = findTime(row);
+        value.time = try findTime(arena, row);
     };
     const transfer = anyContains(lower, &.{ "transfer", "destinatario", "beneficiario" });
     value.kind = if (transfer) "transfer" else "receipt";
@@ -135,6 +136,15 @@ fn negativePrefix(row: []const u8, before: usize) bool {
 /// "$ 53.970", "$40.000 CLP", "$1.234,00": whole pesos after a dollar sign.
 /// OCR misreads are tolerated: "S 53.970" for the sign, "53.97O" for a zero.
 fn money(row: []const u8) ?i64 {
+    // App receipts print an explicit currency code instead of a peso sign.
+    if (std.ascii.indexOfIgnoreCase(row, "CLP")) |at| {
+        if ((at == 0 or !std.ascii.isAlphanumeric(row[at - 1])) and
+            (at + 3 == row.len or !std.ascii.isAlphabetic(row[at + 3])))
+        {
+            const amount = std.mem.trimStart(u8, row[at + 3 ..], " :");
+            if (amount.len > 0 and std.ascii.isDigit(amount[0])) return labelAmount(amount);
+        }
+    }
     for (row, 0..) |sign, at| {
         if (!isSign(row, at, sign) or negativePrefix(row, at)) continue;
         var i = at + 1;
@@ -241,10 +251,13 @@ fn numericDate(arena: std.mem.Allocator, text: []const u8) !?[]const u8 {
         while (at < text.len and (text[at] == ' ' or text[at] == '\t')) at += 1;
     }
     if (at < text.len and std.ascii.isDigit(text[at])) return null;
+    // Preserve Chilean day-first dates when ambiguous. A second component
+    // above 12 unambiguously identifies a US month-first app receipt.
+    const month_first = widths[0] != 4 and parts[0] >= 1 and parts[0] <= 12 and parts[1] > 12;
     const year, const month, const day = if (widths[0] == 4)
         .{ parts[0], parts[1], parts[2] }
     else if (widths[2] == 4 or widths[2] == 2)
-        .{ if (widths[2] == 2) parts[2] + 2000 else parts[2], parts[1], parts[0] }
+        .{ if (widths[2] == 2) parts[2] + 2000 else parts[2], if (month_first) parts[0] else parts[1], if (month_first) parts[1] else parts[0] }
     else
         return null;
     return validDate(arena, year, month, day);
@@ -277,16 +290,27 @@ fn validDate(arena: std.mem.Allocator, year: u32, month: u32, day: u32) !?[]cons
     return if (model.valid_date(iso)) iso else null;
 }
 
-fn findTime(row: []const u8) []const u8 {
+/// Prefer the time beside the receipt date over a screenshot's status clock.
+fn findTime(arena: std.mem.Allocator, row: []const u8) ![]const u8 {
     var i: usize = 0;
-    while (i + 5 <= row.len) : (i += 1) {
-        const t = row[i .. i + 5];
-        if (i > 0 and std.ascii.isDigit(row[i - 1])) continue;
-        if (!(std.ascii.isDigit(t[0]) and std.ascii.isDigit(t[1]) and t[2] == ':' and std.ascii.isDigit(t[3]) and std.ascii.isDigit(t[4]))) continue;
-        if (i + 5 < row.len and std.ascii.isDigit(row[i + 5])) continue;
-        const hour = (t[0] - '0') * 10 + (t[1] - '0');
-        const minute = (t[3] - '0') * 10 + (t[4] - '0');
-        if (hour < 24 and minute < 60) return t;
+    while (i + 4 <= row.len) : (i += 1) {
+        if (!std.ascii.isDigit(row[i]) or (i > 0 and std.ascii.isDigit(row[i - 1]))) continue;
+        const width = digitRun(row[i..]);
+        if (width < 1 or width > 2) continue;
+        const colon = i + width;
+        if (colon + 3 > row.len or row[colon] != ':' or !std.ascii.isDigit(row[colon + 1]) or !std.ascii.isDigit(row[colon + 2])) continue;
+        if (colon + 3 < row.len and std.ascii.isDigit(row[colon + 3])) continue;
+        var hour = std.fmt.parseInt(u8, row[i..colon], 10) catch continue;
+        const minute = try std.fmt.parseInt(u8, row[colon + 1 .. colon + 3], 10);
+        if (hour >= 24 or minute >= 60) continue;
+        const suffix = std.mem.trimStart(u8, row[colon + 3 ..], " ");
+        if (suffix.len >= 2 and (std.ascii.eqlIgnoreCase(suffix[0..2], "AM") or std.ascii.eqlIgnoreCase(suffix[0..2], "PM")) and
+            (suffix.len == 2 or !std.ascii.isAlphabetic(suffix[2])))
+        {
+            if (hour < 1 or hour > 12) continue;
+            hour = hour % 12 + @as(u8, if (std.ascii.toLower(suffix[0]) == 'p') 12 else 0);
+        }
+        return std.fmt.allocPrint(arena, "{d:0>2}:{d:0>2}", .{ hour, minute });
     }
     return "";
 }
@@ -343,6 +367,7 @@ fn withoutFolio(name: []const u8) []const u8 {
 /// the next one, or the name after the label's colon. OCR's "rn" and "rm"
 /// for "m" ("Cormpra en") and a logo's letters before the label are allowed.
 fn appPayee(arena: std.mem.Allocator, text_rows: []const []const u8, lower: []const []const u8) !?[]const u8 {
+    if (receiptPayee(text_rows, lower)) |name| return name;
     const labels = [_][]const u8{ "compra en", "compraste en", "pagaste a", "pago a", "pago en", "pagado a", "comercio" };
     for (lower, 0..) |row, index| {
         const plain = try mergeMisreadM(arena, std.mem.trim(u8, row, " "));
@@ -364,6 +389,39 @@ fn appPayee(arena: std.mem.Allocator, text_rows: []const []const u8, lower: []co
         }
     }
     return null;
+}
+
+/// Delivery-app receipts explicitly name the merchant after this phrase.
+/// The name may be on the same OCR row or immediately below it.
+fn receiptPayee(text_rows: []const []const u8, lower: []const []const u8) ?[]const u8 {
+    const labels = [_][]const u8{ "here's your receipt for", "here’s your receipt for" };
+    for (lower, 0..) |row, index| for (labels) |label| {
+        const trimmed = std.mem.trimStart(u8, row, " ");
+        if (!std.mem.startsWith(u8, trimmed, label)) continue;
+        if (trimmed.len > label.len and std.ascii.isAlphabetic(trimmed[label.len])) continue;
+        const offset = row.len - trimmed.len + label.len;
+        var name = merchantText(text_rows[index][offset..]);
+        if (name.len == 0 and index + 1 < text_rows.len) name = merchantText(text_rows[index + 1]);
+        // Do not mistake totals or other receipt sections for a missing name.
+        if (letters(name) < 3 or money(name) != null or std.ascii.eqlIgnoreCase(name, "total") or std.ascii.eqlIgnoreCase(name, "payments")) continue;
+        return name;
+    };
+    return null;
+}
+
+fn merchantText(text: []const u8) []const u8 {
+    var name = std.mem.trim(u8, text, " :.,");
+    // A merchant logo emoji is decoration, not part of the merchant name.
+    while (name.len > 0) {
+        const width = std.unicode.utf8ByteSequenceLength(name[0]) catch break;
+        if (width > name.len) break;
+        const codepoint = std.unicode.utf8Decode(name[0..width]) catch break;
+        if (!(codepoint >= 0x1f300 and codepoint <= 0x1faff) and codepoint != 0xfe0f and codepoint != 0x200d) break;
+        name = std.mem.trimStart(u8, name[width..], " ");
+    }
+    // The branch street address may share the merchant's OCR row.
+    if (std.mem.indexOf(u8, name, " (")) |at| name = name[0..at];
+    return std.mem.trim(u8, name, " :.,");
 }
 
 /// `text` with "rn" and "rm" read as the "m" OCR split ("cormpra" → "compra").
@@ -683,9 +741,11 @@ test "Onepay success screen: app label payee, amount, no printed date" {
     defer arena.deinit();
     // ML Kit on a POCO X3, from a screenshot of the app.
     const onepay = [_][]const u8{
-        "Tu pago fue exitoso",                         "Monto $ 34.752",                                "gtd Cormpra en",
-        "GTD MANQUEHUE SA",                            "El comprobante se mostrará en el comercio",     "y puedes revisarlo en la sección Historial de",
-        "Onepay",                                      "Ira Historial",                                 "Ir al inicio",
+        "Tu pago fue exitoso", "Monto $ 34.752", "gtd Cormpra en",
+        "GTD MANQUEHUE SA",
+        "El comprobante se mostrará en el comercio",
+        "y puedes revisarlo en la sección Historial de",
+        "Onepay",              "Ira Historial",  "Ir al inicio",
     };
     const result = try extract(arena.allocator(), &onepay);
     try std.testing.expectEqual(@as(i64, 34752), result.extraction.amount);
@@ -738,14 +798,13 @@ test "abbreviated and English month dates; label amounts" {
     try std.testing.expectEqual(@as(?i64, null), labelAmount("Total IVA (19%)"));
 }
 
-
 test "discount receipt uses final total and never guesses the largest amount" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const breakdown = [_][]const u8{
         "SUPERMERCADO TOTTUS SA.", "18/10/26 14:49:12", "SUB TOTAL $435.670",
-        "DESCUENTO -$52.065", "NETO $322.357", "IVA $61.248",
+        "DESCUENTO -$52.065",      "NETO $322.357",     "IVA $61.248",
     };
     const printed = breakdown ++ [_][]const u8{ "TOTAL o$383.605", "TARJETA CREDITO $383.605", "TOTAL 383.605" };
     const result = try extract(a, &printed);
@@ -784,4 +843,70 @@ test "discount photo OCR boxes retain final payable amount" {
         .{ .text = "TARJETA CREDITO $383.605", .left = 648, .top = 616, .right = 1133, .bottom = 675 },
     });
     try std.testing.expectEqual(@as(i64, 383605), (try extract(a, text_rows)).extraction.amount);
+}
+
+test "Uber Eats pharmacy receipt uses final CLP total and US payment date" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const receipt = [_][]const u8{
+        "9:49 Uber Eats",        "Receipt",                  "Thanks for",                            "ordering, Sergio",
+        "Here's your receipt for 🏪Farmacias Ahumada",
+        "(272 Av. Los Leones).", "Total CLP 16,147",         "3 Gesidol Infantil 100 mg/mL x 15 mL",
+        "Solución Oral Para Gotas",
+        "CLP 4,219/pc",          "Item Subtotal CLP 12,657", "Delivery Fee (VAT included) CLP 2,500", "Service Fee (VAT included) CLP 990",
+        "Payments",
+        "Mastercard ••••9526 CLP 16,147",
+        "10/22/26 9:45 PM",
+    };
+    const result = try extract(arena.allocator(), &receipt);
+    try std.testing.expect(result.complete);
+    try std.testing.expectEqual(@as(i64, 16147), result.extraction.amount);
+    try std.testing.expectEqualStrings("Farmacias Ahumada", result.extraction.payee);
+    try std.testing.expectEqualStrings("2026-10-22", result.extraction.date);
+    try std.testing.expectEqualStrings("21:45", result.extraction.time);
+}
+
+test "detached CLP total and receipt merchant label remain a quick scan" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const result = try extract(arena.allocator(), &.{
+        "Here's your receipt for",  "Farmacias Ahumada", "Total", "CLP 16,147",
+        "Item Subtotal CLP 12,657", "10/22/26 9:45 PM",
+    });
+    try std.testing.expect(result.complete);
+    try std.testing.expectEqual(@as(i64, 16147), result.extraction.amount);
+    try std.testing.expectEqualStrings("Farmacias Ahumada", result.extraction.payee);
+}
+
+test "receipt dates preserve Chilean order and reject impossible US dates" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqualStrings("2026-11-10", (try numericDate(a, "10/11/26")).?);
+    try std.testing.expectEqualStrings("2026-10-22", (try numericDate(a, "22/10/26")).?);
+    try std.testing.expectEqualStrings("2026-10-22", (try numericDate(a, "10/22/26")).?);
+    try std.testing.expect((try numericDate(a, "10/32/26")) == null);
+    try std.testing.expect((try numericDate(a, "02/30/26")) == null);
+    try std.testing.expectEqualStrings("00:45", try findTime(a, "10/22/26 12:45 AM"));
+    try std.testing.expectEqualStrings("12:45", try findTime(a, "10/22/26 12:45 PM"));
+    try std.testing.expectEqualStrings("", try findTime(a, "1O:45"));
+}
+
+test "delivery receipt does not complete without merchant evidence or final total" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const missing_name = try extract(arena.allocator(), &.{
+        "Here's your receipt for", "Total CLP 16,147", "10/22/26 9:45 PM",
+    });
+    try std.testing.expect(!missing_name.complete);
+    const missing_total = try extract(arena.allocator(), &.{
+        "Here’s your receipt for 🏪Farmacias Ahumada (272 Av. Los Leones).",
+        "Item Subtotal CLP 12,657",
+        "Delivery Fee CLP 2,500",
+        "Service Fee CLP 990",
+        "10/22/26 9:45 PM",
+    });
+    try std.testing.expect(!missing_total.complete);
+    try std.testing.expectEqualStrings("Farmacias Ahumada", missing_total.extraction.payee);
+    try std.testing.expectEqual(@as(i64, 0), missing_total.extraction.amount);
 }
