@@ -9,15 +9,15 @@ private; its builds and this website are public.
 
 # [Download Penny Goblin]($heading.id('download-penny-goblin'))
 
-Download [Penny Goblin 0.2.18](https://github.com/highercomve/penny-goblin/releases/tag/v0.2.18):
+Download [Penny Goblin 0.2.19](https://github.com/highercomve/penny-goblin/releases/tag/v0.2.19):
 
-- [Linux x86_64 AppImage](https://github.com/highercomve/penny-goblin/releases/download/v0.2.18/penny-goblin-linux-x86_64-oriel.AppImage) (compiled Oriel interface; the scanner can use any GPU through Vulkan)
-- [Linux x86_64 AppImage, WebView interface](https://github.com/highercomve/penny-goblin/releases/download/v0.2.18/penny-goblin-linux-x86_64-webview.AppImage) (scans on NVIDIA GPUs with CUDA)
-- [Windows x86_64 installer](https://github.com/highercomve/penny-goblin/releases/download/v0.2.18/penny-goblin-windows-x86_64-setup.exe) (the scanner can use any GPU through Vulkan)
-- [macOS Apple silicon disk image](https://github.com/highercomve/penny-goblin/releases/download/v0.2.18/penny-goblin-macos-arm64.dmg) (the scanner runs on the GPU through Metal)
-- [Android arm64 APK](https://github.com/highercomve/penny-goblin/releases/download/v0.2.18/penny-goblin-android-arm64.apk)
+- [Linux x86_64 AppImage](https://github.com/highercomve/penny-goblin/releases/download/v0.2.19/penny-goblin-linux-x86_64-oriel.AppImage) (compiled Oriel interface; the scanner can use any GPU through Vulkan)
+- [Linux x86_64 AppImage, WebView interface](https://github.com/highercomve/penny-goblin/releases/download/v0.2.19/penny-goblin-linux-x86_64-webview.AppImage) (scans on NVIDIA GPUs with CUDA)
+- [Windows x86_64 installer](https://github.com/highercomve/penny-goblin/releases/download/v0.2.19/penny-goblin-windows-x86_64-setup.exe) (the scanner can use any GPU through Vulkan)
+- [macOS Apple silicon disk image](https://github.com/highercomve/penny-goblin/releases/download/v0.2.19/penny-goblin-macos-arm64.dmg) (the scanner runs on the GPU through Metal)
+- [Android arm64 APK](https://github.com/highercomve/penny-goblin/releases/download/v0.2.19/penny-goblin-android-arm64.apk)
 
-Every version, its notes and the [SHA256SUMS](https://github.com/highercomve/penny-goblin/releases/download/v0.2.18/SHA256SUMS)
+Every version, its notes and the [SHA256SUMS](https://github.com/highercomve/penny-goblin/releases/download/v0.2.19/SHA256SUMS)
 of its files are on the [releases page](https://github.com/highercomve/penny-goblin/releases).
 There is no app-store release yet.
 
