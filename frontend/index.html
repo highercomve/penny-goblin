@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#111511" media="(prefers-color-scheme: dark)">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Penny Goblin</title>
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
   <script src="progress.js?v=8" defer></script>
   <script src="merchants.js?v=8" defer></script>
   <script src="reports.js?v=10" defer></script>
@@ -135,15 +135,12 @@
       </section>
 
       <section class="view" id="view-insights" aria-label="Insights" hidden>
-        <div class="section-heading insights-heading">
-          <div class="chips period-controls" aria-label="Insights period">
-            <label class="select-chip"><span class="visually-hidden">From</span><select id="insights-from"></select></label>
-            <label class="select-chip"><span class="visually-hidden">Through</span><select id="insights-to"></select></label>
-            <label class="select-chip"><span class="visually-hidden">Whole year</span><select id="insights-year"><option value="">Whole year</option></select></label>
-          </div>
-          <button id="export-report" class="tonal">Export report</button>
+        <div class="chips period-controls" aria-label="Insights period">
+          <label class="select-chip"><span class="visually-hidden">From</span><select id="insights-from"></select></label>
+          <label class="select-chip"><span class="visually-hidden">Through</span><select id="insights-to"></select></label>
+          <label class="select-chip"><span class="visually-hidden">Whole year</span><select id="insights-year"><option value="">Whole year</option></select></label>
         </div>
-        <p id="insights-period" class="supporting"></p>
+        <div class="section-heading insights-heading"><p id="insights-period" class="supporting"></p><button id="export-report" class="tonal">Export report</button></div>
         <p id="report-status" class="supporting" role="status"></p>
         <div class="grid">
           <section class="card"><h3 class="card-title">By cardholder</h3><div id="account-chart"></div></section>

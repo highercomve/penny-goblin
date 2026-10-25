@@ -2510,6 +2510,14 @@ test "Insights month range, whole year and category medians follow WebKit" {
     try std.testing.expectEqualStrings("2026-01", value(e, aid("insights-from")));
     try std.testing.expectEqualStrings("2026-01", value(e, aid("insights-to")));
 
+    // On a phone the range chips sit in one short row, directly above the period label.
+    e.tree.width = 393;
+    try resized(e);
+    try navigate(e, .insights);
+    const chip = e.tree.get(aid("insights-from")).?.frame;
+    const label = e.tree.get(aid("insights-period")).?.frame;
+    try std.testing.expect(label.y > chip.y and label.y - chip.y < 72);
+    try std.testing.expect(e.tree.get(aid("insights-from")).?.parent.?.parent.?.props.scrollx);
     _ = try handle_event(e, aid("insights-year"), "change", "\"2025\"");
     _ = try click(e, aid("export-report"));
     try std.testing.expectEqualStrings("export_report", host.command);

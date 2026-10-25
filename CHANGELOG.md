@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.18
+
+- Insights range chips sit in one short row on phones, above the period and
+  Export report.
+
 ## 0.2.17
 
 - Add a category's median month to the monthly budget from Insights (By category,
