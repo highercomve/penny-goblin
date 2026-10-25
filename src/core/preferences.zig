@@ -120,6 +120,30 @@ pub fn validate(settings: legacy.Settings) !void {
     try validate_map(settings.categories, .keywords);
     try validate_map(settings.vendors_config, .label);
     try validate_map(settings.special_cases, .label);
+    try validate_budgets(settings.category_budgets);
+}
+
+fn validate_budgets(value: std.json.Value) !void {
+    if (value == .null) return;
+    if (value != .object or value.object.count() > 1000) return error.InvalidBudget;
+    var iterator = value.object.iterator();
+    while (iterator.next()) |entry| {
+        try model.text(entry.key_ptr.*, 120, false);
+        const amount = entry.value_ptr.*;
+        if (amount != .integer or amount.integer < 0 or amount.integer > 1_000_000_000_000) return error.InvalidBudget;
+    }
+}
+
+test "category budgets are bounded whole CLP amounts" {
+    var budgets: std.json.ObjectMap = .empty;
+    defer budgets.deinit(std.testing.allocator);
+    try budgets.put(std.testing.allocator, "Food", .{ .integer = 2000 });
+    try validate(.{ .category_budgets = .{ .object = budgets } });
+    try budgets.put(std.testing.allocator, "Taxi", .{ .integer = -1 });
+    try std.testing.expectError(error.InvalidBudget, validate(.{ .category_budgets = .{ .object = budgets } }));
+    _ = budgets.swapRemove("Taxi");
+    try budgets.put(std.testing.allocator, "Taxi", .{ .float = 1.5 });
+    try std.testing.expectError(error.InvalidBudget, validate(.{ .category_budgets = .{ .object = budgets } }));
 }
 
 const MapKind = enum { account, keywords, label };

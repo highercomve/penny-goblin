@@ -77,7 +77,7 @@ pub const State = struct {
     details_open: bool = true,
     extraction_open: bool = false,
     scan_fill: bool = false,
-    confirm_action: enum { discard, replace_image, rescan, scanner_delete } = .discard,
+    confirm_action: enum { discard, replace_image, rescan, scanner_delete, category_budget } = .discard,
     pending_camera: bool = false,
 };
 pub var s: State = .{};
@@ -760,7 +760,12 @@ pub fn render(e: *ui.Engine) !void {
     var parts: [180]u8 = undefined;
     _ = try BudgetPart.mount(&e.tree, 27000000, 70700, &.{.{ .name = "text", .value = try std.fmt.bufPrint(&parts, "Variable {s}", .{try reports.money(&variable, total.variable)}) }});
     _ = try BudgetPart.mount(&e.tree, 27000004, 70700, &.{.{ .name = "text", .value = try std.fmt.bufPrint(&parts, "Special {s}", .{try reports.money(&special, total.special)}) }});
-    if (!try e.tree.stampKids(aid("budget-parts"), &.{ 27000000, 27000004 })) return error.InvalidTemplate;
+    const budgeted = settings().category_budgets == .object and settings().category_budgets.object.count() > 0;
+    if (budgeted) {
+        var reserved: [48]u8 = undefined;
+        _ = try BudgetPart.mount(&e.tree, 27000008, 70700, &.{.{ .name = "text", .value = try std.fmt.bufPrint(&parts, "Budgets left {s}", .{try reports.money(&reserved, total.reserved)}) }});
+    }
+    if (!try e.tree.stampKids(aid("budget-parts"), if (budgeted) &.{ 27000000, 27000004, 27000008 } else &.{ 27000000, 27000004 })) return error.InvalidTemplate;
     try show(e, aid("clear-drilldown"), s.drill_active);
     try set_text(e, aid("clear-drilldown"), if (s.drill_from) |from| switch (from) {
         .home => "Back to Home",
@@ -778,6 +783,8 @@ pub fn render(e: *ui.Engine) !void {
     const months = calendar_months(range.from, range.through);
     try set_text(e, aid("insights-period"), if (range.from.len == 0) "No payments yet" else if (std.mem.eql(u8, range.from, range.through)) try @import("ui_dates.zig").month_label(a, range.from) else try std.fmt.allocPrint(a, "{s} – {s} · {d} months", .{ try @import("ui_dates.zig").month_label(a, range.from), try @import("ui_dates.zig").month_label(a, range.through), months }));
     try tools.render_reports(e, clp.items, insight.items, months);
+    // After the reports: they reset the report arena that budget rows also use.
+    try tools.render_budgets(e, selected.items);
     try tools.render_statements(e);
     try overlay(e);
     redraw(e);
@@ -1125,6 +1132,10 @@ fn click(e: *ui.Engine, id: i64) !bool {
                     .scanner_delete => {
                         try overlay(e);
                         try tools.confirm_scanner_delete(e);
+                    },
+                    .category_budget => {
+                        try overlay(e);
+                        try tools.save_category_budget(e);
                     },
                 }
             } else try overlay(e);
@@ -2504,4 +2515,66 @@ test "Insights month range, whole year and category medians follow WebKit" {
     try std.testing.expectEqualStrings("export_report", host.command);
     try std.testing.expect(std.mem.indexOf(u8, host.args, "Old market") != null);
     try std.testing.expect(std.mem.indexOf(u8, host.args, "Cab") == null);
+}
+
+test "a category median joins the monthly budget and Home tracks it" {
+    const a = std.testing.allocator;
+    var host: TestHost = .{ .allocator = a };
+    defer host.deinit();
+    configure(std.testing.io);
+    const e = try ui.Engine.create(a, .{ .ctx = &host, .measure = TestHost.measure, .laid_out = TestHost.laid, .removed = TestHost.removed, .add_timer = TestHost.timer, .invoke = TestHost.dispatch, .focus = TestHost.focus }, &.{}, "{}", "main", "application.oriel", 1180, 820);
+    defer e.destroy();
+    try boot(e);
+    var rows = [_]model.Expense{
+        .{ .id = &model.digest("budget-1"), .date = "2026-01-10", .amount = 1000, .payee = "Market", .account = "1234", .category = "Food", .revision = 1 },
+        .{ .id = &model.digest("budget-2"), .date = "2026-02-03", .amount = 3000, .payee = "Market", .account = "1234", .category = "Food", .revision = 1 },
+        .{ .id = &model.digest("budget-3"), .date = "2026-03-08", .amount = 1500, .payee = "Market", .account = "1234", .category = "Food", .revision = 1 },
+        .{ .id = &model.digest("budget-4"), .date = "2026-03-09", .amount = 900, .payee = "Cab", .account = "1234", .category = "Taxi", .revision = 1 },
+    };
+    var snapshot: app.Snapshot = .{ .expenses = &rows, .settings = "{\"salary\":10000,\"fixed_expenses_items\":[{\"name\":\"Rent\",\"amount\":500,\"keywords\":[\"RENT\"]}]}", .platform = "linux", .vision_available = false, .tray_running = false, .statements = &.{} };
+    const encoded = try std.json.Stringify.valueAlloc(a, snapshot, .{});
+    defer a.free(encoded);
+    try resolved(e, @intFromEnum(Request.snapshot), true, encoded);
+    try navigate(e, .insights);
+    _ = try handle_event(e, aid("insights-year"), "change", "\"2026\"");
+    _ = try handle_event(e, aid("category-measure"), "change", "\"median\"");
+    const Chart = ui.View(@embedFile("category-row.oriel"));
+    const text = struct {
+        fn of(engine: *ui.Engine, id: i64) []const u8 {
+            const n = engine.tree.get(id).?;
+            const holder = if (n.kids.items.len > 0) n.kids.items[0] else n;
+            return holder.props.runs.?[0].t;
+        }
+    }.of;
+    // Food: 1000, 3000, 1500 -> median 1500.
+    try std.testing.expectEqualStrings("Food", text(e, Chart.id("title", 8000000)));
+    _ = try handle_event(e, Chart.id("title", 8000000), "click", "0");
+    try std.testing.expect(s.notice_open);
+    try std.testing.expectEqual(Page.insights, s.page);
+    try std.testing.expectEqualStrings("Add Food to the monthly budget at its median, $1.500 a month?", text(e, Notice.id("message", 19000)));
+    _ = try click(e, Notice.id("confirm", 19000));
+    try std.testing.expectEqualStrings("save_budget", host.command);
+    const edit = try std.json.parseFromSlice(@import("core/preferences.zig").Edit, a, host.args, .{ .ignore_unknown_fields = true });
+    defer edit.deinit();
+    try std.testing.expectEqual(@as(i64, 1500), edit.value.settings.category_budgets.object.get("Food").?.integer);
+    try std.testing.expectEqual(@as(usize, 1), edit.value.settings.fixed_expenses_items.len);
+    try resolved(e, @intFromEnum(Request.settings), true, "0");
+
+    snapshot.settings = "{\"salary\":10000,\"fixed_expenses_items\":[{\"name\":\"Rent\",\"amount\":500,\"keywords\":[\"RENT\"]}],\"category_budgets\":{\"Food\":2000}}";
+    const updated = try std.json.Stringify.valueAlloc(a, snapshot, .{});
+    defer a.free(updated);
+    try resolved(e, @intFromEnum(Request.snapshot), true, updated);
+    try navigate(e, .home);
+    // March: Food 1500 of 2000; the forecast keeps the other 500 aside.
+    try std.testing.expectEqualStrings("Food", text(e, Chart.id("title", 21000000)));
+    try std.testing.expectEqualStrings("of $2.000 · $500 left", text(e, Chart.id("detail", 21000000)));
+    try std.testing.expectEqualStrings("$6.600", text(e, aid("budget-forecast")));
+    _ = try handle_event(e, aid("month"), "change", "\"2026-02\"");
+    try std.testing.expectEqualStrings("$1.000 over $2.000", text(e, Chart.id("detail", 21000000)));
+    _ = try handle_event(e, Chart.id("title", 21000000), "click", "0");
+    try std.testing.expectEqualStrings("Remove the Food budget of $2.000 a month?", text(e, Notice.id("message", 19000)));
+    _ = try click(e, Notice.id("confirm", 19000));
+    const removal = try std.json.parseFromSlice(@import("core/preferences.zig").Edit, a, host.args, .{ .ignore_unknown_fields = true });
+    defer removal.deinit();
+    try std.testing.expectEqual(@as(usize, 0), removal.value.settings.category_budgets.object.count());
 }

@@ -245,8 +245,9 @@ function renderReports(periodRows) {
   $("fixed-paid").textContent = `${money.format(report.fixed)} paid`;
   $("budget-hint").textContent = settings.salary ? "" : "Add your salary in Settings to see what's left.";
   $("budget-parts").replaceChildren(...[
-    ["Variable", report.variable], ["Special", report.special],
+    ["Variable", report.variable], ["Special", report.special], ...(report.budgets.length ? [["Budgets left", report.reserved]] : []),
   ].map(([label, amount]) => node("span", `${label} ${money.format(amount)}`)));
+  renderCategoryBudgets(report.budgets);
   for (const [id, key] of [
     ["category-report", (row) => PennyReports.category(row, settings)],
     ["account-report", (row) => accountLabel(row.account)],

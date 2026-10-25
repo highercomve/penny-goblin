@@ -68,3 +68,12 @@ test("category medians use monthly totals, with empty months as zero", () => {
   assert.equal(report.monthlyMedian(rows, ["2026-01", "2026-02", "2026-03", "2026-04"]), 120n);
   assert.equal(report.monthlyMedian(rows, ["2026-01", "2026-03", "2026-04"]), 150n);
 });
+
+test("category budgets reserve their unspent part in the forecast", () => {
+  const settings = { salary: 10000, category_budgets: { Food: 2000, Taxi: 300 } };
+  const rows = [{ amount: 1500, category: "Food", payee: "Market" }, { amount: 410, category: "Taxi", payee: "Cab" }];
+  const r = report.monthly(rows, settings);
+  assert.equal(r.reserved, 500n);
+  assert.equal(r.legacyForecast, 10000n - 1910n - 500n);
+  assert.equal(r.budgets.map((b) => `${b.name} ${b.budget} ${b.spent}`).join(", "), "Food 2000 1500, Taxi 300 410");
+});

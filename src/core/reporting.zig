@@ -12,6 +12,8 @@ pub const Totals = struct {
     planned: i64 = 0,
     actual_remaining: i64 = 0,
     forecast: i64 = 0,
+    /// Category budgets not yet spent; the forecast keeps them aside.
+    reserved: i64 = 0,
 };
 pub const Filter = struct {
     month: []const u8 = "",
@@ -196,8 +198,39 @@ pub fn totals(rows: []const model.Expense, settings: Settings) Totals {
         if (special(row, settings) != null) t.special += row.amount else if (std.mem.startsWith(u8, row.category, "Fixed:") or fixed_item(row, settings) != null) t.fixed += row.amount else t.variable += row.amount;
     }
     t.actual_remaining = t.salary - t.actual;
-    t.forecast = t.salary - t.planned - t.variable - t.special;
+    if (settings.category_budgets == .object) for (settings.category_budgets.object.keys(), settings.category_budgets.object.values()) |name, amount| {
+        if (amount == .integer) t.reserved += @max(0, amount.integer - budget_spent(rows, settings, name));
+    };
+    t.forecast = t.salary - t.planned - t.variable - t.special - t.reserved;
     return t;
+}
+fn variable_payment(row: model.Expense, settings: Settings) bool {
+    return special(row, settings) == null and !std.mem.startsWith(u8, row.category, "Fixed:") and fixed_item(row, settings) == null;
+}
+/// What `rows` spent in CLP on the variable category `name`.
+pub fn budget_spent(rows: []const model.Expense, settings: Settings, name: []const u8) i64 {
+    var spent: i64 = 0;
+    for (rows) |row| if (std.mem.eql(u8, row.currency, "CLP") and variable_payment(row, settings) and std.mem.eql(u8, row.category, name)) {
+        spent += row.amount;
+    };
+    return spent;
+}
+
+test "the forecast keeps unspent category budgets aside" {
+    var budgets: std.json.ObjectMap = .empty;
+    defer budgets.deinit(std.testing.allocator);
+    try budgets.put(std.testing.allocator, "Food", .{ .integer = 2000 });
+    try budgets.put(std.testing.allocator, "Taxi", .{ .integer = 300 });
+    const settings: Settings = .{ .salary = 10000, .category_budgets = .{ .object = budgets } };
+    const rows = [_]model.Expense{
+        .{ .id = "a", .date = "2026-10-01", .amount = 1500, .payee = "Market", .account = "1", .category = "Food" },
+        .{ .id = "b", .date = "2026-10-02", .amount = 410, .payee = "Cab", .account = "1", .category = "Taxi" },
+    };
+    const t = totals(&rows, settings);
+    // Food has 500 left; Taxi is over and reserves nothing.
+    try std.testing.expectEqual(@as(i64, 500), t.reserved);
+    try std.testing.expectEqual(@as(i64, 10000 - 1910 - 500), t.forecast);
+    try std.testing.expectEqual(@as(i64, 410), budget_spent(&rows, settings, "Taxi"));
 }
 /// A payment's amount in its currency: "$53.970" in CLP, "US$46.63" in USD.
 pub fn amount_text(buf: []u8, amount: i64, currency: []const u8) ![]const u8 {

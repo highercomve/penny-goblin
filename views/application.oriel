@@ -540,6 +540,7 @@
                 </view>
               </row>
               <row id="budget-parts" wrap="wrap" margin="0,0,8,0" row-gap="6" column-gap="6" />
+              <view id="category-budgets" margin="0,0,8,0" />
               <text id="budget-hint" class="budget-hint" shrink="0" margin="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">Add your salary in Settings to see what's left.</text>
             </view>
             <view class="n46" min-width="0" padding="16" radius="16" unset="shrink">

@@ -52,6 +52,12 @@ var special_rows: []f.model.Expense = &.{};
 /// The Insights range's CLP payments and calendar months, for the render in progress.
 var insight_rows: []const f.model.Expense = &.{};
 var range_months: usize = 1;
+/// Category rows that offer their median to the budget, and Home's budget rows: node id -> group index or budget name.
+var budget_offers: std.AutoHashMapUnmanaged(i64, usize) = .empty;
+var budget_rows: std.AutoHashMapUnmanaged(i64, []const u8) = .empty;
+/// The category budget awaiting confirmation; a null amount removes it.
+var pending_budget: struct { name: [120]u8 = undefined, len: usize = 0, amount: ?i64 = null } = .{};
+const budget_base: i64 = 21000000;
 var mapping_count: usize = 0;
 var section: Section = .budget;
 var expected: []const u8 = "";
@@ -85,6 +91,8 @@ pub fn prepare(e: *ui.Engine) !void {
     // Never retain slices into the previous window's freed arenas.
     groups = .empty;
     group_actions = .empty;
+    budget_offers = .empty;
+    budget_rows = .empty;
     special_rows = &.{};
     observations = &.{};
     statement_bank = .santander;
@@ -339,13 +347,17 @@ fn category_chart(e: *ui.Engine) !void {
             try std.fmt.allocPrint(a, "{d} payments · median {s} a month", .{ g.count, try f.reports.money(&other, g.median) })
         else
             try std.fmt.allocPrint(a, "{d} payments", .{g.count});
-        _ = try ChartRow.mount(&e.tree, id, 75600, &.{ .{ .name = "title", .value = g.name }, .{ .name = "detail", .value = detail }, .{ .name = "amount", .value = try f.reports.money(&amount, g.amount) } });
+        const budgeted = budget_of(g.name);
+        var budget_money: [48]u8 = undefined;
+        const full_detail = if (g.kind == .variable_category and budgeted != null) try std.fmt.allocPrint(a, "{s} · budget {s}", .{ detail, try f.reports.money(&budget_money, budgeted.?) }) else detail;
+        _ = try ChartRow.mount(&e.tree, id, 75600, &.{ .{ .name = "title", .value = g.name }, .{ .name = "detail", .value = full_detail }, .{ .name = "amount", .value = try f.reports.money(&amount, g.amount) } });
         var props = e.tree.get(ChartRow.id("bar", id)).?.props;
         props.w = .{ .pct = if (maximum > 0) @as(f32, @floatFromInt(g.amount)) / @as(f32, @floatFromInt(maximum)) * 100 else 0 };
         if (g.kind == .planned_category) props.bg = .{ .color = oriel.canvas.rgb(if (e.tree.dark) 0xe6c07b else 0xb88736) };
         try e.tree.updateUiProps(ChartRow.id("bar", id), props);
+        // With medians shown, a category row offers its median month to the monthly budget.
         if (g.kind == .variable_category) {
-            try group_actions.put(a, id, i);
+            if (by_median) try budget_offers.put(a, id, i) else try group_actions.put(a, id, i);
             try f.mark_action(e, id, g.name);
         }
         try ids.append(a, id);
@@ -403,6 +415,8 @@ fn collect_groups(e: *ui.Engine, rows: []const f.model.Expense, insight: []const
     _ = report_arena.reset(.retain_capacity);
     groups = .empty;
     group_actions = .empty;
+    budget_offers = .empty;
+    budget_rows = .empty;
     for (rows) |row| {
         try add_group(.category, try f.reports.category_name(report_arena.allocator(), row, f.settings()), row.amount);
         try add_group(.account, try f.reports.account_label(report_arena.allocator(), row.account, f.settings()), row.amount);
@@ -535,6 +549,77 @@ fn fixed_report(e: *ui.Engine) !void {
     const month = f.value(e, f.aid("month"));
     try f.set_text(e, Fixed.id("fixed-summary", 12000), try std.fmt.allocPrint(a, "{s} a month · {s} paid{s}{s}", .{ try f.reports.money(&plan, planned), try f.reports.money(&paid, total_paid), if (month.len > 0) " in " else "", if (month.len > 0) try @import("ui_dates.zig").month_label(a, month) else "" }));
     if (!try e.tree.stampKids(Fixed.id("fixed-list", 12000), ids.items)) return error.InvalidTemplate;
+}
+fn budget_of(name: []const u8) ?i64 {
+    const budgets = f.settings().category_budgets;
+    if (budgets != .object) return null;
+    const amount = budgets.object.get(name) orelse return null;
+    return if (amount == .integer) amount.integer else null;
+}
+/// Home's budget card: each budgeted category's spending this month against its budget.
+pub fn render_budgets(e: *ui.Engine, rows: []const f.model.Expense) !void {
+    const a = report_arena.allocator();
+    var ids: std.ArrayList(i64) = .empty;
+    const budgets = f.settings().category_budgets;
+    if (budgets == .object) for (budgets.object.keys(), budgets.object.values()) |name, value| {
+        if (value != .integer) continue;
+        const budget = value.integer;
+        const spent = f.reports.budget_spent(rows, f.settings(), name);
+        const id = budget_base + @as(i64, @intCast(ids.items.len)) * 16;
+        var spent_text: [48]u8 = undefined;
+        var budget_text: [48]u8 = undefined;
+        var left_text: [48]u8 = undefined;
+        const detail = if (spent > budget)
+            try std.fmt.allocPrint(a, "{s} over {s}", .{ try f.reports.money(&left_text, spent - budget), try f.reports.money(&budget_text, budget) })
+        else
+            try std.fmt.allocPrint(a, "of {s} · {s} left", .{ try f.reports.money(&budget_text, budget), try f.reports.money(&left_text, budget - spent) });
+        _ = try ChartRow.mount(&e.tree, id, 75600, &.{ .{ .name = "title", .value = name }, .{ .name = "detail", .value = detail }, .{ .name = "amount", .value = try f.reports.money(&spent_text, spent) } });
+        var props = e.tree.get(ChartRow.id("bar", id)).?.props;
+        props.w = .{ .pct = if (budget > 0) @min(100, @as(f32, @floatFromInt(spent)) / @as(f32, @floatFromInt(budget)) * 100) else 100 };
+        if (spent > budget) props.bg = .{ .color = oriel.canvas.rgb(if (e.tree.dark) 0xffb4ab else 0xba1a1a) };
+        try e.tree.updateUiProps(ChartRow.id("bar", id), props);
+        try budget_rows.put(a, id, name);
+        try f.mark_action(e, id, name);
+        try ids.append(a, id);
+    };
+    if (!try e.tree.stampKids(f.aid("category-budgets"), ids.items)) return error.InvalidTemplate;
+}
+fn offer_budget(e: *ui.Engine, name: []const u8, amount: ?i64) !void {
+    var buf: [400]u8 = undefined;
+    var current_text: [48]u8 = undefined;
+    var amount_text: [48]u8 = undefined;
+    if (amount) |value| if (value <= 0) {
+        try f.status(e, try std.fmt.bufPrint(&buf, "{s}'s median month is $0; there is nothing to budget.", .{name}));
+        return;
+    };
+    const len = @min(name.len, pending_budget.name.len);
+    @memcpy(pending_budget.name[0..len], name[0..len]);
+    pending_budget.len = len;
+    pending_budget.amount = amount;
+    const current = budget_of(name);
+    if (amount) |value| {
+        const message = if (current) |old|
+            try std.fmt.bufPrint(&buf, "Change the {s} budget from {s} to its median, {s} a month?", .{ name, try f.reports.money(&current_text, old), try f.reports.money(&amount_text, value) })
+        else
+            try std.fmt.bufPrint(&buf, "Add {s} to the monthly budget at its median, {s} a month?", .{ name, try f.reports.money(&amount_text, value) });
+        try f.confirm_editor(e, .category_budget, message, if (current != null) "Update budget" else "Add to budget");
+    } else try f.confirm_editor(e, .category_budget, try std.fmt.bufPrint(&buf, "Remove the {s} budget of {s} a month?", .{ name, try f.reports.money(&current_text, current orelse 0) }), "Remove budget");
+}
+/// Saves the confirmed category budget with the usual settings conflict check.
+pub fn save_category_budget(e: *ui.Engine) !void {
+    var arena = std.heap.ArenaAllocator.init(e.gpa);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const current = f.s.snapshot.?.value.settings;
+    var config = try std.json.parseFromSliceLeaky(legacy.Settings, a, current, .{ .ignore_unknown_fields = true });
+    var budgets: std.json.ObjectMap = if (config.category_budgets == .object) try config.category_budgets.object.clone(a) else .empty;
+    const name = pending_budget.name[0..pending_budget.len];
+    if (pending_budget.amount) |amount| try budgets.put(a, name, .{ .integer = amount }) else _ = budgets.orderedRemove(name);
+    config.category_budgets = .{ .object = budgets };
+    try prefs.validate(config);
+    f.s.busy = true;
+    errdefer f.s.busy = false;
+    try f.invoke(e, .settings, "save_budget", prefs.Edit{ .settings = config, .expected = current });
 }
 pub fn parse_queued(e: *ui.Engine) !void {
     if (oriel.target.is_android or parser_busy or f.s.busy or f.s.snapshot == null) return;
@@ -1081,6 +1166,14 @@ fn click_none(e: *ui.Engine, id: i64) !bool {
         var ids: std.ArrayList([]const u8) = .empty;
         for (f.s.snapshot.?.value.expenses) |row| if (f.period(e).matches(row, f.settings()) and f.reports.special(row, f.settings()) == null and f.reports.fixed_item(row, f.settings()) == index) try ids.append(arena.allocator(), row.id);
         try f.drilldown(e, ids.items, try std.fmt.allocPrint(arena.allocator(), "Fixed: {s}", .{f.settings().fixed_expenses_items[index].name}));
+        return true;
+    }
+    if (budget_offers.get(id - @mod(id, 16))) |i| {
+        try offer_budget(e, groups.items[i].name, groups.items[i].median);
+        return true;
+    }
+    if (budget_rows.get(id - @mod(id, 16))) |name| {
+        try offer_budget(e, name, null);
         return true;
     }
     if (group_actions.get(id - @mod(id, 16))) |i| {

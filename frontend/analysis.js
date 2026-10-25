@@ -44,7 +44,11 @@ function renderAnalysis(rows, calendarMonths = 1) {
   $("category-chart").replaceChildren(...categories.map((item) => {
     const detail = !item.rows ? (byMedian ? "Planned a month" : "Planned") : byMedian ? `${item.rows.length} payments · total ${money.format(item.total)}` :
       months.length > 1 ? `${item.rows.length} payments · median ${money.format(item.median)} a month` : `${item.rows.length} payments`;
-    const row = reportRow(item.name, item.amount, detail, item.rows ? () => showGroup(item.name, item.rows) : null);
+    const budget = settings.category_budgets?.[item.name];
+    const budgeted = item.rows && Number.isInteger(budget) ? ` · budget ${money.format(BigInt(budget))}` : "";
+    // With medians shown, a category row offers its median month to the monthly budget.
+    const action = !item.rows ? null : byMedian ? () => addCategoryBudget(item.name, item.median) : () => showGroup(item.name, item.rows);
+    const row = reportRow(item.name, item.amount, detail + budgeted, action);
     const bar = node("span", undefined, "data-bar");
     bar.style.width = `${categories[0]?.amount ? Number(item.amount * 10000n / categories[0].amount) / 100 : 0}%`;
     if (!item.rows) bar.classList.add("planned");
@@ -62,6 +66,49 @@ function renderAnalysis(rows, calendarMonths = 1) {
   const special = rows.filter((row) => PennyReports.special(row, settings));
   $("special-payments").replaceChildren(...special.map((row) => reportRow(`${row.date} · ${row.payee}`, BigInt(row.amount), String(PennyReports.special(row, settings)), () => openEditor(row))));
   if (!special.length) $("special-payments").append(node("p", "None this period.", "supporting"));
+}
+
+// Home's budget card: each budgeted category's spending this month against its budget.
+function renderCategoryBudgets(budgets) {
+  $("category-budgets").replaceChildren(...budgets.map((item) => {
+    const over = item.spent > item.budget;
+    const detail = over ? `${money.format(item.spent - item.budget)} over ${money.format(item.budget)}` : `of ${money.format(item.budget)} · ${money.format(item.budget - item.spent)} left`;
+    const row = reportRow(item.name, item.spent, detail, () => removeCategoryBudget(item.name, item.budget));
+    const bar = node("span", undefined, over ? "data-bar over" : "data-bar");
+    bar.style.width = `${item.budget ? Math.min(100, Number(item.spent * 10000n / item.budget) / 100) : 100}%`;
+    row.append(bar);
+    return row;
+  }));
+}
+
+async function addCategoryBudget(name, amount) {
+  if (mutationPending) return;
+  if (amount <= 0n) { status("report-status", `${name}'s median month is ${money.format(0n)}; there is nothing to budget.`, true); return; }
+  const current = settings.category_budgets?.[name];
+  const message = Number.isInteger(current)
+    ? `Change the ${name} budget from ${money.format(BigInt(current))} to its median, ${money.format(amount)} a month?`
+    : `Add ${name} to the monthly budget at its median, ${money.format(amount)} a month?`;
+  if (await ask(message, Number.isInteger(current) ? "Update budget" : "Add to budget")) await saveCategoryBudget(name, amount);
+}
+
+async function removeCategoryBudget(name, amount) {
+  if (mutationPending) return;
+  if (await ask(`Remove the ${name} budget of ${money.format(amount)} a month?`, "Remove budget")) await saveCategoryBudget(name, null);
+}
+
+/// Saves one category's budget (null removes it) with the usual settings conflict check.
+async function saveCategoryBudget(name, amount) {
+  mutationPending = true;
+  try {
+    const next = JSON.parse(snapshot.settings);
+    const budgets = { ...(next.category_budgets || {}) };
+    if (amount === null) delete budgets[name]; else budgets[name] = Number(amount);
+    next.category_budgets = budgets;
+    await invoke("save_budget", { settings: next, expected: snapshot.settings });
+    mutationPending = false;
+    await reload(amount === null ? `${name} budget removed` : `${name} budgeted at ${money.format(amount)} a month`);
+  } catch (error) { status("report-status", errorText(error), true); }
+  finally { mutationPending = false; }
 }
 
 function reportDocument(all) {

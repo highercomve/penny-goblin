@@ -63,11 +63,18 @@ const PennyReports = (() => {
     }
     const salary = BigInt(settings.salary || 0);
     const planned = (settings.fixed_expenses_items || []).reduce((total, item) => total + BigInt(item.amount), 0n);
+    // Category budgets: the forecast keeps each budget's unspent part aside.
+    const budgets = entries(settings.category_budgets).filter(([, amount]) => Number.isInteger(amount)).map(([name, amount]) => {
+      const matched = variable.filter((row) => row.category === name);
+      return { name, budget: BigInt(amount), spent: sum(matched), rows: matched };
+    });
+    const reserved = budgets.reduce((total, item) => total + (item.budget > item.spent ? item.budget - item.spent : 0n), 0n);
     return {
       actual: sum(rows), variable: sum(variable), special: sum(specials), fixed: sum(fixed), salary, planned,
       actualRemaining: salary - sum(rows),
       // Preserve the previous web dashboard formula for comparison.
-      legacyForecast: salary - planned - sum(variable) - sum(specials),
+      legacyForecast: salary - planned - sum(variable) - sum(specials) - reserved,
+      budgets, reserved,
       commitments: (settings.fixed_expenses_items || []).map((item) => {
         const matched = fixed.filter((row) => fixedItem(row, settings) === item);
         return { name: item.name, planned: BigInt(item.amount), paid: sum(matched), rows: matched };

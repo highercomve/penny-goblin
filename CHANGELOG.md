@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.17
+
+- Add a category's median month to the monthly budget from Insights (By category,
+  Monthly median). Home's budget card shows each budgeted category's spending
+  against its budget, and "Left this month" keeps each budget's unspent part aside.
+  Tap a budget on Home to remove it; renaming or merging a category keeps its budget.
+
 ## 0.2.16
 
 - Insights has its own month range: choose From and Through months, or a whole

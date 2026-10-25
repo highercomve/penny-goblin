@@ -31,6 +31,10 @@ window.oriel = {listen(){}, invoke: async (cmd, args = {}) => {
  qaCalls.push({cmd, args});
  if (cmd === 'snapshot') return qaFixture;
  if (cmd === 'export_report') return true;
+ if (cmd === 'save_budget') {
+  if (args.expected !== qaFixture.settings) throw Error('SettingsConflict');
+  qaFixture.settings = JSON.stringify(args.settings); return 0;
+ }
  if (cmd === 'qa_scenario' || cmd === 'take_quick_action') return null;
  throw Error(cmd);
 }};
@@ -69,6 +73,33 @@ window.addEventListener('load', async () => {
   check($('insights-period').textContent.includes('5 months'), 'Calendar months not counted');
   choose('insights-from', '2026-03'); choose('insights-to', '2026-01');
   check($('insights-from').value === '2026-01' && $('insights-to').value === '2026-01', 'Through before From was not corrected');
+
+  // A median joins the monthly budget; Home then tracks it for the month.
+  choose('insights-year', '2026'); choose('category-measure', 'median');
+  $('category-chart').querySelector('.report-row').click();
+  await until(() => $('ask-dialog').open);
+  check($('ask-message').textContent.includes('Food') && $('ask-message').textContent.includes('$2.000'), $('ask-message').textContent);
+  check($('ask-ok').textContent === 'Add to budget', 'Unexpected budget action');
+  $('ask-ok').click();
+  await until(() => JSON.parse(qaFixture.settings).category_budgets?.Food === 2000 && JSON.parse(snapshot.settings).category_budgets);
+  check(JSON.parse(qaFixture.settings).fixed_expenses_items.length === 1, 'Budget save lost fixed expenses');
+  check(chart()[0].includes('budget $2.000'), 'Insights row lacks its budget');
+  // March: Food spent 2000 of 2000; forecast = 10000 - 500 planned - 2900 variable.
+  const budgetRow = $('category-budgets').querySelector('.report-row');
+  check(budgetRow && budgetRow.textContent.includes('Food') && budgetRow.textContent.includes('$0 left'), 'Home budget row missing');
+  check($('budget-forecast').textContent.includes('6.600'), `Forecast ${$('budget-forecast').textContent}`);
+  check($('budget-parts').textContent.includes('Budgets left'), 'Budget parts lack the reserve');
+  choose('month', '2026-02');
+  // February: Taxi nothing, Food 3000 of 2000 -> 1000 over.
+  check($('category-budgets').textContent.includes('$1.000 over'), $('category-budgets').textContent);
+  choose('month', '2026-03');
+  $('category-budgets').querySelector('.report-row').click();
+  await until(() => $('ask-dialog').open);
+  check($('ask-ok').textContent === 'Remove budget', 'Unexpected remove action');
+  $('ask-ok').click();
+  await until(() => !$('category-budgets').children.length);
+  check(!JSON.parse(qaFixture.settings).category_budgets.Food, 'Budget not removed');
+  choose('category-measure', 'total');
 
   choose('insights-year', '2025');
   $('export-report').click();

@@ -34,6 +34,8 @@ pub const Settings = struct {
     vendors_config: std.json.Value = .null,
     categories: std.json.Value = .null,
     special_cases: std.json.Value = .null,
+    /// Monthly CLP budget per variable category, such as a category's median month.
+    category_budgets: std.json.Value = .null,
 };
 
 pub fn import(ledger: ledger_mod.Ledger, arena: std.mem.Allocator, json: []const u8) !Result {

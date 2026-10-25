@@ -140,6 +140,13 @@ pub fn changed(a: std.mem.Allocator, settings: legacy.Settings, names: []const [
     }
     if (change.source.len > 0) _ = result.categories.object.swapRemove(change.source);
     try result.categories.object.put(a, target, .{ .array = keywords });
+    // A renamed category keeps its budget; a merge keeps the target's own budget.
+    if (change.source.len > 0 and result.category_budgets == .object) if (result.category_budgets.object.get(change.source)) |amount| {
+        var budgets = try result.category_budgets.object.clone(a);
+        _ = budgets.swapRemove(change.source);
+        if (!budgets.contains(target)) try budgets.put(a, target, amount);
+        result.category_budgets = .{ .object = budgets };
+    };
     return result;
 }
 
@@ -148,4 +155,20 @@ test "likely category typos are suggestions, never automatic aliases" {
     try std.testing.expect(similar("Dining", "Dinin"));
     try std.testing.expect(!same("Dining", "Dinning"));
     try std.testing.expect(!similar("Dining", "Delivery"));
+}
+
+test "renaming a category moves its budget; merging keeps the target's" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var budgets: std.json.ObjectMap = .empty;
+    try budgets.put(a, "Dinning", .{ .integer = 900 });
+    try budgets.put(a, "Food", .{ .integer = 2000 });
+    const names = [_][]const u8{ "Dinning", "Food" };
+    const renamed = try changed(a, .{ .category_budgets = .{ .object = budgets } }, &names, .{ .source = "Dinning", .target = "Dining" });
+    try std.testing.expectEqual(@as(i64, 900), renamed.category_budgets.object.get("Dining").?.integer);
+    try std.testing.expect(renamed.category_budgets.object.get("Dinning") == null);
+    const merged = try changed(a, .{ .category_budgets = .{ .object = budgets } }, &names, .{ .source = "Dinning", .target = "Food" });
+    try std.testing.expectEqual(@as(i64, 2000), merged.category_budgets.object.get("Food").?.integer);
+    try std.testing.expectEqual(@as(usize, 1), merged.category_budgets.object.count());
 }
