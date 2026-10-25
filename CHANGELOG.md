@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.16
 
 - Insights has its own month range: choose From and Through months, or a whole
   year at once. Fixed plans count once per month in the range.
