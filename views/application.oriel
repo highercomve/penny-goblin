@@ -740,6 +740,7 @@
                   </view>
                   <text class="n140" clickable="true" font-size="14" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Include planned fixed</text>
                 </row>
+                <text id="category-hint" class="ledger-filter-hint" shrink="0" margin="0,0,4,0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">Long-press a category to add its median month to the budget.</text>
                 <view id="category-chart" />
               </view>
             </row>

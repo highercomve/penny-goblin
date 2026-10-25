@@ -243,7 +243,7 @@ function renderReports(periodRows) {
   $("budget-forecast").textContent = money.format(report.legacyForecast);
   $("fixed-planned").textContent = money.format(report.planned);
   $("fixed-paid").textContent = `${money.format(report.fixed)} paid`;
-  $("budget-hint").textContent = settings.salary ? "" : "Add your salary in Settings to see what's left.";
+  $("budget-hint").textContent = !settings.salary ? "Add your salary in Settings to see what's left." : report.budgets.length ? "Long-press a budget to remove it." : "";
   $("budget-parts").replaceChildren(...[
     ["Variable", report.variable], ["Special", report.special], ...(report.budgets.length ? [["Budgets left", report.reserved]] : []),
   ].map(([label, amount]) => node("span", `${label} ${money.format(amount)}`)));
@@ -310,7 +310,8 @@ function render() {
   // The budget, insights and the hero total are in CLP; dollars stay apart.
   const periodRows = periodAll.filter(isClp);
   const dollarRows = periodAll.filter((row) => !isClp(row));
-  const rows = filteredPayments(periodAll);
+  // A drill-down lists exactly its payments, including an Insights range beyond Home's period.
+  const rows = filteredPayments(drilldown ? snapshot.expenses : periodAll);
   const sort = $("ledger-sort").value;
   renderReports(periodRows);
   // Summing in BigInt retains exact CLP totals even across the full ledger limit.

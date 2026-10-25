@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.19
+
+- Tapping a category in Insights opens its payments again, also with Monthly median.
+  Long-press a category (right-click on desktop) to add its median month to the budget.
+- Tapping a budget on Home opens its payments for the month; long-press it to remove it.
+- A drill-down from Insights lists every payment in the Insights range, not only
+  those in Home's month.
+
 ## 0.2.18
 
 - Insights range chips sit in one short row on phones, above the period and

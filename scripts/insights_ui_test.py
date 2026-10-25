@@ -76,7 +76,13 @@ window.addEventListener('load', async () => {
 
   // A median joins the monthly budget; Home then tracks it for the month.
   choose('insights-year', '2026'); choose('category-measure', 'median');
+  check($('category-hint').textContent.includes('Long-press'), 'Median mode lacks the long-press hint');
+  // A tap still opens the category's payments; a long press offers the budget.
   $('category-chart').querySelector('.report-row').click();
+  check(currentView === 'payments' && drilldown?.name === 'Food', 'Tap did not open Food payments');
+  check($('rows').querySelectorAll('.payment').length === 3, 'Drill-down lost payments outside the Home month');
+  history.back(); await until(() => currentView === 'insights');
+  $('category-chart').querySelector('.report-row').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true}));
   await until(() => $('ask-dialog').open);
   check($('ask-message').textContent.includes('Food') && $('ask-message').textContent.includes('$2.000'), $('ask-message').textContent);
   check($('ask-ok').textContent === 'Add to budget', 'Unexpected budget action');
@@ -93,7 +99,14 @@ window.addEventListener('load', async () => {
   // February: Taxi nothing, Food 3000 of 2000 -> 1000 over.
   check($('category-budgets').textContent.includes('$1.000 over'), $('category-budgets').textContent);
   choose('month', '2026-03');
+  check($('budget-hint').textContent.includes('Long-press'), 'Home lacks the remove hint');
+  // The confirm dialog's own history entry is popped asynchronously after it closes.
+  await until(() => history.state?.penny !== 'dialog');
+  const origin = currentView;
   $('category-budgets').querySelector('.report-row').click();
+  check(currentView === 'payments' && drilldown?.name === 'Food' && drilldown.ids.size === 1, 'Budget tap did not open its month payments');
+  history.back(); await until(() => currentView === origin);
+  $('category-budgets').querySelector('.report-row').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true}));
   await until(() => $('ask-dialog').open);
   check($('ask-ok').textContent === 'Remove budget', 'Unexpected remove action');
   $('ask-ok').click();

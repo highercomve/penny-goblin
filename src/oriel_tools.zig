@@ -329,6 +329,9 @@ fn category_chart(e: *ui.Engine) !void {
     };
     var indexes: std.ArrayList(usize) = .empty;
     for (groups.items, 0..) |g, i| if (g.kind == .variable_category or g.kind == .planned_category) try indexes.append(a, i);
+    var has_category = false;
+    for (indexes.items) |i| has_category = has_category or groups.items[i].kind == .variable_category;
+    try f.show(e, f.aid("category-hint"), by_median and has_category);
     std.mem.sort(usize, indexes.items, groups.items, struct {
         fn less(all: []Group, x: usize, y: usize) bool {
             return all[x].amount > all[y].amount;
@@ -355,9 +358,10 @@ fn category_chart(e: *ui.Engine) !void {
         props.w = .{ .pct = if (maximum > 0) @as(f32, @floatFromInt(g.amount)) / @as(f32, @floatFromInt(maximum)) * 100 else 0 };
         if (g.kind == .planned_category) props.bg = .{ .color = oriel.canvas.rgb(if (e.tree.dark) 0xe6c07b else 0xb88736) };
         try e.tree.updateUiProps(ChartRow.id("bar", id), props);
-        // With medians shown, a category row offers its median month to the monthly budget.
+        // A tap opens the category's payments; a long press offers its median month to the budget.
         if (g.kind == .variable_category) {
-            if (by_median) try budget_offers.put(a, id, i) else try group_actions.put(a, id, i);
+            try group_actions.put(a, id, i);
+            try budget_offers.put(a, id, i);
             try f.mark_action(e, id, g.name);
         }
         try ids.append(a, id);
@@ -583,6 +587,20 @@ pub fn render_budgets(e: *ui.Engine, rows: []const f.model.Expense) !void {
         try ids.append(a, id);
     };
     if (!try e.tree.stampKids(f.aid("category-budgets"), ids.items)) return error.InvalidTemplate;
+}
+/// A long press (right click on desktop): Insights categories offer their median month
+/// to the budget, and Home's budgets offer their removal.
+pub fn context(e: *ui.Engine, id: i64) !bool {
+    if (id != id - @mod(id, 16)) return false;
+    if (budget_offers.get(id)) |i| {
+        try offer_budget(e, groups.items[i].name, groups.items[i].median);
+        return true;
+    }
+    if (budget_rows.get(id)) |name| {
+        try offer_budget(e, name, null);
+        return true;
+    }
+    return false;
 }
 fn offer_budget(e: *ui.Engine, name: []const u8, amount: ?i64) !void {
     var buf: [400]u8 = undefined;
@@ -1168,12 +1186,12 @@ fn click_none(e: *ui.Engine, id: i64) !bool {
         try f.drilldown(e, ids.items, try std.fmt.allocPrint(arena.allocator(), "Fixed: {s}", .{f.settings().fixed_expenses_items[index].name}));
         return true;
     }
-    if (budget_offers.get(id - @mod(id, 16))) |i| {
-        try offer_budget(e, groups.items[i].name, groups.items[i].median);
-        return true;
-    }
     if (budget_rows.get(id - @mod(id, 16))) |name| {
-        try offer_budget(e, name, null);
+        var arena = std.heap.ArenaAllocator.init(e.gpa);
+        defer arena.deinit();
+        var ids: std.ArrayList([]const u8) = .empty;
+        for (f.s.snapshot.?.value.expenses) |row| if (f.period(e).matches(row, f.settings()) and is_variable(row) and std.mem.eql(u8, row.category, name)) try ids.append(arena.allocator(), row.id);
+        try f.drilldown(e, ids.items, name);
         return true;
     }
     if (group_actions.get(id - @mod(id, 16))) |i| {
@@ -1182,10 +1200,15 @@ fn click_none(e: *ui.Engine, id: i64) !bool {
         defer arena.deinit();
         const a = arena.allocator();
         var ids: std.ArrayList([]const u8) = .empty;
+        // Home's lists use its period; Insights rows use the Insights month range.
+        const insight = switch (g.kind) {
+            .variable_category, .variable_account, .merchant, .special, .comparison => true,
+            else => false,
+        };
         for (f.s.snapshot.?.value.expenses) |row| {
             var filter = f.period(e);
             if (g.kind == .month) filter.month = "";
-            if (!filter.matches(row, f.settings())) continue;
+            if (if (insight) !(f.insights_matches(e, row) and std.mem.eql(u8, row.currency, "CLP")) else !filter.matches(row, f.settings())) continue;
             const variable = f.reports.special(row, f.settings()) == null and f.reports.fixed_item(row, f.settings()) == null and !std.mem.startsWith(u8, row.category, "Fixed:");
             const matches = switch (g.kind) {
                 .category => f.reports.category_matches(g.name, row, f.settings()),

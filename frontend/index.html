@@ -11,8 +11,8 @@
   <script src="progress.js?v=8" defer></script>
   <script src="merchants.js?v=8" defer></script>
   <script src="reports.js?v=10" defer></script>
-  <script src="analysis.js?v=10" defer></script>
-  <script src="app.js?v=12" defer></script>
+  <script src="analysis.js?v=11" defer></script>
+  <script src="app.js?v=13" defer></script>
   <script src="preferences.js?v=8" defer></script>
   <script src="statements.js?v=8" defer></script>
   <script src="sync.js?v=8" defer></script>
@@ -144,7 +144,7 @@
         <p id="report-status" class="supporting" role="status"></p>
         <div class="grid">
           <section class="card"><h3 class="card-title">By cardholder</h3><div id="account-chart"></div></section>
-          <section class="card"><div class="card-heading"><h3 class="card-title">By category</h3><label class="select-chip"><span class="visually-hidden">Measure</span><select id="category-measure"><option value="total">Total</option><option value="median">Monthly median</option></select></label></div><label class="switch-row"><input id="chart-fixed" type="checkbox"><span>Include planned fixed</span></label><div id="category-chart" class="list"></div></section>
+          <section class="card"><div class="card-heading"><h3 class="card-title">By category</h3><label class="select-chip"><span class="visually-hidden">Measure</span><select id="category-measure"><option value="total">Total</option><option value="median">Monthly median</option></select></label></div><label class="switch-row"><input id="chart-fixed" type="checkbox"><span>Include planned fixed</span></label><p id="category-hint" class="supporting"></p><div id="category-chart" class="list"></div></section>
         </div>
         <section class="card"><div class="card-heading"><h3 class="card-title">Comparison</h3><label class="select-chip"><span class="visually-hidden">Comparison</span><select id="comparison-mode"><option value="split">By cardholder</option><option value="combined">Combined</option></select></label></div><div id="account-comparison" class="comparison-grid"></div></section>
         <section class="card"><h3 class="card-title">Merchants</h3>

@@ -753,14 +753,14 @@ pub fn render(e: *ui.Engine) !void {
     inline for (.{ .{ "budget-forecast", "forecast" }, .{ "fixed-planned", "planned" }, .{ "salary-total", "salary" } }) |pair| try set_text(e, aid(pair[0]), try reports.money(&buf, @field(total, pair[1])));
     var fixed_buffer: [48]u8 = undefined;
     try set_text(e, aid("fixed-paid"), try std.fmt.bufPrint(&buf, "{s} paid", .{try reports.money(&fixed_buffer, total.fixed)}));
-    try set_text(e, aid("budget-hint"), if (settings().salary == 0) "Add your salary in Settings to see what's left." else "");
+    const budgeted = settings().category_budgets == .object and settings().category_budgets.object.count() > 0;
+    try set_text(e, aid("budget-hint"), if (settings().salary == 0) "Add your salary in Settings to see what's left." else if (budgeted) "Long-press a budget to remove it." else "");
     try set_text(e, aid("period-title"), if (filter.month.len > 0) try @import("ui_dates.zig").month_label(a, filter.month) else if (filter.from.len > 0 or filter.through.len > 0) try std.fmt.allocPrint(a, "{s} through {s}", .{ if (filter.from.len > 0) filter.from else "Beginning", if (filter.through.len > 0) filter.through else "latest" }) else "All months");
     var variable: [48]u8 = undefined;
     var special: [48]u8 = undefined;
     var parts: [180]u8 = undefined;
     _ = try BudgetPart.mount(&e.tree, 27000000, 70700, &.{.{ .name = "text", .value = try std.fmt.bufPrint(&parts, "Variable {s}", .{try reports.money(&variable, total.variable)}) }});
     _ = try BudgetPart.mount(&e.tree, 27000004, 70700, &.{.{ .name = "text", .value = try std.fmt.bufPrint(&parts, "Special {s}", .{try reports.money(&special, total.special)}) }});
-    const budgeted = settings().category_budgets == .object and settings().category_budgets.object.count() > 0;
     if (budgeted) {
         var reserved: [48]u8 = undefined;
         _ = try BudgetPart.mount(&e.tree, 27000008, 70700, &.{.{ .name = "text", .value = try std.fmt.bufPrint(&parts, "Budgets left {s}", .{try reports.money(&reserved, total.reserved)}) }});
@@ -773,7 +773,8 @@ pub fn render(e: *ui.Engine) !void {
         .insights => "Back to Insights",
         .settings => "Back to Settings",
     } else "Clear filter");
-    try render_payments(e, selected.items);
+    // A drill-down lists exactly its payments, including an Insights range beyond Home's period.
+    try render_payments(e, if (s.drill_active) snapshot.expenses else selected.items);
     // Insights in CLP, as the budget; the list above shows every currency.
     var clp: std.ArrayList(model.Expense) = .empty;
     for (selected.items) |row| if (std.mem.eql(u8, row.currency, "CLP")) try clp.append(a, row);
@@ -792,6 +793,7 @@ pub fn render(e: *ui.Engine) !void {
 fn render_payments(e: *ui.Engine, rows: []const model.Expense) !void {
     s.selected.clearRetainingCapacity();
     var f = period(e);
+    if (s.drill_active) f = .{};
     f.search = value(e, aid("search"));
     f.category = value(e, aid("category-filter"));
     const query = f.search;
@@ -1059,6 +1061,17 @@ fn handle_event(e: *ui.Engine, id: i64, kind: []const u8, data: []const u8) !boo
     if (std.mem.eql(u8, kind, "key") and std.mem.indexOf(u8, data, "Escape") != null) {
         try request_close(e);
         return true;
+    }
+    if (std.mem.eql(u8, kind, "contextmenu")) {
+        if (s.notice_open or s.modal != .none or s.busy) return false;
+        var target = e.tree.get(id);
+        var level: usize = 0;
+        while (target) |n| : (level += 1) {
+            if (level == 64) break;
+            if (try tools.context(e, n.id)) return true;
+            target = n.parent;
+        }
+        return false;
     }
     if (!std.mem.eql(u8, kind, "click")) return false;
     if (id == 19500 and s.modal == .editor and !s.notice_open) {
@@ -2556,7 +2569,14 @@ test "a category median joins the monthly budget and Home tracks it" {
     }.of;
     // Food: 1000, 3000, 1500 -> median 1500.
     try std.testing.expectEqualStrings("Food", text(e, Chart.id("title", 8000000)));
+    try std.testing.expect(!e.tree.get(aid("category-hint")).?.props.none);
+    // A tap still opens the category's payments; a long press offers the budget.
     _ = try handle_event(e, Chart.id("title", 8000000), "click", "0");
+    try std.testing.expectEqual(Page.payments, s.page);
+    try std.testing.expectEqual(@as(usize, 3), s.selected.items.len);
+    try std.testing.expect(e.back());
+    try std.testing.expectEqual(Page.insights, s.page);
+    _ = try handle_event(e, Chart.id("title", 8000000), "contextmenu", "[0,0,2,2,0]");
     try std.testing.expect(s.notice_open);
     try std.testing.expectEqual(Page.insights, s.page);
     try std.testing.expectEqualStrings("Add Food to the monthly budget at its median, $1.500 a month?", text(e, Notice.id("message", 19000)));
@@ -2579,7 +2599,12 @@ test "a category median joins the monthly budget and Home tracks it" {
     try std.testing.expectEqualStrings("$6.600", text(e, aid("budget-forecast")));
     _ = try handle_event(e, aid("month"), "change", "\"2026-02\"");
     try std.testing.expectEqualStrings("$1.000 over $2.000", text(e, Chart.id("detail", 21000000)));
+    try std.testing.expectEqualStrings("Long-press a budget to remove it.", text(e, aid("budget-hint")));
     _ = try handle_event(e, Chart.id("title", 21000000), "click", "0");
+    try std.testing.expectEqual(Page.payments, s.page);
+    try std.testing.expectEqual(@as(usize, 1), s.selected.items.len);
+    try std.testing.expect(e.back());
+    _ = try handle_event(e, Chart.id("title", 21000000), "contextmenu", "[0,0,2,2,0]");
     try std.testing.expectEqualStrings("Remove the Food budget of $2.000 a month?", text(e, Notice.id("message", 19000)));
     _ = try click(e, Notice.id("confirm", 19000));
     const removal = try std.json.parseFromSlice(@import("core/preferences.zig").Edit, a, host.args, .{ .ignore_unknown_fields = true });

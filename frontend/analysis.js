@@ -41,14 +41,15 @@ function renderAnalysis(rows, calendarMonths = 1) {
   }
   for (const item of categories) item.amount = byMedian ? item.median : item.total;
   categories.sort((a, b) => a.amount > b.amount ? -1 : a.amount < b.amount ? 1 : a.name.localeCompare(b.name));
+  $("category-hint").textContent = byMedian && categories.some((item) => item.rows) ? "Long-press a category to add its median month to the budget." : "";
   $("category-chart").replaceChildren(...categories.map((item) => {
     const detail = !item.rows ? (byMedian ? "Planned a month" : "Planned") : byMedian ? `${item.rows.length} payments · total ${money.format(item.total)}` :
       months.length > 1 ? `${item.rows.length} payments · median ${money.format(item.median)} a month` : `${item.rows.length} payments`;
     const budget = settings.category_budgets?.[item.name];
     const budgeted = item.rows && Number.isInteger(budget) ? ` · budget ${money.format(BigInt(budget))}` : "";
-    // With medians shown, a category row offers its median month to the monthly budget.
-    const action = !item.rows ? null : byMedian ? () => addCategoryBudget(item.name, item.median) : () => showGroup(item.name, item.rows);
-    const row = reportRow(item.name, item.amount, detail + budgeted, action);
+    const row = reportRow(item.name, item.amount, detail + budgeted, item.rows ? () => showGroup(item.name, item.rows) : null);
+    // A long press (right click on desktop) offers the category's median month to the budget.
+    if (item.rows) onLongPress(row, () => addCategoryBudget(item.name, item.median));
     const bar = node("span", undefined, "data-bar");
     bar.style.width = `${categories[0]?.amount ? Number(item.amount * 10000n / categories[0].amount) / 100 : 0}%`;
     if (!item.rows) bar.classList.add("planned");
@@ -68,12 +69,18 @@ function renderAnalysis(rows, calendarMonths = 1) {
   if (!special.length) $("special-payments").append(node("p", "None this period.", "supporting"));
 }
 
+/// Android's WebView reports a long press as contextmenu, as a right click does on desktop.
+function onLongPress(element, action) {
+  element.addEventListener("contextmenu", (event) => { event.preventDefault(); action(); });
+}
+
 // Home's budget card: each budgeted category's spending this month against its budget.
 function renderCategoryBudgets(budgets) {
   $("category-budgets").replaceChildren(...budgets.map((item) => {
     const over = item.spent > item.budget;
     const detail = over ? `${money.format(item.spent - item.budget)} over ${money.format(item.budget)}` : `of ${money.format(item.budget)} · ${money.format(item.budget - item.spent)} left`;
-    const row = reportRow(item.name, item.spent, detail, () => removeCategoryBudget(item.name, item.budget));
+    const row = reportRow(item.name, item.spent, detail, () => showGroup(item.name, item.rows));
+    onLongPress(row, () => removeCategoryBudget(item.name, item.budget));
     const bar = node("span", undefined, over ? "data-bar over" : "data-bar");
     bar.style.width = `${item.budget ? Math.min(100, Number(item.spent * 10000n / item.budget) / 100) : 100}%`;
     row.append(bar);
