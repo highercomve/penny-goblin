@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.20
+
+- Remember bank review decisions when merchant case or punctuation changes, while
+  retaining separate occurrences of identical purchases.
+- Hide handled payments and exact matches by default in native statement review;
+  show them again to inspect or undo a decision.
+- Mark captured rows through a chosen date as already handled: link exact matches
+  and ignore the remaining older rows, then confirm to save. Newer and late-arriving
+  charges remain available for review.
+- Align desktop package metadata with the release version.
+
 ## 0.2.19
 
 - Tapping a category in Insights opens its payments again, also with Monthly median.

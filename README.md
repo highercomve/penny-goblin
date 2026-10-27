@@ -8,7 +8,7 @@ on your devices; there is no hosted account or cloud ledger.
 
 Built with **Zig 0.16.0** and **Oriel**, with two Linux interfaces: WebKit and
 compiled `.oriel` views. Android uses the compiled Oriel renderer. Application
-ID: `com.pennygoblin.app`. Current development version: **0.2.12**.
+ID: `com.pennygoblin.app`. Current development version: **0.2.20**.
 
 ## What it does
 
@@ -197,7 +197,13 @@ merchant case and punctuation) are matched once per occurrence and collapsed in
 the review. Their reviewed details are preserved; the save button counts only
 new charges. Matching is checked again inside the save transaction. Repeated
 captures preserve ignored rows, reviewed corrections, and genuine identical
-purchases. Without bank movement IDs, changed bank descriptions must be reviewed
+purchases. Merchant case and punctuation changes reuse prior capture decisions.
+Handled payments are hidden by default in the native review; **Show handled
+payments** reveals them and their Undo action. If older payments were already
+entered, choose **Already reviewed through**, then **Mark older rows handled**.
+This selects links for exact matches and Ignore for other rows through that date;
+**Confirm** saves those choices. Later charges stay available for review. This
+marks only the captured rows, so a late-arriving bank charge is still reviewable. Without bank movement IDs, changed bank descriptions must be reviewed
 as possible matches rather than assumed identical.
 
 The bank browser uses a separate ephemeral WebKit session. Login fields, session

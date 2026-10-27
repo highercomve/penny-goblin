@@ -313,6 +313,9 @@
   <dialog id="statement-dialog" class="sheet" aria-labelledby="statement-title"><form id="statement-form">
     <header class="dialog-bar"><button id="close-statement" type="button" class="icon-button" aria-label="Close"><svg><use href="#i-close"/></svg></button><h2 id="statement-title">Review statement</h2><button id="confirm-statement" type="submit" class="filled">Confirm</button></header>
     <p id="statement-review-status" class="supporting" role="status"></p>
+    <p>Already entered older payments? Link exact matches and ignore other rows through this date. Confirm saves these choices.</p>
+    <label>Already reviewed through <input id="reviewed-through" type="date"></label>
+    <button id="apply-reviewed-through" type="button" class="tonal">Mark older rows handled</button>
     <fieldset id="statement-fields"><div id="statement-rows"></div></fieldset>
   </form></dialog>
 

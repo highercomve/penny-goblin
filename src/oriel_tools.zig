@@ -64,6 +64,7 @@ var expected: []const u8 = "";
 var original: legacy.Settings = .{};
 var current_hash: []const u8 = "";
 var observations: []statements.Observation = &.{};
+var show_reviewed_observations = false;
 var statement_bank: statements.Bank = .santander;
 var scanner: ?Scanner.Status = null;
 var delete_model_buf: [32]u8 = undefined;
@@ -95,6 +96,7 @@ pub fn prepare(e: *ui.Engine) !void {
     budget_rows = .empty;
     special_rows = &.{};
     observations = &.{};
+    show_reviewed_observations = false;
     statement_bank = .santander;
     scanner = null;
     delete_model_len = 0;
@@ -777,6 +779,7 @@ fn reset_modal() void {
     original = .{};
     current_hash = "";
     observations = &.{};
+    show_reviewed_observations = false;
     conflict = null;
     _ = modal_arena.reset(.free_all);
 }
@@ -1003,11 +1006,13 @@ fn render_observations(e: *ui.Engine) !void {
         try f.show(e, Review.id("matches", base), !linked and candidates > 0);
         try f.set_text(e, Review.id("matches", base), try std.fmt.allocPrint(a, "{d} possible match{s}", .{ candidates, if (candidates == 1) "" else "es" }));
         try f.mark_action(e, Review.id("undo", base), "Undo");
+        try f.show(e, Review.id("review-row", base), show_reviewed_observations or (!linked and obs.match == null));
         try ids.append(a, base);
     }
     if (!try e.tree.stampKids(Statement.id("statement-rows", 14000), ids.items)) return error.InvalidTemplate;
-    const summary = if (suggestion_count == open_count) try std.fmt.allocPrint(a, "All {d} already recorded · Confirm to link them", .{open_count}) else if (suggestion_count > 0) try std.fmt.allocPrint(a, "{d} of {d} already recorded · choose the rest", .{ suggestion_count, open_count }) else try std.fmt.allocPrint(a, "{d} rows", .{observations.len});
+    const summary = if (open_count == 0) try std.fmt.allocPrint(a, "All {d} already handled · nothing to review", .{observations.len}) else if (suggestion_count == open_count) try std.fmt.allocPrint(a, "All {d} already recorded · Confirm to remember matches", .{open_count}) else if (suggestion_count > 0) try std.fmt.allocPrint(a, "{d} of {d} already recorded · choose the rest", .{ suggestion_count, open_count }) else try std.fmt.allocPrint(a, "{d} to review · {d} already handled", .{ open_count, observations.len - open_count });
     try f.set_text(e, Statement.id("statement-review-status", 14000), summary);
+    try f.set_text(e, Statement.id("toggle-reviewed", 14000), if (show_reviewed_observations) "Hide handled payments" else "Show handled payments");
 }
 fn reconcile(e: *ui.Engine) !void {
     const a = modal_arena.allocator();
@@ -1383,7 +1388,33 @@ fn click_statements(e: *ui.Engine, id: i64) !bool {
 
     return false;
 }
+fn apply_reviewed_through(e: *ui.Engine) !void {
+    const through = f.value(e, Statement.id("reviewed-through", 14000));
+    if (!f.model.valid_date(through)) return error.InvalidDate;
+    var count: usize = 0;
+    for (observations, 0..) |obs, i| {
+        if (obs.expense_id != null or obs.ignored or std.mem.order(u8, obs.source.date, through) == .gt) continue;
+        const base = review_base + @as(i64, @intCast(i)) * review_stride;
+        try f.set_value(e, Review.id("choice", base), if (obs.match) |match| match.id else "ignore");
+        try f.show(e, Review.id("review-row", base), show_reviewed_observations);
+        count += 1;
+    }
+    try f.set_text(e, Statement.id("statement-review-status", 14000), try std.fmt.allocPrint(modal_arena.allocator(), "{d} older rows marked · Confirm to save choices", .{count}));
+}
 fn click_statement(e: *ui.Engine, id: i64) !bool {
+    if (id == Statement.id("apply-reviewed-through", 14000) and !f.s.busy) {
+        try apply_reviewed_through(e);
+        return true;
+    }
+    if (id == Statement.id("toggle-reviewed", 14000) and !f.s.busy) {
+        show_reviewed_observations = !show_reviewed_observations;
+        for (observations, 0..) |obs, i| {
+            const base = review_base + @as(i64, @intCast(i)) * review_stride;
+            try f.show(e, Review.id("review-row", base), show_reviewed_observations or (obs.expense_id == null and !obs.ignored and obs.match == null));
+        }
+        try f.set_text(e, Statement.id("toggle-reviewed", 14000), if (show_reviewed_observations) "Hide handled payments" else "Show handled payments");
+        return true;
+    }
     if (id >= review_base and id < review_base + @as(i64, @intCast(observations.len)) * review_stride and !f.s.busy) {
         const i: usize = @intCast(@divTrunc(id - review_base, review_stride));
         if (i < observations.len and id == Review.id("undo", review_base + @as(i64, @intCast(i)) * review_stride)) {

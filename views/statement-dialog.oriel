@@ -48,6 +48,10 @@
       </row>
     </row>
     <text id="statement-review-status" class="statement-review-status" shrink="0" margin="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">Status</text>
+    <text id="toggle-reviewed" clickable="true" min-height="40" padding="8" color="#2d6a4f">Show handled payments</text>
+    <text font-size="13">Already entered older payments? Link exact matches and ignore other rows through this date. Confirm saves these choices.</text>
+    <input id="reviewed-through" type="date" label="Already reviewed through" min-height="48" border-width="1" radius="8" padding="8" />
+    <text id="apply-reviewed-through" clickable="true" min-height="40" padding="8">Mark older rows handled</text>
     <view id="statement-fields" min-width="0" margin="0">
       <view id="statement-rows" margin="0" />
     </view>

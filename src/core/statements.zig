@@ -499,6 +499,49 @@ pub fn bank_ids_for(a: std.mem.Allocator, bank: Bank, rows: []const Row) ![][64]
     return ids;
 }
 
+// Reuse legacy IDs when Santander changes only merchant case or punctuation.
+// Consume each saved occurrence once, including ignored and linked rows.
+fn known_bank_rows(db: ledger_mod.Ledger, a: std.mem.Allocator, bank: Bank, rows: []const Row, ids: []const [64]u8) ![]bool {
+    const known = try a.alloc(bool, rows.len);
+    @memset(known, false);
+    var exact: std.StringHashMapUnmanaged(void) = .empty;
+    defer exact.deinit(a);
+    var counts: std.StringHashMapUnmanaged(usize) = .empty;
+    defer counts.deinit(a);
+    const query = try db.db.prepare("SELECT o.id,o.source_json FROM observations o JOIN statements s ON s.hash=o.statement_hash WHERE s.parser=?1 LIMIT 100001");
+    defer query.finalize();
+    try query.bindText(1, parser_for(bank));
+    var count: usize = 0;
+    while (try query.step()) {
+        count += 1;
+        if (count > 100000) return error.TooManyExpenses;
+        try exact.put(a, try query.text(a, 0), {});
+        const row = try std.json.parseFromSliceLeaky(Row, a, try query.text(a, 1), .{ .ignore_unknown_fields = true });
+        const key = try match_key(a, row) orelse continue;
+        const slot = try counts.getOrPut(a, key);
+        if (!slot.found_existing) slot.value_ptr.* = 0;
+        slot.value_ptr.* += 1;
+    }
+    // Reserve exact identities first so formatting variants cannot consume them.
+    for (rows, ids, 0..) |row, id, i| {
+        if (!exact.contains(&id)) continue;
+        known[i] = true;
+        const key = try match_key(a, row) orelse continue;
+        if (counts.getPtr(key)) |remaining| if (remaining.* > 0) {
+            remaining.* -= 1;
+        };
+    }
+    for (rows, 0..) |row, i| {
+        if (known[i]) continue;
+        const key = try match_key(a, row) orelse continue;
+        const remaining = counts.getPtr(key) orelse continue;
+        if (remaining.* == 0) continue;
+        remaining.* -= 1;
+        known[i] = true;
+    }
+    return known;
+}
+
 /// Stage only new observations. Overlapping snapshots, ignored observations,
 /// edited payments and deleted payments never turn into another new charge.
 pub fn stage_bank(db: ledger_mod.Ledger, a: std.mem.Allocator, month: []const u8, rows: []const Row) !BankImport {
@@ -517,14 +560,10 @@ pub fn stage_bank_for(db: ledger_mod.Ledger, a: std.mem.Allocator, bank: Bank, m
     try db.db.exec("BEGIN IMMEDIATE");
     errdefer db.db.exec("ROLLBACK") catch {};
     var added: usize = 0;
-    const fresh = try a.alloc(bool, rows.len);
-    for (ids, 0..) |id, i| {
-        const query = try db.db.prepare("SELECT 1 FROM observations WHERE id=?1");
-        defer query.finalize();
-        try query.bindText(1, &id);
-        fresh[i] = !try query.step();
-        if (fresh[i]) added += 1;
-    }
+    const known = try known_bank_rows(db, a, bank, rows, ids);
+    for (known) |exists| if (!exists) {
+        added += 1;
+    };
     if (added == 0) {
         try db.db.exec("COMMIT");
         return .{};
@@ -533,7 +572,7 @@ pub fn stage_bank_for(db: ledger_mod.Ledger, a: std.mem.Allocator, bank: Bank, m
     const data_url = try std.fmt.allocPrint(a, "{s}{s}", .{ if (bank == .santander) bank_prefix else bank_prefix_generic, std.base64.standard.Encoder.encode(encoded, json) });
     const hash = try stage(db, a, try std.fmt.allocPrint(a, "{s} {s} · {s}", .{ bank.name(), bank.currency(), month }), data_url);
     for (rows, ids, 0..) |row, id, i| {
-        if (!fresh[i]) continue;
+        if (known[i]) continue;
         const insert = try db.db.prepare("INSERT INTO observations(id,statement_hash,position,source_json) VALUES (?1,?2,?3,?4)");
         defer insert.finalize();
         try insert.bindText(1, &id);
@@ -655,4 +694,28 @@ test "bank source preparation and transaction clean up on allocation failure" {
         }
     };
     try std.testing.checkAllAllocationFailures(std.testing.allocator, T.run, .{});
+}
+
+test "bank formatting changes retain ignored and linked decisions across captures" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const db = try ledger_mod.Ledger.open(":memory:");
+    defer db.close();
+    const row: Row = .{ .date = "2026-10-22", .amount = 1200, .payee = "TEST*SHOP", .account = "9526", .category = "Other" };
+    const first = try stage_bank(db, a, "2026-10", &.{ row, row });
+    const obs = try observations(db, a, first.hash.?);
+    _ = try reconcile(db, a, first.hash.?, &.{ .{ .observation_id = obs[0].id, .action = .ignore }, .{ .observation_id = obs[1].id, .action = .create } });
+    var formatted = row;
+    formatted.payee = "Test Shop";
+    formatted.category = "Shopping";
+    try std.testing.expectEqual(@as(usize, 0), (try stage_bank(db, a, "2026-10", &.{ formatted, formatted })).added);
+    const next = try stage_bank(db, a, "2026-10", &.{ formatted, formatted, formatted });
+    try std.testing.expectEqual(@as(usize, 1), next.added);
+    const pending = try review(db, a, next.hash.?);
+    try std.testing.expectEqual(@as(usize, 1), pending.len);
+    try std.testing.expect(pending[0].match == null);
+    const original = try observations(db, a, first.hash.?);
+    try std.testing.expect(original[0].ignored);
+    try std.testing.expect(original[1].expense_id != null);
 }

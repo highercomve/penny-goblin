@@ -2457,6 +2457,32 @@ test "Santander capture requires an account and stages review without saving a p
     try resolved(e, @intFromEnum(Request.observations), true, encoded);
     try std.testing.expect(s.modal == .statement and !s.busy);
     try std.testing.expectEqual(@as(usize, 0), s.snapshot.?.value.expenses.len);
+    const Statement = ui.View(@embedFile("statement-dialog.oriel"));
+    const Review = ui.View(@embedFile("review-row.oriel"));
+    var handled = [_]@import("core/statements.zig").Observation{
+        obs[0],
+        .{ .id = &model.digest("ignored-bank-row"), .source = obs[0].source, .expense_id = null, .ignored = true },
+        .{ .id = &model.digest("matched-bank-row"), .source = obs[0].source, .expense_id = null, .ignored = false, .match = .{ .id = &model.digest("reviewed-payment"), .revision = 1 } },
+        .{ .id = &model.digest("older-bank-row"), .source = obs[0].source, .expense_id = null, .ignored = false },
+    };
+    handled[0].source.date = "2026-10-23";
+    const handled_json = try std.json.Stringify.valueAlloc(a, handled, .{});
+    defer a.free(handled_json);
+    try resolved(e, @intFromEnum(Request.observations), true, handled_json);
+    try std.testing.expect(!e.tree.get(Review.id("review-row", 22000000)).?.props.none);
+    try std.testing.expect(e.tree.get(Review.id("review-row", 22000032)).?.props.none);
+    try std.testing.expect(e.tree.get(Review.id("review-row", 22000064)).?.props.none);
+    _ = try handle_event(e, Statement.id("toggle-reviewed", 14000), "click", "0");
+    try std.testing.expect(!e.tree.get(Review.id("review-row", 22000032)).?.props.none);
+    try set_value(e, Statement.id("reviewed-through", 14000), "2026-10-22");
+    _ = try handle_event(e, Statement.id("apply-reviewed-through", 14000), "click", "0");
+    try std.testing.expectEqualStrings("create", value(e, Review.id("choice", 22000000)));
+    try std.testing.expectEqualStrings("ignore", value(e, Review.id("choice", 22000096)));
+    try std.testing.expectEqualStrings(handled[2].match.?.id, value(e, Review.id("choice", 22000064)));
+    _ = try handle_event(e, Statement.id("confirm-statement", 14000), "click", "0");
+    try std.testing.expectEqualStrings("reconcile_statement", host.command);
+    try std.testing.expect(std.mem.indexOf(u8, host.args, "ignore") != null);
+    try std.testing.expect(std.mem.indexOf(u8, host.args, "link") != null);
 }
 
 test "Insights month range, whole year and category medians follow WebKit" {

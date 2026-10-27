@@ -108,6 +108,7 @@ async function openStatement(source) {
   if ($("statement-dialog").open) return;
   const observations = await invoke("statement_observations", { hash: source.hash });
   statementReview = { ...source, observations };
+  $("reviewed-through").value = "";
   $("statement-title").textContent = source.name;
   // The ledger supplies one-to-one matches. Older responses fall back to
   // exact text; never guess from a nearby date or the amount alone.
@@ -162,6 +163,28 @@ async function openStatement(source) {
   updateStatementSummary();
   $("statement-dialog").showModal();
 }
+
+$("apply-reviewed-through").addEventListener("click", () => {
+  if (statementSaving || mutationPending || !statementReview) return;
+  const through = $("reviewed-through").value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(through)) { status("statement-review-status", "Choose a reviewed-through date.", true); return; }
+  let count = 0;
+  let handled = $("statement-bulk-handled");
+  if (!handled) {
+    handled = node("details"); handled.id = "statement-bulk-handled";
+    handled.append(node("summary", "Older rows marked handled · confirm to save"));
+    $("statement-rows").append(handled);
+  }
+  for (const select of [...$("statement-rows").querySelectorAll("select")]) {
+    const observation = statementReview.observations.find(row => row.id === select.dataset.observation);
+    if (!observation || observation.source.date > through) continue;
+    select.value = observation.match ? `link:${observation.match.id}` : "ignore";
+    handled.append(select.closest("article"));
+    count += 1;
+  }
+  updateStatementSummary();
+  status("statement-review-status", `${count} older rows marked · Confirm to save choices`);
+});
 
 function updateStatementSummary() {
   if (!statementReview) return;
