@@ -29,6 +29,19 @@
   @media (max-width: 380px) and (prefers-color-scheme: dark) {
     review-row: background=#191d19
   }
+
+  @when (hover) {
+    choice-field: background=#d0e4c5
+    undo: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    choice-field: background=#384a3b
+    undo: background=#384a3b
+  }
+  @when (focus) {
+    choice-field: outline=2,-2,#e59700 outline-halo=#111511
+    undo: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <view id="review-row" class="review-row" margin="0" padding="12" radius="16" unset="color font-size">
   <text class="n2" shrink="0" font-size="14" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif"><span font-weight="700">{title}</span></text>
@@ -44,7 +57,7 @@
   </row>
   <text id="matches" class="matches" shrink="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">1 possible match</text>
   <text id="state" class="state" shrink="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">Linked</text>
-  <row id="undo" justify="center" align="center" align-self="flex-start" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true">
+  <row id="undo" justify="center" align="center" align-self="flex-start" min-height="48" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true">
     <text class="n10" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Undo</text>
   </row>
 </view>

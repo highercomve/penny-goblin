@@ -81,8 +81,11 @@ pub const State = struct {
     pending_camera: bool = false,
 };
 pub var s: State = .{};
+const desktop = @import("oriel_desktop.zig");
+const recovery = @import("oriel_recovery.zig");
 pub fn configure(io: std.Io) void {
     s = .{ .io = io };
+    recovery.reset();
     ui.configure(.{ .boot = boot, .event = event, .resolved = resolved_safe, .resized = resized, .timer = timer, .shutdown = shutdown });
 }
 pub fn aid(comptime name: []const u8) i64 {
@@ -263,6 +266,7 @@ fn boot(e: *ui.Engine) !void {
     s.draft = .init(e.gpa);
     s.initialized = true;
     inline for (.{ .{ App, 50000 }, .{ Editor, 60000 }, .{ Item, item_style }, .{ Payment, 70500 }, .{ Day, 70600 }, .{ BudgetPart, 70700 }, .{ Evidence, 71000 }, .{ EvidencePanel, 76000 }, .{ StatementEvidence, 76100 }, .{ Text, 79000 }, .{ Notice, 78000 }, .{ Backdrop, 79500 } }) |v| try v[0].prepare(&e.tree, v[1]);
+    try desktop.prepare(e);
     try suggestions.prepare(e);
     try categories.prepare(e);
     try tools.prepare(e);
@@ -288,6 +292,7 @@ fn shutdown(e: *ui.Engine) void {
     s.inert.deinit(e.gpa);
     s.selected.deinit(e.gpa);
     s.draft.deinit();
+    desktop.shutdown();
     categories.shutdown();
     progress.shutdown();
     tools.shutdown();
@@ -329,6 +334,12 @@ fn resized(e: *ui.Engine) !void {
 }
 pub fn mark_action(e: *ui.Engine, id: i64, label: []const u8) !void {
     try e.tree.setAxEntry(id, .{ .r = .button, .n = label, .s = 1024 });
+    if (e.tree.get(id)) |node| {
+        var p = node.props;
+        if (p.minh == null or p.minh.? == .px and p.minh.?.px < 48) p.minh = .{ .px = 48 };
+        if (p.minw == null or p.minw.? == .px and p.minw.?.px < 48) p.minw = .{ .px = 48 };
+        try e.tree.updateUiProps(id, p);
+    }
     if (std.mem.indexOfScalar(i64, s.actions.items, id) == null) try s.actions.append(e.gpa, id);
 }
 pub fn mark_actions(e: *ui.Engine, comptime View: type, base: i64, comptime names: anytype) !void {
@@ -352,7 +363,7 @@ fn modal_focus(e: *ui.Engine, modal: ?i64) !void {
     var nodes = e.tree.nodes.iterator();
     while (nodes.next()) |entry| {
         const n = entry.value_ptr.*;
-        if (n.kind == .input or n.kind == .textarea or n.kind == .select or n.kind == .button or n.kind == .check) {
+        if (n.kind == .input or n.kind == .textarea or n.kind == .select or n.kind == .button or n.kind == .check or std.mem.indexOfScalar(i64, s.actions.items, n.id) != null) {
             const allowed = if (modal) |id| inside(n, id) else true;
             const was = s.inert.get(n.id);
             if (allowed == (was == null)) continue;
@@ -406,6 +417,11 @@ pub fn resize_modal(e: *ui.Engine, id: i64) !void {
     p.h = .{ .px = height };
     p.maxh = .{ .px = height };
     p.m = null;
+    // The views only become absolute in their phone media query. Wide
+    // windows need the same overlay behavior or the dialog flows after the
+    // ledger and lands below the viewport.
+    p.pos = "absolute";
+    p.z = 2147483647;
     p.ins = .{ .{ .px = (e.tree.height - height) / 2 }, null, null, .{ .px = (e.tree.width - width) / 2 } };
     p.br = if (phone) null else p.br;
     try e.tree.updateUiProps(id, p);
@@ -444,7 +460,7 @@ pub fn overlay(e: *ui.Engine) !void {
         ids[len] = child.id;
         len += 1;
     };
-    const modal_id: ?i64 = if (s.modal == .editor) editor_base else tools.modal_id(s.modal);
+    const modal_id: ?i64 = if (desktop.menu_active) desktop.menu_base else if (s.modal == .editor) editor_base else tools.modal_id(s.modal);
     if (modal_id != null or s.notice_open) {
         _ = try Backdrop.mount(&e.tree, 19500, 79500, &.{});
         ids[len] = 19500;
@@ -497,12 +513,15 @@ pub fn refresh(e: *ui.Engine) !void {
     try invoke(e, .snapshot, "snapshot", .{});
 }
 fn timer(e: *ui.Engine, id: u32) !void {
+    if (id == 3) return recovery.checkpoint_timer(e);
     if (id == 2) {
         const remaining = s.snackbar_until - std.Io.Clock.awake.now(s.io).toMilliseconds();
         if (remaining > 0) e.backend.add_timer(e.backend.ctx, e, 2, @intCast(remaining)) else try show(e, aid("status"), false);
         return;
     }
     if (id != 1) return;
+    try desktop.advance(e);
+    try recovery.persist(e);
     defer e.backend.add_timer(e.backend.ctx, e, 1, 5000);
     if (!s.busy) try refresh(e);
     if (s.modal == .sync) try tools.refresh_sync(e);
@@ -671,7 +690,7 @@ fn insights_changed(e: *ui.Engine, id: i64) !void {
     }
     try sync_insights_year(e);
 }
-fn remember_inputs(e: *ui.Engine) void {
+pub fn remember_inputs(e: *ui.Engine) void {
     inline for (input_names, 0..) |name, i| {
         const v = value(e, aid(name));
         const len = @min(v.len, s.inputs[i].len);
@@ -848,6 +867,11 @@ fn render_payments(e: *ui.Engine, rows: []const model.Expense) !void {
             try e.tree.updateUiProps(letter.id, props);
         }
         try mark_action(e, base, try std.fmt.bufPrint(&detail, "{s}, {s}, {s}", .{ row.payee, try reports.amount_text(&amount, row.amount, row.currency), row.date }));
+        if (desktop.selected(row.id)) {
+            var selection_props = e.tree.get(base).?.props;
+            selection_props.bg = .{ .color = oriel.canvas.rgb(if (e.tree.dark) 0x384a3b else 0xd0e4c5) };
+            try e.tree.updateUiProps(base, selection_props);
+        }
         ids[count_ids] = base;
         count_ids += 1;
     }
@@ -936,6 +960,7 @@ pub fn open_editor(e: *ui.Engine, expense: ?model.Expense) !void {
     try resize_modal(e, editor_base);
     try overlay(e);
     redraw(e);
+    desktop.focus(e, eid("field-payee"));
     if (expense == null) try invoke(e, .defaults, "ui_defaults", .{});
     if (expense) |row| {
         try invoke(e, .documents, "expense_documents", .{ .id = row.id });
@@ -972,7 +997,7 @@ fn editor_capture_layout(e: *ui.Engine) !void {
     ids[len] = capture.id;
     if (!try e.tree.stampKids(parent.id, ids[0 .. len + 1])) return error.InvalidTemplate;
 }
-fn open_capture(e: *ui.Engine) !void {
+pub fn open_capture(e: *ui.Engine) !void {
     try open_editor(e, null);
     if (s.modal != .editor) return;
     s.scan_first = true;
@@ -991,7 +1016,7 @@ fn show_review(e: *ui.Engine) !void {
     try show(e, eid("save"), true);
     try show(e, eid("manual-fallback"), false);
 }
-fn save(e: *ui.Engine) !void {
+pub fn save(e: *ui.Engine) !void {
     if (s.busy) return;
     if (s.current == null) {
         s.busy = true;
@@ -1014,13 +1039,45 @@ fn category_rule_note(e: *ui.Engine) !void {
     if (special) |label| try set_text(e, eid("category-rule-note"), try std.fmt.allocPrint(s.draft.allocator(), "Special payment: {s}", .{label}));
 }
 fn event(e: *ui.Engine, id: i64, kind: []const u8, data: []const u8) bool {
-    return handle_event(e, id, kind, data) catch |err| {
+    defer if (oriel.target.is_android and (std.mem.eql(u8, kind, "input") or std.mem.eql(u8, kind, "change") or std.mem.eql(u8, kind, "click"))) {
+        recovery.schedule(e);
+    };
+    return normalized_event(e, id, kind, data) catch |err| {
         std.log.err("Oriel view action: {s}", .{@errorName(err)});
         report_error(e, if (s.modal == .editor) eid("editor-status") else aid("status"), @errorName(err)) catch {};
         return true;
     };
 }
+fn normalized_event(e: *ui.Engine, id: i64, kind: []const u8, data: []const u8) !bool {
+    if (!std.mem.eql(u8, kind, "input") and !std.mem.eql(u8, kind, "change")) return handle_event(e, id, kind, data);
+    // Android/AppKit/Win32 carry [value, inputType, data]; GTK carries a string.
+    // Normalize once before category/suggestion handlers or dirty-state tracking.
+    const parsed = try std.json.parseFromSlice(std.json.Value, e.gpa, data, .{});
+    defer parsed.deinit();
+    if (parsed.value == .array and parsed.value.array.items.len > 0 and parsed.value.array.items[0] == .string) {
+        const value_json = try std.json.Stringify.valueAlloc(e.gpa, parsed.value.array.items[0].string, .{});
+        defer e.gpa.free(value_json);
+        return handle_event(e, id, kind, value_json);
+    }
+    return handle_event(e, id, kind, data);
+}
+
 fn handle_event(e: *ui.Engine, id: i64, kind: []const u8, data: []const u8) !bool {
+    if (std.mem.eql(u8, kind, "desktop_profile")) {
+        recovery.profile(data);
+        if (s.snapshot != null) try recovery.restore_once(e);
+        return true;
+    }
+    if (std.mem.eql(u8, kind, "desktop_checkpoint")) {
+        try recovery.persist(e);
+        return true;
+    }
+    if (std.mem.eql(u8, kind, "desktop_files")) {
+        try desktop.receive(e, data);
+        return true;
+    }
+    if (std.mem.eql(u8, kind, "key") and try desktop.key(e, data)) return true;
+    if (try desktop.event(e, id, kind, data)) return true;
     if (try categories.event(e, id, kind, data)) return true;
     if (std.mem.eql(u8, kind, "back")) {
         if (s.notice_open) return click(e, Notice.id("cancel", 19000));
@@ -1414,6 +1471,8 @@ fn resolved_snapshot(e: *ui.Engine, _: Request, ok: bool, json: []const u8) !voi
     try period_options(e);
     try render(e);
     try tools.parse_queued(e);
+    try recovery.restore_once(e);
+    try desktop.advance(e);
     return;
 }
 
@@ -1451,6 +1510,19 @@ fn resolved_new_id(e: *ui.Engine, request: Request, ok: bool, json: []const u8) 
     s.current = .{ .id = id, .date = "", .payee = "", .amount = 0 };
     try save(e);
     return;
+}
+
+pub fn attach_image(e: *ui.Engine, file: app.UiFile) !void {
+    // Validate with the same ledger decoder and size limit used by saving.
+    _ = try @import("core/ledger.zig").image_bytes(s.draft.allocator(), file.data_url);
+    s.document = .{ .data_url = try s.draft.allocator().dupe(u8, file.data_url) };
+    s.document_name = try s.draft.allocator().dupe(u8, file.name);
+    s.dirty = true;
+    try set_image(e, eid("preview"), s.document.?.data_url);
+    try show(e, eid("pending-evidence"), true);
+    try show(e, eid("capture-choices"), false);
+    try show(e, eid("scanner-setup"), false);
+    redraw(e);
 }
 
 fn resolved_picked(e: *ui.Engine, request: Request, ok: bool, json: []const u8) !void {
@@ -2555,7 +2627,7 @@ test "Insights month range, whole year and category medians follow WebKit" {
     try navigate(e, .insights);
     const chip = e.tree.get(aid("insights-from")).?.frame;
     const label = e.tree.get(aid("insights-period")).?.frame;
-    try std.testing.expect(label.y > chip.y and label.y - chip.y < 72);
+    try std.testing.expect(label.y >= chip.y + chip.h and label.y - chip.y < 96);
     try std.testing.expect(e.tree.get(aid("insights-from")).?.parent.?.parent.?.props.scrollx);
     _ = try handle_event(e, aid("insights-year"), "change", "\"2025\"");
     _ = try click(e, aid("export-report"));
@@ -2636,4 +2708,168 @@ test "a category median joins the monthly budget and Home tracks it" {
     const removal = try std.json.parseFromSlice(@import("core/preferences.zig").Edit, a, host.args, .{ .ignore_unknown_fields = true });
     defer removal.deinit();
     try std.testing.expectEqual(@as(usize, 0), removal.value.settings.category_budgets.object.count());
+}
+
+test "desktop shortcuts keep editor focus inside modal and recovery retains unsaved revision" {
+    const a = std.testing.allocator;
+    var host: TestHost = .{ .allocator = a };
+    defer host.deinit();
+    configure(std.testing.io);
+    const e = try ui.Engine.create(a, .{ .ctx = &host, .measure = TestHost.measure, .laid_out = TestHost.laid, .removed = TestHost.removed, .add_timer = TestHost.timer, .invoke = TestHost.dispatch, .focus = TestHost.focus }, &.{}, "{}", "main", "application.oriel", 1180, 820);
+    defer e.destroy();
+    try boot(e);
+    const row: model.Expense = .{ .id = &model.digest("desktop-draft"), .date = "2026-10-27", .amount = 123, .payee = "Synthetic", .revision = 7 };
+    var rows = [_]model.Expense{row};
+    const snapshot: app.Snapshot = .{ .expenses = &rows, .settings = "{}", .platform = "android", .vision_available = false, .tray_running = false, .statements = &.{} };
+    const json = try std.json.Stringify.valueAlloc(a, snapshot, .{});
+    defer a.free(json);
+    try resolved(e, @intFromEnum(Request.snapshot), true, json);
+    try std.testing.expect(e.event(0, "key", "[\"f\",2]"));
+    try std.testing.expectEqual(aid("search"), e.focus.id);
+    try open_editor(e, row);
+    try std.testing.expectEqual(eid("field-payee"), e.focus.id);
+    try std.testing.expect(e.focus.visible);
+    // Wide windows must overlay the dialog instead of flowing it after the
+    // ledger (the CSS media query only covers phone widths).
+    const dialog = e.tree.get(editor_base).?;
+    try std.testing.expectEqualStrings("absolute", dialog.props.pos.?);
+    try std.testing.expect(dialog.frame.y >= 0 and dialog.frame.y + dialog.frame.h <= e.tree.height + 1);
+    try std.testing.expect(dialog.frame.x >= 0 and dialog.frame.x + dialog.frame.w <= e.tree.width + 1);
+    try std.testing.expectEqual(@as(?i32, -1), e.tree.get(aid("new-expense")).?.props.ti);
+    try std.testing.expect(e.event(eid("field-payee"), "input", "[\"Unsaved synthetic draft\",\"insertText\",\"t\"]"));
+    var arena = std.heap.ArenaAllocator.init(a);
+    defer arena.deinit();
+    const encoded = try std.json.Stringify.valueAlloc(arena.allocator(), try recovery.capture(e, arena.allocator()), .{});
+    const checkpoint = try std.json.parseFromSliceLeaky(recovery.Checkpoint, arena.allocator(), encoded, .{ .allocate = .alloc_always });
+    try close_modal(e);
+    try recovery.apply(e, checkpoint);
+    try std.testing.expectEqualStrings("Unsaved synthetic draft", value(e, eid("field-payee")));
+    try std.testing.expectEqual(@as(i64, 7), s.current.?.revision);
+    try std.testing.expect(s.dirty);
+    try std.testing.expect(e.event(eid("field-payee"), "key", "[\"s\",2]"));
+    try std.testing.expectEqualStrings("save_expense", host.command);
+    const saved = try std.json.parseFromSlice(model.Save, a, host.args, .{});
+    defer saved.deinit();
+    try std.testing.expectEqual(@as(i64, 7), saved.value.expected_revision);
+}
+
+test "attachment batch refuses replacement of a dirty editor and remains reviewable" {
+    const a = std.testing.allocator;
+    var host: TestHost = .{ .allocator = a };
+    defer host.deinit();
+    configure(std.testing.io);
+    const e = try ui.Engine.create(a, .{ .ctx = &host, .measure = TestHost.measure, .laid_out = TestHost.laid, .removed = TestHost.removed, .add_timer = TestHost.timer, .invoke = TestHost.dispatch, .focus = TestHost.focus }, &.{}, "{}", "main", "application.oriel", 393, 820);
+    defer e.destroy();
+    try boot(e);
+    const snapshot: app.Snapshot = .{ .expenses = &.{}, .settings = "{}", .platform = "android", .vision_available = false, .tray_running = false, .statements = &.{} };
+    const json = try std.json.Stringify.valueAlloc(a, snapshot, .{});
+    defer a.free(json);
+    try resolved(e, @intFromEnum(Request.snapshot), true, json);
+    try open_editor(e, null);
+    try set_value(e, eid("field-payee"), "Do not replace");
+    s.dirty = true;
+    try desktop.receive(e, "[{\"name\":\"synthetic.png\",\"data_url\":\"data:image/png;base64,iVBORw0KGgo=\"}]");
+    try std.testing.expectEqualStrings("Do not replace", value(e, eid("field-payee")));
+    try std.testing.expect(s.document == null);
+    try std.testing.expectError(error.ImportAlreadyQueued, desktop.receive(e, "[]"));
+    try close_modal(e);
+    try desktop.advance(e);
+    try std.testing.expect(s.document != null);
+    try std.testing.expectEqualStrings("synthetic.png", s.document_name);
+    try std.testing.expect(s.dirty);
+}
+
+test "every drawn control shows a focus look in the payments tab order" {
+    const a = std.testing.allocator;
+    var host: TestHost = .{ .allocator = a };
+    defer host.deinit();
+    configure(std.testing.io);
+    const e = try ui.Engine.create(a, .{ .ctx = &host, .measure = TestHost.measure, .laid_out = TestHost.laid, .removed = TestHost.removed, .add_timer = TestHost.timer, .invoke = TestHost.dispatch, .focus = TestHost.focus }, &.{}, "{}", "main", "application.oriel", 768, 576);
+    defer e.destroy();
+    try boot(e);
+    const row: model.Expense = .{ .id = &model.digest("focus-order"), .date = "2026-10-27", .amount = 123, .payee = "Synthetic", .revision = 7 };
+    var rows = [_]model.Expense{row};
+    const snapshot: app.Snapshot = .{ .expenses = &rows, .settings = "{}", .platform = "android", .vision_available = false, .tray_running = false, .statements = &.{} };
+    const json = try std.json.Stringify.valueAlloc(a, snapshot, .{});
+    defer a.free(json);
+    try resolved(e, @intFromEnum(Request.snapshot), true, json);
+    try navigate(e, .payments);
+    var drawn: usize = 0;
+    var i: usize = 0;
+    while (i < 16) : (i += 1) {
+        _ = e.event(0, "key", "[\"Tab\",0]");
+        try std.testing.expect(e.focus.visible);
+        try std.testing.expectEqual(e.focus.id, e.focus.ring);
+        const n = e.tree.get(e.focus.id) orelse return error.MissingFocusNode;
+        switch (n.kind) {
+            .input, .textarea, .select, .check, .button => {},
+            else => {
+                // A view with a hover look otherwise suppresses the platform
+                // ring: its own focus look must draw one.
+                try std.testing.expect(n.props.ol != null);
+                drawn += 1;
+            },
+        }
+    }
+    try std.testing.expect(drawn >= 10);
+}
+
+fn find_scroller(n: *ui.Node) ?*ui.Node {
+    if (n.props.scroll and n.content_h > n.frame.h + 0.5) return n;
+    for (n.kids.items) |k| if (find_scroller(k)) |found| return found;
+    return null;
+}
+
+test "keyboard focus under the sticky header is scrolled below it" {
+    const a = std.testing.allocator;
+    var host: TestHost = .{ .allocator = a };
+    defer host.deinit();
+    configure(std.testing.io);
+    const e = try ui.Engine.create(a, .{ .ctx = &host, .measure = TestHost.measure, .laid_out = TestHost.laid, .removed = TestHost.removed, .add_timer = TestHost.timer, .invoke = TestHost.dispatch, .focus = TestHost.focus }, &.{}, "{}", "main", "application.oriel", 768, 576);
+    defer e.destroy();
+    try boot(e);
+    const snapshot: app.Snapshot = .{ .expenses = &.{}, .settings = "{}", .platform = "android", .vision_available = false, .tray_running = false, .statements = &.{} };
+    const json = try std.json.Stringify.valueAlloc(a, snapshot, .{});
+    defer a.free(json);
+    try resolved(e, @intFromEnum(Request.snapshot), true, json);
+    try navigate(e, .payments);
+    const scroller = find_scroller(e.tree.root.?) orelse return error.MissingScroller;
+    e.setScrollY(scroller, 120);
+    try std.testing.expect(scroller.scroll_y > 0);
+    desktop.focus(e, aid("search"));
+    try std.testing.expectEqual(aid("search"), e.focus.id);
+    desktop.reveal_focused(e);
+    const search = e.tree.get(aid("search")).?;
+    try std.testing.expect(search.frame.y >= 63.5);
+}
+
+test "ctrl toggles and shift extends the payment selection" {
+    const a = std.testing.allocator;
+    var host: TestHost = .{ .allocator = a };
+    defer host.deinit();
+    configure(std.testing.io);
+    const e = try ui.Engine.create(a, .{ .ctx = &host, .measure = TestHost.measure, .laid_out = TestHost.laid, .removed = TestHost.removed, .add_timer = TestHost.timer, .invoke = TestHost.dispatch, .focus = TestHost.focus }, &.{}, "{}", "main", "application.oriel", 768, 576);
+    defer e.destroy();
+    try boot(e);
+    const rows = [_]model.Expense{
+        .{ .id = &model.digest("select-a"), .date = "2026-10-27", .amount = 100, .payee = "A", .revision = 1 },
+        .{ .id = &model.digest("select-b"), .date = "2026-10-26", .amount = 200, .payee = "B", .revision = 1 },
+        .{ .id = &model.digest("select-c"), .date = "2026-10-25", .amount = 300, .payee = "C", .revision = 1 },
+    };
+    var snapshot_rows = rows;
+    const snapshot: app.Snapshot = .{ .expenses = &snapshot_rows, .settings = "{}", .platform = "android", .vision_available = false, .tray_running = false, .statements = &.{} };
+    const json = try std.json.Stringify.valueAlloc(a, snapshot, .{});
+    defer a.free(json);
+    try resolved(e, @intFromEnum(Request.snapshot), true, json);
+    try navigate(e, .payments);
+    try std.testing.expectEqual(@as(usize, 3), s.selected.items.len);
+    _ = try desktop.event(e, 26000000, "pointer", "[\"down\",0,0,1,0,0,2]");
+    try std.testing.expect(desktop.has_selection());
+    try std.testing.expect(desktop.selected(rows[0].id));
+    _ = try desktop.event(e, 26000000, "pointer", "[\"down\",0,0,1,0,0,2]");
+    try std.testing.expect(!desktop.has_selection());
+    _ = try desktop.event(e, 26000032, "pointer", "[\"down\",0,0,1,0,0,1]");
+    try std.testing.expect(desktop.selected(rows[0].id));
+    try std.testing.expect(desktop.selected(rows[1].id));
+    try std.testing.expect(desktop.selected(rows[2].id));
 }

@@ -125,10 +125,68 @@
     sync-replace: background="rgba(93.77614, 98.065956, 92.03721, 1)"
     n52: background="rgba(132.75449, 139.75449, 131.0443, 1)"
   }
+
+  @when (hover) {
+    close-sync: background=#d0e4c5
+    n52: background=#d0e4c5
+    n53: background=#d0e4c5
+    sync-connect: background=#d0e4c5
+    sync-link-details-toggle: background=#d0e4c5
+    sync-now: background=#d0e4c5
+    sync-pairing: background=#d0e4c5
+    sync-paste-toggle: background=#d0e4c5
+    sync-replace: background=#d0e4c5
+    sync-restart: background=#d0e4c5
+    sync-scan: background=#d0e4c5
+    sync-service-toggle: background=#d0e4c5
+    sync-start: background=#d0e4c5
+    sync-stop: background=#d0e4c5
+    sync-unpair: background=#d0e4c5
+    sync-use-local: background=#d0e4c5
+    sync-use-remote: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    close-sync: background=#384a3b
+    n52: background=#384a3b
+    n53: background=#384a3b
+    sync-connect: background=#384a3b
+    sync-link-details-toggle: background=#384a3b
+    sync-now: background=#384a3b
+    sync-pairing: background=#384a3b
+    sync-paste-toggle: background=#384a3b
+    sync-replace: background=#384a3b
+    sync-restart: background=#384a3b
+    sync-scan: background=#384a3b
+    sync-service-toggle: background=#384a3b
+    sync-start: background=#384a3b
+    sync-stop: background=#384a3b
+    sync-unpair: background=#384a3b
+    sync-use-local: background=#384a3b
+    sync-use-remote: background=#384a3b
+  }
+  @when (focus) {
+    close-sync: outline=2,-2,#e59700 outline-halo=#111511
+    n52: outline=2,-2,#e59700 outline-halo=#111511
+    n53: outline=2,-2,#e59700 outline-halo=#111511
+    sync-connect: outline=2,-2,#e59700 outline-halo=#111511
+    sync-link-details-toggle: outline=2,-2,#e59700 outline-halo=#111511
+    sync-now: outline=2,-2,#e59700 outline-halo=#111511
+    sync-pairing: outline=2,-2,#e59700 outline-halo=#111511
+    sync-paste-toggle: outline=2,-2,#e59700 outline-halo=#111511
+    sync-replace: outline=2,-2,#e59700 outline-halo=#111511
+    sync-restart: outline=2,-2,#e59700 outline-halo=#111511
+    sync-scan: outline=2,-2,#e59700 outline-halo=#111511
+    sync-service-toggle: outline=2,-2,#e59700 outline-halo=#111511
+    sync-start: outline=2,-2,#e59700 outline-halo=#111511
+    sync-stop: outline=2,-2,#e59700 outline-halo=#111511
+    sync-unpair: outline=2,-2,#e59700 outline-halo=#111511
+    sync-use-local: outline=2,-2,#e59700 outline-halo=#111511
+    sync-use-remote: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <view id="sync-dialog" class="sync-dialog" scroll="true" scroll-x="true" unset="shrink color font-size">
   <row class="n2" align="center" min-height="64" row-gap="4" column-gap="4" sticky="0,auto,auto,auto" z="2">
-    <row id="close-sync" justify="center" align="center" width="48" height="48" min-height="40" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
+    <row id="close-sync" justify="center" align="center" width="48" height="48" min-height="48" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
       <icon class="n4" grow="0" shrink="0" width="24" height="24" clickable="true">
         <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
       </icon>
@@ -146,7 +204,7 @@
   </row>
   <text id="sync-message" class="sync-message" shrink="0" margin="0,0,8,0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">Status</text>
   <view id="sync-desktop" margin="0,0,8,0" row-gap="8" column-gap="8">
-    <row id="sync-pairing" class="sync-pairing" justify="center" align="center" width="100%" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+    <row id="sync-pairing" class="sync-pairing" justify="center" align="center" width="100%" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
       <text class="n14" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Pair a phone</text>
     </row>
     <view id="sync-code">
@@ -166,13 +224,13 @@
       <view id="sync-service-body">
         <view id="sync-routes" margin="0,0,12,0" padding="0,0,0,4" />
         <row wrap="wrap" align="center" margin="0" row-gap="8" column-gap="8">
-          <row id="sync-start" class="sync-start" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+          <row id="sync-start" class="sync-start" justify="center" align="center" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
             <text class="n30" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Start</text>
           </row>
-          <row id="sync-restart" class="sync-restart" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+          <row id="sync-restart" class="sync-restart" justify="center" align="center" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
             <text class="n32" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Restart</text>
           </row>
-          <row id="sync-stop" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+          <row id="sync-stop" justify="center" align="center" min-height="48" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
             <text class="n34" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Stop</text>
           </row>
         </row>
@@ -180,7 +238,7 @@
     </view>
   </view>
   <view id="sync-mobile" margin="0,0,8,0" row-gap="8" column-gap="8">
-    <row id="sync-scan" class="sync-scan" justify="center" align="center" width="100%" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+    <row id="sync-scan" class="sync-scan" justify="center" align="center" width="100%" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
       <icon class="n37" grow="0" shrink="0" width="18" height="18" clickable="true">
         <path d="M4 8a1 1 0 0 1 1-1h3l1.5-2h5L16 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
         <path d="M8.5 13a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
@@ -188,10 +246,10 @@
       <text class="n38" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Scan desktop QR</text>
     </row>
     <row wrap="wrap" align="center" margin="12,0,0,0" row-gap="8" column-gap="8">
-      <row id="sync-now" class="sync-now" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+      <row id="sync-now" class="sync-now" justify="center" align="center" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
         <text class="n41" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Sync now</text>
       </row>
-      <row id="sync-unpair" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+      <row id="sync-unpair" justify="center" align="center" min-height="48" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
         <text class="n43" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Disconnect</text>
       </row>
     </row>
@@ -199,12 +257,12 @@
       <text id="sync-paste-toggle" class="sync-paste-toggle" shrink="0" padding="10,0,10,0" clickable="true" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif"><span>Paste link instead</span><span> ▴</span></text>
       <row id="sync-paste-body" wrap="wrap" align="baseline">
         <textarea id="sync-paste" class="sync-paste" width="100%" min-height="80" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" rows="3" autocapitalize="none" autocorrect="false" spellcheck="false" label="Pairing link" />
-        <row id="sync-connect" class="sync-connect" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
+        <row id="sync-connect" class="sync-connect" justify="center" align="center" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
           <text class="n49" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Pair</text>
         </row>
       </row>
     </view>
-    <row align="center" min-height="44" row-gap="12" column-gap="12" clickable="true" unset="shrink">
+    <row align="center" min-height="48" row-gap="12" column-gap="12" clickable="true" unset="shrink">
       <view id="sync-replace" class="sync-replace" grow="0" width="52" height="32" margin="3,2,3,2" padding="1" border-width="2" radius="16" clickable="true" label="Replace paired desktop">
         <view class="n52" width="16" height="16" position="absolute" top="6" left="6" radius="50%" clickable="true" unset="shrink right bottom" />
       </view>
@@ -225,10 +283,10 @@
       </view>
     </row>
     <row wrap="wrap" align="center" margin="0" row-gap="8" column-gap="8">
-      <row id="sync-use-local" class="sync-use-local" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+      <row id="sync-use-local" class="sync-use-local" justify="center" align="center" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
         <text class="n66" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Keep mine</text>
       </row>
-      <row id="sync-use-remote" class="sync-use-remote" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+      <row id="sync-use-remote" class="sync-use-remote" justify="center" align="center" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
         <text class="n68" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Use desktop</text>
       </row>
     </row>

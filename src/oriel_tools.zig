@@ -33,7 +33,7 @@ var bulk_arena: std.heap.ArenaAllocator = undefined;
 var bulk_saving = false;
 const GroupKind = enum { category, account, merchant, fixed, month, special, variable_account, variable_category, planned_category, comparison };
 const Group = struct { name: []const u8, amount: i64 = 0, total: i64 = 0, median: i64 = 0, count: usize = 0, kind: GroupKind, detail: []const u8 = "", account: []const u8 = "", category: []const u8 = "" };
-const Section = enum { budget, fixed, accounts, categories, vendors, special };
+pub const Section = enum { budget, fixed, accounts, categories, vendors, special };
 var report_arena: std.heap.ArenaAllocator = undefined;
 var modal_arena: std.heap.ArenaAllocator = undefined;
 var scanner_arena: std.heap.ArenaAllocator = undefined;
@@ -693,7 +693,7 @@ fn bulk_preview(e: *ui.Engine) !void {
     var config = try std.json.parseFromSliceLeaky(legacy.Settings, a, prior, .{ .ignore_unknown_fields = true, .allocate = .alloc_always });
     var targets: std.ArrayList(prefs.Target) = .empty;
     var ids: std.ArrayList(i64) = .empty;
-    for (f.s.snapshot.?.value.expenses) |row| if (f.period(e).matches(row, f.settings()) and f.reports.contains(row.payee, pattern) and (!bulk_only_other or f.reports.uncategorized(row, f.settings()))) {
+    for (f.s.snapshot.?.value.expenses) |row| if ((!@import("oriel_desktop.zig").has_selection() or @import("oriel_desktop.zig").selected(row.id)) and f.period(e).matches(row, f.settings()) and f.reports.contains(row.payee, pattern) and (!bulk_only_other or f.reports.uncategorized(row, f.settings()))) {
         const base = 560000 + @as(i64, @intCast(targets.items.len)) * 16;
         var amount: [48]u8 = undefined;
         try f.supporting(e, base, try std.fmt.allocPrint(a, "{s} · {s} · {s}", .{ row.date, row.payee, try f.reports.money(&amount, row.amount) }));
@@ -784,11 +784,14 @@ fn reset_modal() void {
     _ = modal_arena.reset(.free_all);
 }
 fn open_preferences(e: *ui.Engine, chosen: Section) !void {
+    try open_preferences_from(e, chosen, f.s.snapshot.?.value.settings);
+}
+fn open_preferences_from(e: *ui.Engine, chosen: Section, base_settings: []const u8) !void {
     reset_modal();
     mapping_count = 0;
     section = chosen;
     const a = modal_arena.allocator();
-    expected = try a.dupe(u8, f.s.snapshot.?.value.settings);
+    expected = try a.dupe(u8, base_settings);
     try @import("core/json_limits.zig").check(expected);
     original = try std.json.parseFromSliceLeaky(legacy.Settings, a, expected, .{ .ignore_unknown_fields = true, .allocate = .alloc_always });
     try open(e, .preferences);
@@ -840,6 +843,18 @@ fn open_preferences(e: *ui.Engine, chosen: Section) !void {
     }
     try mapping_kids(e);
 }
+pub const PreferencesDraft = struct { section: Section, expected: []const u8, rows: usize };
+pub fn preferences_draft() ?PreferencesDraft {
+    if (f.s.modal != .preferences) return null;
+    return .{ .section = section, .expected = expected, .rows = mapping_count };
+}
+pub fn restore_preferences(e: *ui.Engine, draft: PreferencesDraft) !void {
+    if (draft.rows > 1000) return error.TooManyRules;
+    try open_preferences_from(e, draft.section, draft.expected);
+    while (mapping_count < draft.rows) try mapping(e, "", "", 0);
+    if (draft.section != .budget) try mapping_kids(e);
+}
+
 fn save_preferences(e: *ui.Engine) !void {
     if (f.s.busy) return;
     const a = modal_arena.allocator();

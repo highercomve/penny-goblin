@@ -9,6 +9,28 @@
     search: background=#272b27 color=#e0e4dc
     field: border-color=#8c938a color=#e0e4dc
   }
+
+  @when (hover) {
+    add: background=#d0e4c5
+    apply: background=#d0e4c5
+    back: background=#d0e4c5
+    review: background=#d0e4c5
+    rules: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    add: background=#384a3b
+    apply: background=#384a3b
+    back: background=#384a3b
+    review: background=#384a3b
+    rules: background=#384a3b
+  }
+  @when (focus) {
+    add: outline=2,-2,#e59700 outline-halo=#111511
+    apply: outline=2,-2,#e59700 outline-halo=#111511
+    back: outline=2,-2,#e59700 outline-halo=#111511
+    review: outline=2,-2,#e59700 outline-halo=#111511
+    rules: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <column id="category-picker" class="surface" position="absolute" top="0" left="0" width="640" height="720" padding="16" gap="16" z="2147483647" radius="28">
  <row align="center" gap="8" shrink="0">

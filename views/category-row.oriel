@@ -9,6 +9,28 @@
     amount: color=#e0e4dc
     bar: background=#9ad4ae
   }
+
+  @when (hover) {
+    amount: background=#d0e4c5
+    bar: background=#d0e4c5
+    category-row: background=#d0e4c5
+    detail: background=#d0e4c5
+    title: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    amount: background=#384a3b
+    bar: background=#384a3b
+    category-row: background=#384a3b
+    detail: background=#384a3b
+    title: background=#384a3b
+  }
+  @when (focus) {
+    amount: outline=2,-2,#e59700 outline-halo=#111511
+    bar: outline=2,-2,#e59700 outline-halo=#111511
+    category-row: outline=2,-2,#e59700 outline-halo=#111511
+    detail: outline=2,-2,#e59700 outline-halo=#111511
+    title: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <row id="category-row" justify="flex-start" align="center" width="100%" min-height="56" padding="8,4,14,4" row-gap="16" column-gap="16" radius="8" clickable="true" unset="shrink color font-size">
   <view grow="1" shrink="1" basis="0%" min-width="0" clickable="true">

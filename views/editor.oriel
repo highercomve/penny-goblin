@@ -123,11 +123,81 @@
     editor: background=#111511
     n3: background=#111511
   }
+
+  @when (hover) {
+    analyze: background=#d0e4c5
+    camera-file: background=#d0e4c5
+    camera-label: background=#d0e4c5
+    cancel-analysis: background=#d0e4c5
+    cancel-delete: background=#d0e4c5
+    choose-category: background=#d0e4c5
+    close-editor: background=#d0e4c5
+    confirm-delete: background=#d0e4c5
+    delete: background=#d0e4c5
+    details-toggle: background=#d0e4c5
+    extraction-toggle: background=#d0e4c5
+    manual-fallback: background=#d0e4c5
+    n13: background=#d0e4c5
+    n15: background=#d0e4c5
+    n20: background=#d0e4c5
+    n41: background=#d0e4c5
+    n44: background=#d0e4c5
+    receipt-file: background=#d0e4c5
+    remove-image: background=#d0e4c5
+    save: background=#d0e4c5
+    scanner-setup: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    analyze: background=#384a3b
+    camera-file: background=#384a3b
+    camera-label: background=#384a3b
+    cancel-analysis: background=#384a3b
+    cancel-delete: background=#384a3b
+    choose-category: background=#384a3b
+    close-editor: background=#384a3b
+    confirm-delete: background=#384a3b
+    delete: background=#384a3b
+    details-toggle: background=#384a3b
+    extraction-toggle: background=#384a3b
+    manual-fallback: background=#384a3b
+    n13: background=#384a3b
+    n15: background=#384a3b
+    n20: background=#384a3b
+    n41: background=#384a3b
+    n44: background=#384a3b
+    receipt-file: background=#384a3b
+    remove-image: background=#384a3b
+    save: background=#384a3b
+    scanner-setup: background=#384a3b
+  }
+  @when (focus) {
+    analyze: outline=2,-2,#e59700 outline-halo=#111511
+    camera-file: outline=2,-2,#e59700 outline-halo=#111511
+    camera-label: outline=2,-2,#e59700 outline-halo=#111511
+    cancel-analysis: outline=2,-2,#e59700 outline-halo=#111511
+    cancel-delete: outline=2,-2,#e59700 outline-halo=#111511
+    choose-category: outline=2,-2,#e59700 outline-halo=#111511
+    close-editor: outline=2,-2,#e59700 outline-halo=#111511
+    confirm-delete: outline=2,-2,#e59700 outline-halo=#111511
+    delete: outline=2,-2,#e59700 outline-halo=#111511
+    details-toggle: outline=2,-2,#e59700 outline-halo=#111511
+    extraction-toggle: outline=2,-2,#e59700 outline-halo=#111511
+    manual-fallback: outline=2,-2,#e59700 outline-halo=#111511
+    n13: outline=2,-2,#e59700 outline-halo=#111511
+    n15: outline=2,-2,#e59700 outline-halo=#111511
+    n20: outline=2,-2,#e59700 outline-halo=#111511
+    n41: outline=2,-2,#e59700 outline-halo=#111511
+    n44: outline=2,-2,#e59700 outline-halo=#111511
+    receipt-file: outline=2,-2,#e59700 outline-halo=#111511
+    remove-image: outline=2,-2,#e59700 outline-halo=#111511
+    save: outline=2,-2,#e59700 outline-halo=#111511
+    scanner-setup: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <view id="editor" class="editor" scroll="true" scroll-x="true" unset="shrink color font-size">
   <view id="expense-form">
     <row class="n3" align="center" min-height="64" row-gap="4" column-gap="4" sticky="0,auto,auto,auto" z="2">
-      <row id="close-editor" justify="center" align="center" width="48" height="48" min-height="40" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
+      <row id="close-editor" justify="center" align="center" width="48" height="48" min-height="48" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
         <icon class="n5" grow="0" shrink="0" width="24" height="24" clickable="true">
           <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
         </icon>
@@ -135,7 +205,7 @@
       <view id="editor-title" grow="1" shrink="1" basis="0%" clip="true">
         <text class="n7" shrink="0" font-size="22" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Payment</text>
       </view>
-      <row id="save" class="save" justify="center" align="center" grow="0" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
+      <row id="save" class="save" justify="center" align="center" grow="0" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
         <text class="n9" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Save</text>
       </row>
     </row>
@@ -164,10 +234,10 @@
           </view>
         </view>
       </row>
-      <row id="scanner-setup" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+      <row id="scanner-setup" justify="center" align="center" min-height="48" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
         <text class="n24" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Choose scanner</text>
       </row>
-      <row id="manual-fallback" justify="center" align="center" min-height="40" margin="0,auto,8,auto" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+      <row id="manual-fallback" justify="center" align="center" min-height="48" margin="0,auto,8,auto" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
         <text class="n26" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Enter manually</text>
       </row>
       <view id="pending-evidence" margin="4,0,12,0">
@@ -176,10 +246,10 @@
           <canvas id="scan-sweep" shrink="0" width="100%" height="100%" position="absolute" top="0" right="0" bottom="0" left="0" pixel-width="300" pixel-height="150" />
         </view>
         <row id="image-actions" wrap="wrap" align="center" margin="0" row-gap="8" column-gap="8">
-          <row id="analyze" class="analyze" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" opacity="0.38" clickable="true" disabled="true" unset="shrink">
+          <row id="analyze" class="analyze" justify="center" align="center" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" opacity="0.38" clickable="true" disabled="true" unset="shrink">
             <text class="n33" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Scan again</text>
           </row>
-          <row id="remove-image" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+          <row id="remove-image" justify="center" align="center" min-height="48" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
             <text class="n35" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Remove</text>
           </row>
         </row>
@@ -241,20 +311,20 @@
       <view id="delete-confirm" class="delete-confirm" margin="12,0,0,0" padding="16" radius="16">
         <text class="n71" shrink="0" margin="0,0,12,0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Delete this payment?</text>
         <row wrap="wrap" justify="flex-end" align="center" margin="0" row-gap="8" column-gap="8">
-          <row id="cancel-delete" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+          <row id="cancel-delete" justify="center" align="center" min-height="48" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
             <text class="n74" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Keep</text>
           </row>
-          <row id="confirm-delete" class="confirm-delete" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+          <row id="confirm-delete" class="confirm-delete" justify="center" align="center" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
             <text shrink="1" color="#ffffff" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Delete</text>
           </row>
         </row>
       </view>
     </view>
     <row justify="center" align="center" margin="0">
-      <row id="delete" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+      <row id="delete" justify="center" align="center" min-height="48" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
         <text class="n79" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Delete</text>
       </row>
-      <row id="cancel-analysis" class="cancel-analysis" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+      <row id="cancel-analysis" class="cancel-analysis" justify="center" align="center" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
         <text class="n81" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Cancel scan</text>
       </row>
     </row>

@@ -9,6 +9,16 @@
     detail: color-scheme=dark background=#1d211d
     n6: color=#e0e4dc
   }
+
+  @when (hover) {
+    toggle: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    toggle: background=#384a3b
+  }
+  @when (focus) {
+    toggle: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <view id="evidence" margin="12,0,12,0" unset="color font-size">
   <image id="image" class="image" shrink="0" width="100%" max-height="320" margin="0,0,8,0" radius="16" src="logo.png" fit="contain" />

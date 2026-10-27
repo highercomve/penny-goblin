@@ -101,10 +101,50 @@
     scanner-gpu: background="rgba(101.595955, 105.92715, 99.60878, 1)"
     n33: background="rgba(131.72011, 138.72011, 130.05132, 1)"
   }
+
+  @when (hover) {
+    close-scanner: background=#d0e4c5
+    model: background=#d0e4c5
+    n29: background=#d0e4c5
+    n30: background=#d0e4c5
+    n33: background=#d0e4c5
+    projector: background=#d0e4c5
+    scanner-fast: background=#d0e4c5
+    scanner-fast-row: background=#d0e4c5
+    scanner-gpu: background=#d0e4c5
+    scanner-gpu-label: background=#d0e4c5
+    scanner-gpu-row: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    close-scanner: background=#384a3b
+    model: background=#384a3b
+    n29: background=#384a3b
+    n30: background=#384a3b
+    n33: background=#384a3b
+    projector: background=#384a3b
+    scanner-fast: background=#384a3b
+    scanner-fast-row: background=#384a3b
+    scanner-gpu: background=#384a3b
+    scanner-gpu-label: background=#384a3b
+    scanner-gpu-row: background=#384a3b
+  }
+  @when (focus) {
+    close-scanner: outline=2,-2,#e59700 outline-halo=#111511
+    model: outline=2,-2,#e59700 outline-halo=#111511
+    n29: outline=2,-2,#e59700 outline-halo=#111511
+    n30: outline=2,-2,#e59700 outline-halo=#111511
+    n33: outline=2,-2,#e59700 outline-halo=#111511
+    projector: outline=2,-2,#e59700 outline-halo=#111511
+    scanner-fast: outline=2,-2,#e59700 outline-halo=#111511
+    scanner-fast-row: outline=2,-2,#e59700 outline-halo=#111511
+    scanner-gpu: outline=2,-2,#e59700 outline-halo=#111511
+    scanner-gpu-label: outline=2,-2,#e59700 outline-halo=#111511
+    scanner-gpu-row: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <view id="scanner-page" class="scanner-page" scroll="true" scroll-x="true" unset="shrink color font-size">
   <row class="n2" align="center" min-height="64" row-gap="4" column-gap="4" sticky="0,auto,auto,auto" z="2">
-    <row id="close-scanner" justify="center" align="center" width="48" height="48" min-height="40" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
+    <row id="close-scanner" justify="center" align="center" width="48" height="48" min-height="48" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
       <icon class="n4" grow="0" shrink="0" width="24" height="24" clickable="true">
         <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
       </icon>
@@ -132,21 +172,21 @@
     <view id="scanner-custom-row" />
     <text class="n21" shrink="0" padding="12,0,12,0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">A GGUF vision model and its matching projector (mmproj).</text>
     <row wrap="wrap" align="center" margin="12,0,0,0" padding="0,12,12,12" row-gap="8" column-gap="8">
-      <row id="model" class="model" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" opacity="0.38" clickable="true" disabled="true" unset="shrink">
+      <row id="model" class="model" justify="center" align="center" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" opacity="0.38" clickable="true" disabled="true" unset="shrink">
         <text class="n24" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Load model file</text>
       </row>
-      <row id="projector" class="projector" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" opacity="0.38" clickable="true" disabled="true" unset="shrink">
+      <row id="projector" class="projector" justify="center" align="center" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" opacity="0.38" clickable="true" disabled="true" unset="shrink">
         <text class="n26" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Load projector file</text>
       </row>
     </row>
   </view>
-  <row id="scanner-fast-row" align="center" min-height="44" row-gap="12" column-gap="12" clickable="true">
+  <row id="scanner-fast-row" align="center" min-height="48" row-gap="12" column-gap="12" clickable="true">
     <view id="scanner-fast" class="scanner-fast" grow="0" width="52" height="32" margin="3,2,3,2" padding="1" border-width="2" radius="16" clickable="true" label="Fast scan: read text first, use the model only when a field is missing">
       <view class="n29" width="16" height="16" position="absolute" top="6" left="6" radius="50%" clickable="true" unset="shrink right bottom" />
     </view>
     <text class="n30" clickable="true" font-size="14" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Fast scan: read text first, use the model only when a field is missing</text>
   </row>
-  <row id="scanner-gpu-row" align="center" min-height="44" row-gap="12" column-gap="12" clickable="true">
+  <row id="scanner-gpu-row" align="center" min-height="48" row-gap="12" column-gap="12" clickable="true">
     <view id="scanner-gpu" class="scanner-gpu" grow="0" width="52" height="32" margin="3,2,3,2" padding="1" border-width="2" radius="16" clickable="true" label="Use GPU">
       <view class="n33" width="16" height="16" position="absolute" top="6" left="6" radius="50%" clickable="true" unset="shrink right bottom" />
     </view>

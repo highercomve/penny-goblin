@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit
 
 class SyncExtension : OrielAppExtension, OrielAndroidHooks {
     private var context: OrielExtensionContext? = null
+    private fun comparisonWindow() = android.app.Application.getProcessName().endsWith(":compare")
 
     // Oriel constructs one instance for extension calls and another for hooks;
     // the request-code namespace and the pending scan must be shared by both.
@@ -21,18 +22,21 @@ class SyncExtension : OrielAppExtension, OrielAndroidHooks {
 
     override fun onRegistered(context: OrielAndroidHooksContext) { hooks = context }
     override fun onActivityResumed(activity: Activity) {
+        if (comparisonWindow()) return
         val engine = SyncEngine.get(activity)
         engine.foreground = true
         engine.discover()
         engine.queueWork()
     }
     override fun onLoad(ctx: OrielExtensionContext) {
+        if (comparisonWindow()) return
         context = ctx
         val engine = SyncEngine.get(ctx.context)
         engine.foreground = ctx.activity != null
         engine.listener = { changed -> ctx.emit("sync", JSONObject().put("changed", changed).toString().toByteArray()) }
     }
     override fun onLifecycle(event: String, level: String?) {
+        if (comparisonWindow()) return
         val ctx = context ?: return
         if (event == "foreground" || event == "background") {
             val engine = SyncEngine.get(ctx.context)
@@ -48,6 +52,7 @@ class SyncExtension : OrielAppExtension, OrielAndroidHooks {
     }
 
     override fun call(method: String, input: ByteArray, call: OrielCall): ByteArray {
+        check(!comparisonWindow()) { "OpenPrimaryWindowForSync" }
         val args = JSONObject(String(input, Charsets.UTF_8))
         val engine = SyncEngine.get(call.context)
         try {
