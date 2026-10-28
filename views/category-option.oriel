@@ -5,6 +5,16 @@
     item: color=#e0e4dc
     detail: color=#c2c9c0
   }
+
+  @when (hover) {
+    item: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    item: background=#384a3b
+  }
+  @when (focus) {
+    item: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <row id="item" class="item" min-height="56" padding="8,24,8,16" gap="16" align="center" clickable="true" radius="12" shrink="0">
  <column grow="1" min-width="0" gap="4"><text font-size="16">{text}</text><text id="detail" class="detail" font-size="14">{detail}</text></column>

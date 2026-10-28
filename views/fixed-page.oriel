@@ -35,10 +35,23 @@
     n2: background=#111511
     fixed-list: background=#191d19
   }
+
+  @when (hover) {
+    close-fixed: background=#d0e4c5
+    edit-fixed: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    close-fixed: background=#384a3b
+    edit-fixed: background=#384a3b
+  }
+  @when (focus) {
+    close-fixed: outline=2,-2,#e59700 outline-halo=#111511
+    edit-fixed: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <view id="fixed-page" class="fixed-page" scroll="true" scroll-x="true" unset="shrink color font-size">
   <row class="n2" align="center" min-height="64" row-gap="4" column-gap="4" sticky="0,auto,auto,auto" z="2">
-    <row id="close-fixed" justify="center" align="center" width="48" height="48" min-height="40" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
+    <row id="close-fixed" justify="center" align="center" width="48" height="48" min-height="48" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
       <icon class="n4" grow="0" shrink="0" width="24" height="24" clickable="true">
         <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
       </icon>
@@ -46,7 +59,7 @@
     <view id="fixed-title" grow="1" shrink="1" basis="0%" clip="true">
       <text class="n6" shrink="0" font-size="22" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Fixed expenses</text>
     </view>
-    <row id="edit-fixed" justify="center" align="center" grow="0" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true">
+    <row id="edit-fixed" justify="center" align="center" grow="0" min-height="48" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true">
       <text class="n8" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Edit</text>
     </row>
   </row>

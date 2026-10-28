@@ -9,6 +9,22 @@
     theme2: color=#9ad4ae background=#384a3b
     theme3: color=#ffb4ab
   }
+
+  @when (hover) {
+    theme0: background=#d0e4c5
+    theme2: background=#d0e4c5
+    theme3: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    theme0: background=#384a3b
+    theme2: background=#384a3b
+    theme3: background=#384a3b
+  }
+  @when (focus) {
+    theme0: outline=2,-2,#e59700 outline-halo=#111511
+    theme2: outline=2,-2,#e59700 outline-halo=#111511
+    theme3: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <row class="theme0" id="item" min-height="60" padding="12,8,12,8" gap="12" align="center" clickable="true">
   <column grow="1" min-width="0" gap="3"><text id="title" font-size="15">{title}</text><text class="theme1" id="detail" font-size="13">{detail}</text></column>

@@ -473,6 +473,205 @@
     n247: background=#1d211d
     n270: color=#c4ef9a
   }
+
+  @when (hover) {
+    audit-other: background=#d0e4c5
+    bulk-apply: background=#d0e4c5
+    bulk-cancel: background=#d0e4c5
+    bulk-details-toggle: background=#d0e4c5
+    bulk-only-other: background=#d0e4c5
+    bulk-preview-button: background=#d0e4c5
+    bulk-remember: background=#d0e4c5
+    chart-fixed: background=#d0e4c5
+    clear-drilldown: background=#d0e4c5
+    clear-filters: background=#d0e4c5
+    clear-ledger: background=#d0e4c5
+    export-report: background=#d0e4c5
+    fixed-paid: background=#d0e4c5
+    fixed-planned: background=#d0e4c5
+    hide-to-tray: background=#d0e4c5
+    legacy-file: background=#d0e4c5
+    n110: background=#d0e4c5
+    n111: background=#d0e4c5
+    n114: background=#d0e4c5
+    n115: background=#d0e4c5
+    n139: background=#d0e4c5
+    n140: background=#d0e4c5
+    n154: background=#d0e4c5
+    n193: background=#d0e4c5
+    n197: background=#d0e4c5
+    n201: background=#d0e4c5
+    n205: background=#d0e4c5
+    n209: background=#d0e4c5
+    n213: background=#d0e4c5
+    n220: background=#d0e4c5
+    n228: background=#d0e4c5
+    n232: background=#d0e4c5
+    n236: background=#d0e4c5
+    n242: background=#d0e4c5
+    n245: background=#d0e4c5
+    n251: background=#d0e4c5
+    n253: background=#d0e4c5
+    n257: background=#d0e4c5
+    n261: background=#d0e4c5
+    n265: background=#d0e4c5
+    n270: background=#d0e4c5
+    n38: background=#d0e4c5
+    n55: background=#d0e4c5
+    nav-home: background=#d0e4c5
+    nav-insights: background=#d0e4c5
+    nav-payments: background=#d0e4c5
+    nav-settings: background=#d0e4c5
+    new-expense: background=#d0e4c5
+    new-receipt: background=#d0e4c5
+    open-fixed: background=#d0e4c5
+    open-scanner: background=#d0e4c5
+    open-statements: background=#d0e4c5
+    open-sync: background=#d0e4c5
+    pref-accounts: background=#d0e4c5
+    pref-budget: background=#d0e4c5
+    pref-categories: background=#d0e4c5
+    pref-fixed: background=#d0e4c5
+    pref-special: background=#d0e4c5
+    pref-vendors: background=#d0e4c5
+    quit: background=#d0e4c5
+    range-toggle: background=#d0e4c5
+    refresh: background=#d0e4c5
+    research-open: background=#d0e4c5
+    settings-model-summary: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    audit-other: background=#384a3b
+    bulk-apply: background=#384a3b
+    bulk-cancel: background=#384a3b
+    bulk-details-toggle: background=#384a3b
+    bulk-only-other: background=#384a3b
+    bulk-preview-button: background=#384a3b
+    bulk-remember: background=#384a3b
+    chart-fixed: background=#384a3b
+    clear-drilldown: background=#384a3b
+    clear-filters: background=#384a3b
+    clear-ledger: background=#384a3b
+    export-report: background=#384a3b
+    fixed-paid: background=#384a3b
+    fixed-planned: background=#384a3b
+    hide-to-tray: background=#384a3b
+    legacy-file: background=#384a3b
+    n110: background=#384a3b
+    n111: background=#384a3b
+    n114: background=#384a3b
+    n115: background=#384a3b
+    n139: background=#384a3b
+    n140: background=#384a3b
+    n154: background=#384a3b
+    n193: background=#384a3b
+    n197: background=#384a3b
+    n201: background=#384a3b
+    n205: background=#384a3b
+    n209: background=#384a3b
+    n213: background=#384a3b
+    n220: background=#384a3b
+    n228: background=#384a3b
+    n232: background=#384a3b
+    n236: background=#384a3b
+    n242: background=#384a3b
+    n245: background=#384a3b
+    n251: background=#384a3b
+    n253: background=#384a3b
+    n257: background=#384a3b
+    n261: background=#384a3b
+    n265: background=#384a3b
+    n270: background=#384a3b
+    n38: background=#384a3b
+    n55: background=#384a3b
+    nav-home: background=#384a3b
+    nav-insights: background=#384a3b
+    nav-payments: background=#384a3b
+    nav-settings: background=#384a3b
+    new-expense: background=#384a3b
+    new-receipt: background=#384a3b
+    open-fixed: background=#384a3b
+    open-scanner: background=#384a3b
+    open-statements: background=#384a3b
+    open-sync: background=#384a3b
+    pref-accounts: background=#384a3b
+    pref-budget: background=#384a3b
+    pref-categories: background=#384a3b
+    pref-fixed: background=#384a3b
+    pref-special: background=#384a3b
+    pref-vendors: background=#384a3b
+    quit: background=#384a3b
+    range-toggle: background=#384a3b
+    refresh: background=#384a3b
+    research-open: background=#384a3b
+    settings-model-summary: background=#384a3b
+  }
+  @when (focus) {
+    audit-other: outline=2,-2,#e59700 outline-halo=#111511
+    bulk-apply: outline=2,-2,#e59700 outline-halo=#111511
+    bulk-cancel: outline=2,-2,#e59700 outline-halo=#111511
+    bulk-details-toggle: outline=2,-2,#e59700 outline-halo=#111511
+    bulk-only-other: outline=2,-2,#e59700 outline-halo=#111511
+    bulk-preview-button: outline=2,-2,#e59700 outline-halo=#111511
+    bulk-remember: outline=2,-2,#e59700 outline-halo=#111511
+    chart-fixed: outline=2,-2,#e59700 outline-halo=#111511
+    clear-drilldown: outline=2,-2,#e59700 outline-halo=#111511
+    clear-filters: outline=2,-2,#e59700 outline-halo=#111511
+    clear-ledger: outline=2,-2,#e59700 outline-halo=#111511
+    export-report: outline=2,-2,#e59700 outline-halo=#111511
+    fixed-paid: outline=2,-2,#e59700 outline-halo=#111511
+    fixed-planned: outline=2,-2,#e59700 outline-halo=#111511
+    hide-to-tray: outline=2,-2,#e59700 outline-halo=#111511
+    legacy-file: outline=2,-2,#e59700 outline-halo=#111511
+    n110: outline=2,-2,#e59700 outline-halo=#111511
+    n111: outline=2,-2,#e59700 outline-halo=#111511
+    n114: outline=2,-2,#e59700 outline-halo=#111511
+    n115: outline=2,-2,#e59700 outline-halo=#111511
+    n139: outline=2,-2,#e59700 outline-halo=#111511
+    n140: outline=2,-2,#e59700 outline-halo=#111511
+    n154: outline=2,-2,#e59700 outline-halo=#111511
+    n193: outline=2,-2,#e59700 outline-halo=#111511
+    n197: outline=2,-2,#e59700 outline-halo=#111511
+    n201: outline=2,-2,#e59700 outline-halo=#111511
+    n205: outline=2,-2,#e59700 outline-halo=#111511
+    n209: outline=2,-2,#e59700 outline-halo=#111511
+    n213: outline=2,-2,#e59700 outline-halo=#111511
+    n220: outline=2,-2,#e59700 outline-halo=#111511
+    n228: outline=2,-2,#e59700 outline-halo=#111511
+    n232: outline=2,-2,#e59700 outline-halo=#111511
+    n236: outline=2,-2,#e59700 outline-halo=#111511
+    n242: outline=2,-2,#e59700 outline-halo=#111511
+    n245: outline=2,-2,#e59700 outline-halo=#111511
+    n251: outline=2,-2,#e59700 outline-halo=#111511
+    n253: outline=2,-2,#e59700 outline-halo=#111511
+    n257: outline=2,-2,#e59700 outline-halo=#111511
+    n261: outline=2,-2,#e59700 outline-halo=#111511
+    n265: outline=2,-2,#e59700 outline-halo=#111511
+    n270: outline=2,-2,#e59700 outline-halo=#111511
+    n38: outline=2,-2,#e59700 outline-halo=#111511
+    n55: outline=2,-2,#e59700 outline-halo=#111511
+    nav-home: outline=2,-2,#e59700 outline-halo=#111511
+    nav-insights: outline=2,-2,#e59700 outline-halo=#111511
+    nav-payments: outline=2,-2,#e59700 outline-halo=#111511
+    nav-settings: outline=2,-2,#e59700 outline-halo=#111511
+    new-expense: outline=2,-2,#e59700 outline-halo=#111511
+    new-receipt: outline=2,-2,#e59700 outline-halo=#111511
+    open-fixed: outline=2,-2,#e59700 outline-halo=#111511
+    open-scanner: outline=2,-2,#e59700 outline-halo=#111511
+    open-statements: outline=2,-2,#e59700 outline-halo=#111511
+    open-sync: outline=2,-2,#e59700 outline-halo=#111511
+    pref-accounts: outline=2,-2,#e59700 outline-halo=#111511
+    pref-budget: outline=2,-2,#e59700 outline-halo=#111511
+    pref-categories: outline=2,-2,#e59700 outline-halo=#111511
+    pref-fixed: outline=2,-2,#e59700 outline-halo=#111511
+    pref-special: outline=2,-2,#e59700 outline-halo=#111511
+    pref-vendors: outline=2,-2,#e59700 outline-halo=#111511
+    quit: outline=2,-2,#e59700 outline-halo=#111511
+    range-toggle: outline=2,-2,#e59700 outline-halo=#111511
+    refresh: outline=2,-2,#e59700 outline-halo=#111511
+    research-open: outline=2,-2,#e59700 outline-halo=#111511
+    settings-model-summary: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <view class="n1" root="true" unset="shrink color font-size">
   <view class="n2" grow="1" shrink="1" scroll="true">
@@ -480,7 +679,7 @@
       <view class="n4" min-height="820">
         <row class="n5" align="center" height="64" row-gap="8" column-gap="8" sticky="0,auto,auto,auto" z="5">
           <text id="view-title" class="view-title" grow="1" shrink="1" basis="0%" font-size="22" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Penny Goblin</text>
-          <row id="refresh" justify="center" align="center" width="48" height="48" min-height="40" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
+          <row id="refresh" justify="center" align="center" width="48" height="48" min-height="48" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
             <icon class="n8" grow="0" shrink="0" width="24" height="24" clickable="true">
               <path d="M19 12a7 7 0 1 1-2.05-4.95M19 4v4h-4" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
             </icon>
@@ -494,7 +693,7 @@
                 <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
                   <text class="n15" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Month</text>
                 </view>
-                <select id="month" class="month" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="2026-10" no-arrow="true" label="Month">
+                <select id="month" class="month" direction="row" align="center" grow="0" height="32" min-height="48" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="2026-10" no-arrow="true" label="Month">
                   <option value="">All months</option>
                   <option value="2026-10">October 2026</option>
                 </select>
@@ -505,7 +704,7 @@
                 <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
                   <text class="n21" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Account</text>
                 </view>
-                <select id="account-filter" class="account-filter" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="" no-arrow="true" label="Account">
+                <select id="account-filter" class="account-filter" direction="row" align="center" grow="0" height="32" min-height="48" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="" no-arrow="true" label="Account">
                   <option value="">All accounts</option>
                   <option value="1234">Household · 1234</option>
                 </select>
@@ -529,7 +728,7 @@
                   <text class="n35" shrink="0" margin="0,0,4,0" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.5">Left this month</text>
                   <text id="budget-forecast" class="budget-forecast" shrink="0" margin="0" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">$687.655</text>
                 </view>
-                <view id="open-fixed" justify="center" grow="1" shrink="1" basis="0%" min-width="0" min-height="0" radius="8" clickable="true">
+                <view id="open-fixed" justify="center" grow="1" shrink="1" basis="0%" min-width="0" min-height="48" radius="8" clickable="true">
                   <text class="n38" shrink="0" margin="0,0,4,0" clickable="true" font-size="12" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.5">Fixed ›</text>
                   <text id="fixed-planned" class="fixed-planned" shrink="0" margin="0,0,2,0" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">$300.000</text>
                   <text id="fixed-paid" class="fixed-paid" shrink="0" margin="0" clickable="true" font-size="12" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">$0 paid</text>
@@ -572,7 +771,7 @@
                 <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
                   <text class="n64" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Category</text>
                 </view>
-                <select id="category-filter" class="category-filter" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="" no-arrow="true" label="Category">
+                <select id="category-filter" class="category-filter" direction="row" align="center" grow="0" height="32" min-height="48" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="" no-arrow="true" label="Category">
                   <option value="">All categories</option>
                   <option value="Groceries">Groceries</option>
                 </select>
@@ -583,7 +782,7 @@
                 <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
                   <text class="n70" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Sort</text>
                 </view>
-                <select id="ledger-sort" class="ledger-sort" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="newest" no-arrow="true" label="Sort">
+                <select id="ledger-sort" class="ledger-sort" direction="row" align="center" grow="0" height="32" min-height="48" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="newest" no-arrow="true" label="Sort">
                   <option value="newest">Newest</option>
                   <option value="oldest">Oldest</option>
                   <option value="highest">Highest</option>
@@ -591,21 +790,21 @@
                 </select>
                 <view class="n72" width="6" height="6" border-width="0,1,1,0" position="absolute" top="12" right="13" rotate="45" pointer-events="none" box-sizing="content-box" unset="shrink bottom left" />
               </row>
-              <row id="audit-other" class="audit-other" justify="center" align="center" grow="0" height="32" min-height="32" padding="0,16,0,16" border-width="1" row-gap="6" column-gap="6" radius="8" clickable="true">
+              <row id="audit-other" class="audit-other" justify="center" align="center" grow="0" height="32" min-height="48" padding="0,16,0,16" border-width="1" row-gap="6" column-gap="6" radius="8" clickable="true">
                 <text class="n74" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Uncategorized</text>
               </row>
-              <row id="research-open" class="research-open" justify="center" align="center" grow="0" height="32" min-height="32" padding="0,16,0,16" border-width="1" row-gap="6" column-gap="6" radius="8" clickable="true">
+              <row id="research-open" class="research-open" justify="center" align="center" grow="0" height="32" min-height="48" padding="0,16,0,16" border-width="1" row-gap="6" column-gap="6" radius="8" clickable="true">
                 <text class="n76" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Research categories</text>
               </row>
-              <row id="clear-drilldown" class="clear-drilldown" justify="center" align="center" grow="0" height="32" min-height="32" padding="0,16,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true">
+              <row id="clear-drilldown" class="clear-drilldown" justify="center" align="center" grow="0" height="32" min-height="48" padding="0,16,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true">
                 <text class="n78" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Clear filter</text>
               </row>
-              <row id="clear-ledger" class="clear-ledger" justify="center" align="center" grow="0" height="32" min-height="32" padding="0,16,0,16" border-width="1" row-gap="6" column-gap="6" radius="8" clickable="true">
+              <row id="clear-ledger" class="clear-ledger" justify="center" align="center" grow="0" height="32" min-height="48" padding="0,16,0,16" border-width="1" row-gap="6" column-gap="6" radius="8" clickable="true">
                 <text class="n80" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Reset</text>
               </row>
             </row>
             <view>
-              <row id="range-toggle" class="range-toggle" align="center" align-self="flex-start" grow="0" height="32" min-height="32" padding="0,16,0,16" border-width="1" row-gap="6" column-gap="6" radius="8" clickable="true">
+              <row id="range-toggle" class="range-toggle" align="center" align-self="flex-start" grow="0" height="32" min-height="48" padding="0,16,0,16" border-width="1" row-gap="6" column-gap="6" radius="8" clickable="true">
                 <icon class="n83" grow="0" shrink="0" width="18" height="18" clickable="true">
                   <path d="M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2z" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
                   <path d="M4 10h16M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
@@ -622,7 +821,7 @@
                     <text class="n91" shrink="1" font-size="12" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">To</text>
                     <input id="date-through" class="date-through" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" type="date" autocapitalize="sentences" label="To" unset="shrink" />
                   </view>
-                  <row id="clear-filters" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+                  <row id="clear-filters" justify="center" align="center" min-height="48" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
                     <text class="n94" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">All time</text>
                   </row>
                 </row>
@@ -643,19 +842,19 @@
                     <input id="bulk-category" class="bulk-category" width="100%" min-height="52" padding="14,16,14,16" border-width="1" radius="8" font-size="16" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" placeholder="" cols="20" enterkey="go" autocapitalize="sentences" label="Category" unset="shrink" />
                     <view id="categories-bulk-category-list" class="categories-bulk-category-list" max-height="240" margin="4,0,0,0" padding="4,0,4,0" position="absolute" top="100%" right="0" left="0" scroll="true" radius="8" shadow="0,4,12,0,rgba(0, 0, 0, 0.3)" z="10" unset="shrink bottom" />
                   </view>
-                  <row align="center" min-height="44" margin="0" row-gap="12" column-gap="12" clickable="true">
+                  <row align="center" min-height="48" margin="0" row-gap="12" column-gap="12" clickable="true">
                     <view id="bulk-only-other" class="bulk-only-other" grow="0" width="52" height="32" margin="3,2,3,2" padding="1" border-width="2" radius="16" clickable="true" label="Only uncategorized">
                       <view class="n110" width="24" height="24" position="absolute" top="2" left="22" radius="50%" clickable="true" unset="shrink right bottom" />
                     </view>
                     <text class="n111" clickable="true" font-size="14" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Only uncategorized</text>
                   </row>
-                  <row align="center" min-height="44" row-gap="12" column-gap="12" clickable="true">
+                  <row align="center" min-height="48" row-gap="12" column-gap="12" clickable="true">
                     <view id="bulk-remember" class="bulk-remember" grow="0" width="52" height="32" margin="3,2,3,2" padding="1" border-width="2" radius="16" clickable="true" label="Remember keyword">
                       <view class="n114" width="24" height="24" position="absolute" top="2" left="22" radius="50%" clickable="true" unset="shrink right bottom" />
                     </view>
                     <text class="n115" clickable="true" font-size="14" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Remember keyword</text>
                   </row>
-                  <row id="bulk-preview-button" class="bulk-preview-button" justify="center" align="center" align-self="flex-start" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
+                  <row id="bulk-preview-button" class="bulk-preview-button" justify="center" align="center" align-self="flex-start" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true">
                     <text class="n117" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Preview</text>
                   </row>
                 </view>
@@ -663,10 +862,10 @@
                   <text id="bulk-summary" class="bulk-summary" shrink="0" margin="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">Preview</text>
                   <view id="bulk-matches" margin="0,0,12,0" />
                   <row wrap="wrap" align="center" margin="0" row-gap="8" column-gap="8">
-                    <row id="bulk-cancel" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+                    <row id="bulk-cancel" justify="center" align="center" min-height="48" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
                       <text class="n123" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Cancel</text>
                     </row>
-                    <row id="bulk-apply" class="bulk-apply" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+                    <row id="bulk-apply" class="bulk-apply" justify="center" align="center" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
                       <text class="n125" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Apply</text>
                     </row>
                   </row>
@@ -681,7 +880,7 @@
                 <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
                   <text class="n148" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">From</text>
                 </view>
-                <select id="insights-from" class="comparison-mode" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="2026-10" no-arrow="true" label="From">
+                <select id="insights-from" class="comparison-mode" direction="row" align="center" grow="0" height="32" min-height="48" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="2026-10" no-arrow="true" label="From">
                   <option value="2026-10">From October 2026</option>
                 </select>
                 <view class="n150" width="6" height="6" border-width="0,1,1,0" position="absolute" top="12" right="13" rotate="45" pointer-events="none" box-sizing="content-box" unset="shrink bottom left" />
@@ -691,7 +890,7 @@
                 <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
                   <text class="n148" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Through</text>
                 </view>
-                <select id="insights-to" class="comparison-mode" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="2026-10" no-arrow="true" label="Through">
+                <select id="insights-to" class="comparison-mode" direction="row" align="center" grow="0" height="32" min-height="48" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="2026-10" no-arrow="true" label="Through">
                   <option value="2026-10">Through October 2026</option>
                 </select>
                 <view class="n150" width="6" height="6" border-width="0,1,1,0" position="absolute" top="12" right="13" rotate="45" pointer-events="none" box-sizing="content-box" unset="shrink bottom left" />
@@ -701,7 +900,7 @@
                 <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
                   <text class="n148" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Whole year</text>
                 </view>
-                <select id="insights-year" class="comparison-mode" direction="row" align="center" grow="0" height="32" min-height="32" min-width="136" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="" no-arrow="true" label="Whole year">
+                <select id="insights-year" class="comparison-mode" direction="row" align="center" grow="0" height="32" min-height="48" min-width="136" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="" no-arrow="true" label="Whole year">
                   <option value="">Whole year</option>
                   <option value="2026">2026</option>
                 </select>
@@ -710,7 +909,7 @@
             </row>
             <row justify="space-between" align="center" row-gap="8" column-gap="8">
               <text id="insights-period" class="ledger-filter-hint" grow="1" shrink="1" min-width="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">October 2026</text>
-              <row id="export-report" class="export-report" justify="center" align="center" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+              <row id="export-report" class="export-report" justify="center" align="center" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
                 <text class="n130" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Export report</text>
               </row>
             </row>
@@ -727,14 +926,14 @@
                     <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
                       <text class="n148" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Measure</text>
                     </view>
-                    <select id="category-measure" class="comparison-mode" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="total" no-arrow="true" label="Measure">
+                    <select id="category-measure" class="comparison-mode" direction="row" align="center" grow="0" height="32" min-height="48" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="total" no-arrow="true" label="Measure">
                       <option value="total">Total</option>
                       <option value="median">Monthly median</option>
                     </select>
                     <view class="n150" width="6" height="6" border-width="0,1,1,0" position="absolute" top="12" right="13" rotate="45" pointer-events="none" box-sizing="content-box" unset="shrink bottom left" />
                   </row>
                 </row>
-                <row align="center" min-height="44" margin="0" row-gap="12" column-gap="12" clickable="true">
+                <row align="center" min-height="48" margin="0" row-gap="12" column-gap="12" clickable="true">
                   <view id="chart-fixed" class="chart-fixed" grow="0" width="52" height="32" margin="3,2,3,2" padding="1" border-width="2" radius="16" clickable="true" label="Include planned fixed">
                     <view class="n139" width="16" height="16" position="absolute" top="6" left="6" radius="50%" clickable="true" unset="shrink right bottom" />
                   </view>
@@ -752,7 +951,7 @@
                   <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
                     <text class="n148" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Comparison</text>
                   </view>
-                  <select id="comparison-mode" class="comparison-mode" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="split" no-arrow="true" label="Comparison">
+                  <select id="comparison-mode" class="comparison-mode" direction="row" align="center" grow="0" height="32" min-height="48" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="split" no-arrow="true" label="Comparison">
                     <option value="split">By cardholder</option>
                     <option value="combined">Combined</option>
                   </select>
@@ -779,7 +978,7 @@
                   <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
                     <text class="n163" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Category</text>
                   </view>
-                  <select id="merchant-category" class="merchant-category" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="" no-arrow="true" label="Category">
+                  <select id="merchant-category" class="merchant-category" direction="row" align="center" grow="0" height="32" min-height="48" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="" no-arrow="true" label="Category">
                     <option value="">All categories</option>
                     <option value="Groceries">Groceries</option>
                   </select>
@@ -790,7 +989,7 @@
                   <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
                     <text class="n169" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Group</text>
                   </view>
-                  <select id="merchant-grouping" class="merchant-grouping" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="brand" no-arrow="true" label="Group">
+                  <select id="merchant-grouping" class="merchant-grouping" direction="row" align="center" grow="0" height="32" min-height="48" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="brand" no-arrow="true" label="Group">
                     <option value="brand">By brand</option>
                     <option value="exact">Exact name</option>
                   </select>
@@ -801,7 +1000,7 @@
                   <view width="1" height="1" position="absolute" clip="true" unset="top right bottom left">
                     <text class="n175" shrink="0" font-size="16" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Sort</text>
                   </view>
-                  <select id="merchant-sort" class="merchant-sort" direction="row" align="center" grow="0" height="32" min-height="32" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="spend" no-arrow="true" label="Sort">
+                  <select id="merchant-sort" class="merchant-sort" direction="row" align="center" grow="0" height="32" min-height="48" padding="0,32,0,16" border-width="1" border-color="#00000000" row-gap="6" column-gap="6" radius="8" clickable="true" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" value="spend" no-arrow="true" label="Sort">
                     <option value="spend">Highest</option>
                     <option value="low">Lowest</option>
                     <option value="purchases">Most frequent</option>
@@ -993,13 +1192,13 @@
   </view>
   <view id="status" class="status" max-width="560" margin="0,auto,0,auto" padding="14,16,14,16" position="absolute" translate-y="12" radius="4" opacity="0" shadow="0,3,10,0,rgba(0, 0, 0, 0.25)" pointer-events="none" z="30" unset="shrink" />
   <view id="capture-actions" class="capture-actions" row-gap="12" column-gap="12" position="absolute" z="11" unset="shrink">
-    <view id="new-receipt" class="new-receipt" justify="center" align="center" height="56" min-height="40" radius="16" shadow="0,3,8,0,rgba(0, 0, 0, 0.18)" clickable="true" unset="shrink">
+    <view id="new-receipt" class="new-receipt" justify="center" align="center" height="56" min-height="48" radius="16" shadow="0,3,8,0,rgba(0, 0, 0, 0.18)" clickable="true" unset="shrink">
       <icon class="n269" grow="0" shrink="0" width="24" height="24" clickable="true">
         <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
       </icon>
       <text class="n270" clickable="true" font-size="15" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Scan</text>
     </view>
-    <view id="new-expense" class="new-expense" justify="center" align="center" width="40" height="40" min-height="40" radius="12" shadow="0,3,8,0,rgba(0, 0, 0, 0.18)" clickable="true" unset="shrink">
+    <view id="new-expense" class="new-expense" justify="center" align="center" width="40" height="40" min-height="48" radius="12" shadow="0,3,8,0,rgba(0, 0, 0, 0.18)" clickable="true" unset="shrink">
       <icon class="n272" grow="0" shrink="0" width="24" height="24" clickable="true">
         <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
       </icon>

@@ -103,7 +103,7 @@ pub fn build(b: *std.Build) void {
     // zig build run      run it
     // zig build check    type-check src/ without building
     // zig build package  installers: deb/rpm/AppImage (Linux), setup.exe (Windows), .app/.dmg (macOS)
-    const view_names = [_][]const u8{ "application", "payment", "editor", "preferences-dialog", "fixed-page", "statements-page", "scanner-page", "statement-dialog", "sync-dialog", "item", "mapping", "evidence", "notice", "pager", "backdrop", "evidence-panel", "text", "review-row", "donut", "day", "category-row", "report-row", "comparison", "progress", "scanner-row", "statement-source", "statement-evidence", "suggestion", "sync-device", "sync-conflict", "budget-part", "research-dialog", "research-proposal", "research-source", "category-picker", "category-option" };
+    const view_names = [_][]const u8{ "application", "payment", "editor", "preferences-dialog", "fixed-page", "statements-page", "scanner-page", "statement-dialog", "sync-dialog", "item", "mapping", "evidence", "notice", "pager", "backdrop", "evidence-panel", "text", "review-row", "donut", "day", "category-row", "report-row", "comparison", "progress", "scanner-row", "statement-source", "statement-evidence", "suggestion", "sync-device", "sync-conflict", "budget-part", "research-dialog", "research-proposal", "research-source", "category-picker", "category-option", "desktop-menu" };
     var imports: [view_names.len + 1]std.Build.Module.Import = undefined;
     imports[0] = .{ .name = "penny_helper", .module = helper_module };
     for (view_names, 1..) |name, i| imports[i] = .{
@@ -121,7 +121,7 @@ pub fn build(b: *std.Build) void {
                 .name = "penny.sync",
                 .android = .{
                     .class = "com.pennygoblin.sync.SyncExtension",
-                    .sources = &.{ b.path("platform/android/SyncExtension.kt"), b.path("platform/android/SyncEngine.kt"), b.path("platform/android/NativeSync.kt"), b.path("platform/android/PinnedHttp.kt"), b.path("platform/android/Credentials.kt") },
+                    .sources = &.{ b.path("platform/android/SyncExtension.kt"), b.path("platform/android/SyncEngine.kt"), b.path("platform/android/NativeSync.kt"), b.path("platform/android/PinnedHttp.kt"), b.path("platform/android/Credentials.kt"), b.path("platform/android/DesktopHooks.kt") },
                     .dependencies = &.{ "androidx.work:work-runtime-ktx:2.10.1", "com.journeyapps:zxing-android-embedded:4.3.0" },
                 },
                 // A voucher photo for the desktop to scan (scan): the
@@ -140,7 +140,7 @@ pub fn build(b: *std.Build) void {
             },
         },
         .android = .{
-            .hooks = &.{.{ .class = "com.pennygoblin.sync.SyncExtension" }},
+            .hooks = &.{ .{ .class = "com.pennygoblin.sync.SyncExtension" }, .{ .class = "dev.oriel.DesktopHooks" } },
             .permissions = &.{ .{ .name = "android.permission.ACCESS_NETWORK_STATE" }, .{ .name = "android.permission.ACCESS_WIFI_STATE" }, .{ .name = "android.permission.CHANGE_WIFI_MULTICAST_STATE" } },
             .proguard_rules = b.path("platform/android/proguard-rules.pro"),
         },

@@ -5,10 +5,20 @@
     n2: color=#e0e4dc
     n4: color=#ffb4ab
   }
+
+  @when (hover) {
+    disconnect: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    disconnect: background=#384a3b
+  }
+  @when (focus) {
+    disconnect: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <row id="sync-device" justify="space-between" align="center" padding="8,4,8,12" row-gap="8" column-gap="8" unset="color font-size">
   <text class="n2" font-size="15" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif">{title}</text>
-  <row id="disconnect" justify="center" align="center" min-height="40" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
+  <row id="disconnect" justify="center" align="center" min-height="48" padding="0,12,0,12" row-gap="8" column-gap="8" radius="20" clickable="true" unset="shrink">
     <text class="n4" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center" letter-spacing="0.1">Disconnect</text>
   </row>
 </row>

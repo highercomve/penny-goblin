@@ -60,9 +60,13 @@ sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'ndk;28.2.13676358'
 python3 scripts/build-android.py
 ```
 
-The script uses Oriel's `android-project` generator, compiles the arm64 library,
+The script uses Oriel's `android-project` generator, compiles the selected native libraries,
 builds the APK and verifies its package identity/signature. Outputs are in `dist/`.
 `android/` is generated; Kotlin and app resource sources live in `platform/android/`.
+Use `--abi arm64-v8a --abi x86_64` for a universal APK and `--test-profile` for
+`com.pennygoblin.adaptive.test`, which has a separate data sandbox. See the
+[Android adaptive coverage and device evidence](docs/android-adaptive.md) for
+Chromebook build prerequisites, shortcuts and outstanding verification.
 CI APKs are **debug-signed**. A clean runner generates its own debug key, so these
 are test artifacts, not a stable release signing channel. Android only permits
 an in-place update when the installed app has the same signing certificate.

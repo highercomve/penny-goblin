@@ -37,10 +37,41 @@
     statements-page: background=#111511
     n2: background=#111511
   }
+
+  @when (hover) {
+    bank-add-account: background=#d0e4c5
+    bank-bci: background=#d0e4c5
+    bank-boa: background=#d0e4c5
+    bank-santander: background=#d0e4c5
+    close-statements: background=#d0e4c5
+    n7: background=#d0e4c5
+    santander-connect: background=#d0e4c5
+    statement-file: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    bank-add-account: background=#384a3b
+    bank-bci: background=#384a3b
+    bank-boa: background=#384a3b
+    bank-santander: background=#384a3b
+    close-statements: background=#384a3b
+    n7: background=#384a3b
+    santander-connect: background=#384a3b
+    statement-file: background=#384a3b
+  }
+  @when (focus) {
+    bank-add-account: outline=2,-2,#e59700 outline-halo=#111511
+    bank-bci: outline=2,-2,#e59700 outline-halo=#111511
+    bank-boa: outline=2,-2,#e59700 outline-halo=#111511
+    bank-santander: outline=2,-2,#e59700 outline-halo=#111511
+    close-statements: outline=2,-2,#e59700 outline-halo=#111511
+    n7: outline=2,-2,#e59700 outline-halo=#111511
+    santander-connect: outline=2,-2,#e59700 outline-halo=#111511
+    statement-file: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <view id="statements-page" class="statements-page" scroll="true" scroll-x="true" unset="shrink color font-size">
   <row class="n2" align="center" min-height="64" row-gap="4" column-gap="4" sticky="0,auto,auto,auto" z="2">
-    <row id="close-statements" justify="center" align="center" width="48" height="48" min-height="40" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
+    <row id="close-statements" justify="center" align="center" width="48" height="48" min-height="48" row-gap="8" column-gap="8" radius="50%" clickable="true" unset="shrink">
       <icon class="n4" grow="0" shrink="0" width="24" height="24" clickable="true">
         <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" linecap="round" linejoin="round" />
       </icon>
@@ -48,7 +79,7 @@
     <view id="statements-title" grow="1" shrink="1" basis="0%" clip="true">
       <text class="n6" shrink="0" font-size="22" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" nowrap="true">Bank statements</text>
     </view>
-    <row class="n7" justify="center" align="center" grow="0" min-height="40" padding="0,24,0,24" row-gap="8" column-gap="8" clip="true" radius="20" clickable="true">
+    <row class="n7" justify="center" align="center" grow="0" min-height="48" padding="0,24,0,24" row-gap="8" column-gap="8" clip="true" radius="20" clickable="true">
       <text class="n8" shrink="1" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" letter-spacing="0.1">Add PDF</text>
       <view id="statement-file" class="statement-file" justify="center" padding="1" border-width="2" border-color="#cdcdcd" position="absolute" top="0" right="0" bottom="0" left="0" radius="5" opacity="0" clickable="true" label="Add PDF" unset="shrink">
         <text class="n10" shrink="0" font-size="14" font-weight="500" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" text-align="center">Choose File  No file chosen</text>
@@ -58,15 +89,15 @@
   <text id="statement-status" class="statement-status" shrink="0" margin="0" font-size="13" font-weight="400" font-family="Roboto, Google Sans, system-ui, -apple-system, Segoe UI, sans-serif" line-height="18.85">Status</text>
   <view id="santander-import" display="none" padding="16" row-gap="12" radius="16">
     <row column-gap="8">
-      <button id="bank-santander" class="n7" grow="1" min-height="44" radius="22"><text id="bank-santander-label" class="n8" font-size="14">✓ Santander</text></button>
-      <button id="bank-bci" class="n7" grow="1" min-height="44" radius="22"><text id="bank-bci-label" class="n8" font-size="14">BCI</text></button>
-      <button id="bank-boa" class="n7" grow="1" min-height="44" radius="22"><text id="bank-boa-label" class="n8" font-size="14">Bank of America</text></button>
+      <button id="bank-santander" class="n7" grow="1" min-height="48" radius="22"><text id="bank-santander-label" class="n8" font-size="14">✓ Santander</text></button>
+      <button id="bank-bci" class="n7" grow="1" min-height="48" radius="22"><text id="bank-bci-label" class="n8" font-size="14">BCI</text></button>
+      <button id="bank-boa" class="n7" grow="1" min-height="48" radius="22"><text id="bank-boa-label" class="n8" font-size="14">Bank of America</text></button>
     </row>
     <text id="bank-import-title" class="n6" font-size="20" font-weight="500">Santander</text>
     <text id="bank-import-description" class="statement-status" font-size="14">Import this month’s card charges</text>
     <text class="statement-status" font-size="13">Save charges to</text>
     <input id="santander-account" class="santander-account" width="100%" min-height="56" padding="16" radius="12" border-width="1" font-size="16" label="Bank card or account" placeholder="Choose or enter the card or account" />
-    <button id="bank-add-account" class="n7" min-height="44" padding="12" radius="22"><text class="n8" font-size="14">Add card or account</text></button>
+    <button id="bank-add-account" class="n7" min-height="48" padding="12" radius="22"><text class="n8" font-size="14">Add card or account</text></button>
     <text id="bank-import-help" class="statement-status" font-size="13">Choose the same card you’ll open at Santander.</text>
     <text id="bank-import-steps" class="statement-status" font-size="13">1  Sign in    ·    2  Choose card    ·    3  Review new charges</text>
     <button id="santander-connect" class="n7" min-height="48" padding="12,24,12,24" radius="24"><text id="bank-connect-label" class="n8" font-size="14" font-weight="500">Open Santander</text></button>

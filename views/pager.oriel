@@ -3,6 +3,19 @@
   @media (prefers-color-scheme: dark) {
     ink: color=#e0e4dc
   }
+
+  @when (hover) {
+    next: background=#d0e4c5
+    previous: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    next: background=#384a3b
+    previous: background=#384a3b
+  }
+  @when (focus) {
+    next: outline=2,-2,#e59700 outline-halo=#111511
+    previous: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <row class="ink" justify="space-between" align="center" gap="8" padding="12">
   <button id="previous" height="44" grow="1" basis="0%" min-width="0" max-width="110" justify="center" align="center" clickable="true"><text font-size="14" font-weight="500" text-align="center">Previous</text></button>

@@ -11,11 +11,24 @@
   filled: background=#9ad4ae color=#003920
   field: color=#e0e4dc border-color=#8c938a color-scheme=dark
  }
+
+  @when (hover) {
+    open: background=#d0e4c5
+    toggle: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    open: background=#384a3b
+    toggle: background=#384a3b
+  }
+  @when (focus) {
+    open: outline=2,-2,#e59700 outline-halo=#111511
+    toggle: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <column gap="8" shrink="0">
- <button id="toggle" class="primary" min-height="44" padding="8" clickable="true"><text id="title" font-size="14">{title}</text></button>
+ <button id="toggle" class="primary" min-height="48" padding="8" clickable="true"><text id="title" font-size="14">{title}</text></button>
  <column id="body" display="none" gap="8">
   <text font-size="13">{quote}</text>
-  <button id="open" class="primary" min-height="40" padding="8" align-self="flex-start" clickable="true"><text font-size="14">Open source</text></button>
+  <button id="open" class="primary" min-height="48" padding="8" align-self="flex-start" clickable="true"><text font-size="14">Open source</text></button>
  </column>
 </column>

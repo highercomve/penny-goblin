@@ -11,6 +11,22 @@
     n8: color=#c2c9c0
     n9: color=#e0e4dc
   }
+
+  @when (hover) {
+    n9: background=#d0e4c5
+    payment: background=#d0e4c5
+    payment-avatar: background=#d0e4c5
+  }
+  @when (hover) and (prefers-color-scheme: dark) {
+    n9: background=#384a3b
+    payment: background=#384a3b
+    payment-avatar: background=#384a3b
+  }
+  @when (focus) {
+    n9: outline=2,-2,#e59700 outline-halo=#111511
+    payment: outline=2,-2,#e59700 outline-halo=#111511
+    payment-avatar: outline=2,-2,#e59700 outline-halo=#111511
+  }
 </style>
 <row id="payment" justify="flex-start" align="center" width="100%" min-height="56" padding="10,8,10,8" row-gap="16" column-gap="16" radius="8" clickable="true" unset="shrink color font-size">
   <row id="payment-avatar" class="payment-avatar" justify="center" align="center" grow="0" width="40" height="40" radius="50%" clickable="true">
