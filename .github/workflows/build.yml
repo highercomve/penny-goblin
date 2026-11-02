@@ -278,7 +278,7 @@ jobs:
           mkdir release
           cp artifacts/penny-goblin-linux-x86_64-oriel/*-oriel.AppImage release/penny-goblin-linux-x86_64-oriel.AppImage
           cp artifacts/penny-goblin-linux-x86_64-webview/*-webview.AppImage release/penny-goblin-linux-x86_64-webview.AppImage
-          cp artifacts/penny-goblin-android-arm64-oriel/*-android-arm64.apk release/penny-goblin-android-arm64.apk
+          cp artifacts/penny-goblin-android-arm64-oriel/*-android-arm64-v8a.apk release/penny-goblin-android-arm64.apk
           cp artifacts/penny-goblin-windows-x86_64/*.exe release/penny-goblin-windows-x86_64-setup.exe
           cp artifacts/penny-goblin-macos-arm64/*.dmg release/penny-goblin-macos-arm64.dmg
           (cd release && sha256sum * > SHA256SUMS)
