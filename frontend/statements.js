@@ -254,8 +254,8 @@ $("santander-connect").addEventListener("click", async () => {
     status("statement-status", statementBank !== "santander" ? `Sign in to ${bank}, then ${statementBanks[statementBank].step.toLowerCase()} for the selected card or account in the bank window.` : "Sign in in the Santander window, then open card movements. Close it to cancel.");
     const result = await invoke(statementBanks[statementBank].command, { account });
     await reload();
-    if (!result.hash) { status("statement-status", "No new charges in the current month."); return; }
-    status("statement-status", `${result.added} movements ready to review.`);
+    if (!result.hash) { status("statement-status", "No new charges since the last import."); return; }
+    status("statement-status", result.snapshots > 1 ? `${result.added} movements ready to review across ${result.snapshots} months. The earlier month is in your statements list.` : `${result.added} movements ready to review.`);
     const source = snapshot.statements.find(s => s.hash === result.hash);
     const review = () => openStatement(source).catch(error => status("status", errorText(error), true));
     if ($("statements-page").open) closeThen($("statements-page"), review);

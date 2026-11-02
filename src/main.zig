@@ -338,7 +338,7 @@ pub const Commands = struct {
         const db = try database();
         const config = try std.json.parseFromSliceLeaky(@import("core/reporting.zig").Settings, arena, try db.setting(arena, "budget"), .{ .ignore_unknown_fields = true });
         const rows = try @import("core/santander.zig").parse(arena, response, args.account, today, config);
-        return statements.stage_bank(db, arena, today[0..7], rows);
+        return statements.stage_bank_window(db, arena, .santander, rows);
     }
 
     pub fn import_bci(arena: std.mem.Allocator, args: struct { account: []const u8 }) !statements.BankImport {

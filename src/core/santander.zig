@@ -28,6 +28,7 @@ pub fn parse(a: std.mem.Allocator, json: []const u8, account: []const u8, today:
         else => return error.InvalidSantanderResponse,
     };
     if (!std.mem.eql(u8, response.METADATA.STATUS, "0") or !std.mem.eql(u8, response.DATA.Informacion.Codigo, "00") or response.DATA.MatrizMovimientos.len > 10000) return error.InvalidSantanderResponse;
+    const oldest = try previousMonthStart(a, today);
     var rows: std.ArrayList(statements.Row) = .empty;
     for (response.DATA.MatrizMovimientos) |movement| {
         if (std.mem.eql(u8, movement.IndicadorDebeHaber, "H")) continue;
@@ -35,7 +36,9 @@ pub fn parse(a: std.mem.Allocator, json: []const u8, account: []const u8, today:
         const description = std.mem.trim(u8, movement.Descripcion, " \t\r\n");
         if (std.ascii.eqlIgnoreCase(description, "SALDO INICIAL") or std.ascii.eqlIgnoreCase(description, "PAGO")) continue;
         const date = try dateOf(a, movement.Fecha);
-        if (!std.mem.eql(u8, date[0..7], today[0..7]) or std.mem.order(u8, date, today) == .gt) continue;
+        // The unbilled cycle crosses month boundaries (e.g. 26/10 to 02/11);
+        // keep it whole, but never accept anything older than last month.
+        if (std.mem.order(u8, date, oldest) == .lt or std.mem.order(u8, date, today) == .gt) continue;
         const merchant = std.mem.trim(u8, movement.Comercio orelse "", " \t\r\n");
         const payee = try clean(a, if (merchant.len > 0) merchant else description);
         const row: statements.Row = .{
@@ -59,6 +62,15 @@ pub fn parse(a: std.mem.Allocator, json: []const u8, account: []const u8, today:
         }
     }.less);
     return rows.toOwnedSlice(a);
+}
+
+fn previousMonthStart(a: std.mem.Allocator, today: []const u8) ![]const u8 {
+    const year = std.fmt.parseInt(u16, today[0..4], 10) catch return error.InvalidSantanderResponse;
+    const month = std.fmt.parseInt(u8, today[5..7], 10) catch return error.InvalidSantanderResponse;
+    return if (month == 1)
+        std.fmt.allocPrint(a, "{d:0>4}-12-01", .{year - 1})
+    else
+        std.fmt.allocPrint(a, "{d:0>4}-{d:0>2}-01", .{ year, month - 1 });
 }
 
 fn clean(a: std.mem.Allocator, text: []const u8) ![]const u8 {
@@ -106,7 +118,7 @@ test "Santander amounts are exact CLP and malformed grouping never becomes spend
     for ([_][]const u8{ "1.20", "1,200", "-20", "0", "1..000", "NaN" }) |value| try std.testing.expectError(error.InvalidSantanderResponse, amountOf(value));
 }
 
-test "Santander captures only current-month debits, preserving equal purchases" {
+test "Santander captures the unbilled cycle across a month boundary, preserving equal purchases" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -114,16 +126,22 @@ test "Santander captures only current-month debits, preserving equal purchases" 
         \\{"METADATA":{"STATUS":"0"},"DATA":{"Informacion":{"Codigo":"00"},"MatrizMovimientos":[
         \\{"Fecha":"18/10/2026","Descripcion":"COMPRA NORMAL","Comercio":"TEST SHOP","Importe":"1.200","IndicadorDebeHaber":"D"},
         \\{"Fecha":"18/10/2026","Descripcion":"COMPRA NORMAL","Comercio":"TEST SHOP","Importe":"1.200","IndicadorDebeHaber":"D"},
-        \\{"Fecha":"30/09/2026","Descripcion":"COMPRA NORMAL","Comercio":"OLD SHOP","Importe":"9.999","IndicadorDebeHaber":"D"},
+        \\{"Fecha":"30/08/2026","Descripcion":"COMPRA NORMAL","Comercio":"OLD SHOP","Importe":"9.999","IndicadorDebeHaber":"D"},
+        \\{"Fecha":"30/09/2026","Descripcion":"COMPRA NORMAL","Comercio":"LAST MONTH","Importe":"4.000","IndicadorDebeHaber":"D"},
+        \\{"Fecha":"20/10/2026","Descripcion":"COMPRA NORMAL","Comercio":"FUTURE SHOP","Importe":"7.000","IndicadorDebeHaber":"D"},
         \\{"Fecha":"01/10/2026","Descripcion":"SALDO INICIAL","Comercio":null,"Importe":"99.999","IndicadorDebeHaber":"D"},
         \\{"Fecha":"02/10/2026","Descripcion":"PAGO","Comercio":null,"Importe":"5.000","IndicadorDebeHaber":"H"},
         \\{"Fecha":"19/10/2026","Descripcion":"TRASPASO A DEUDA NACIONAL","Comercio":null,"Importe":"2.000","IndicadorDebeHaber":"D"}]}}
     ;
     const rows = try parse(a, json, "1234", "2026-10-19", .{});
-    try std.testing.expectEqual(@as(usize, 3), rows.len);
+    try std.testing.expectEqual(@as(usize, 4), rows.len);
     try std.testing.expectEqualStrings("TRASPASO A DEUDA NACIONAL", rows[0].payee);
     try std.testing.expectEqual(@as(i64, 1200), rows[1].amount);
     try std.testing.expectEqualStrings("1234", rows[2].account);
+    try std.testing.expectEqualStrings("LAST MONTH", rows[3].payee);
+    try std.testing.expectEqualStrings("2026-09-30", rows[3].date);
+    const january = try parse(a, json, "1234", "2027-01-05", .{});
+    try std.testing.expectEqual(@as(usize, 0), january.len);
     try std.testing.expectError(error.InvalidSantanderResponse, parse(a, "{\"METADATA\":{\"STATUS\":\"1\"}}", "1234", "2026-10-19", .{}));
 }
 

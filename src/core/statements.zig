@@ -427,7 +427,7 @@ pub const Bank = enum {
     }
 };
 pub const BankSource = struct { schema: u8 = 1, bank: Bank = .santander, month: []const u8, rows: []const Row };
-pub const BankImport = struct { hash: ?[]const u8 = null, added: usize = 0 };
+pub const BankImport = struct { hash: ?[]const u8 = null, added: usize = 0, snapshots: usize = 0 };
 
 pub fn parser_for(bank: Bank) []const u8 {
     return switch (bank) {
@@ -508,6 +508,7 @@ fn known_bank_rows(db: ledger_mod.Ledger, a: std.mem.Allocator, bank: Bank, rows
     defer exact.deinit(a);
     var counts: std.StringHashMapUnmanaged(usize) = .empty;
     defer counts.deinit(a);
+    var saved: std.ArrayList(Saved) = .empty;
     const query = try db.db.prepare("SELECT o.id,o.source_json FROM observations o JOIN statements s ON s.hash=o.statement_hash WHERE s.parser=?1 LIMIT 100001");
     defer query.finalize();
     try query.bindText(1, parser_for(bank));
@@ -521,6 +522,7 @@ fn known_bank_rows(db: ledger_mod.Ledger, a: std.mem.Allocator, bank: Bank, rows
         const slot = try counts.getOrPut(a, key);
         if (!slot.found_existing) slot.value_ptr.* = 0;
         slot.value_ptr.* += 1;
+        try saved.append(a, .{ .row = row, .key = key });
     }
     // Reserve exact identities first so formatting variants cannot consume them.
     for (rows, ids, 0..) |row, id, i| {
@@ -539,13 +541,77 @@ fn known_bank_rows(db: ledger_mod.Ledger, a: std.mem.Allocator, bank: Bank, rows
         remaining.* -= 1;
         known[i] = true;
     }
+    // Santander shows pending charges with the merchant cut to ~15 characters
+    // and the full name once posted (MINIMARKET ANTO -> MINIMARKET ANTONIA).
+    // Same day, amount and card with one name a prefix of the other is the
+    // same charge; each saved occurrence is still consumed only once.
+    for (rows, 0..) |row, i| {
+        if (known[i]) continue;
+        for (saved.items) |entry| {
+            const remaining = counts.getPtr(entry.key) orelse continue;
+            if (remaining.* == 0 or !try truncated_same(a, row, entry.row)) continue;
+            remaining.* -= 1;
+            known[i] = true;
+            break;
+        }
+    }
     return known;
+}
+
+const Saved = struct { row: Row, key: []const u8 };
+
+fn compact_name(a: std.mem.Allocator, payee: []const u8) ![]const u8 {
+    var name: std.ArrayList(u8) = .empty;
+    for (payee) |byte| {
+        if (std.ascii.isAlphanumeric(byte) or byte >= 128) try name.append(a, std.ascii.toUpper(byte));
+    }
+    return name.items;
+}
+
+fn truncated_same(a: std.mem.Allocator, left: Row, right: Row) !bool {
+    if (left.amount != right.amount or !std.mem.eql(u8, left.date, right.date) or !std.mem.eql(u8, left.currency, right.currency) or !std.mem.eql(u8, left.account, right.account)) return false;
+    const l = try compact_name(a, left.payee);
+    const r = try compact_name(a, right.payee);
+    const short = if (l.len <= r.len) l else r;
+    const long = if (l.len <= r.len) r else l;
+    // Too-short names (e.g. "UBER") are not distinctive enough to merge.
+    return short.len >= 8 and short.len < long.len and std.mem.startsWith(u8, long, short);
 }
 
 /// Stage only new observations. Overlapping snapshots, ignored observations,
 /// edited payments and deleted payments never turn into another new charge.
 pub fn stage_bank(db: ledger_mod.Ledger, a: std.mem.Allocator, month: []const u8, rows: []const Row) !BankImport {
     return stage_bank_for(db, a, .santander, month, rows);
+}
+
+/// A bank window can span a month boundary (Santander's unbilled cycle runs
+/// e.g. 26/10 to 02/11). Snapshots are month-keyed, so stage one per month,
+/// oldest first; the returned hash is the newest snapshot with new rows.
+pub fn stage_bank_window(db: ledger_mod.Ledger, a: std.mem.Allocator, bank: Bank, rows: []const Row) !BankImport {
+    var months: std.ArrayList([]const u8) = .empty;
+    for (rows) |row| {
+        if (row.date.len < 7) return error.InvalidStatement;
+        for (months.items) |month| {
+            if (std.mem.eql(u8, month, row.date[0..7])) break;
+        } else try months.append(a, row.date[0..7]);
+    }
+    std.mem.sort([]const u8, months.items, {}, struct {
+        fn less(_: void, l: []const u8, r: []const u8) bool {
+            return std.mem.order(u8, l, r) == .lt;
+        }
+    }.less);
+    var result: BankImport = .{};
+    for (months.items) |month| {
+        var group: std.ArrayList(Row) = .empty;
+        for (rows) |row| if (std.mem.eql(u8, row.date[0..7], month)) try group.append(a, row);
+        const staged = try stage_bank_for(db, a, bank, month, group.items);
+        if (staged.hash) |hash| {
+            result.hash = hash;
+            result.added += staged.added;
+            result.snapshots += 1;
+        }
+    }
+    return result;
 }
 
 pub fn stage_bank_for(db: ledger_mod.Ledger, a: std.mem.Allocator, bank: Bank, month: []const u8, rows: []const Row) !BankImport {
@@ -587,7 +653,36 @@ pub fn stage_bank_for(db: ledger_mod.Ledger, a: std.mem.Allocator, bank: Bank, m
     try update.bindText(2, parser_for(bank));
     _ = try update.step();
     try db.db.exec("COMMIT");
-    return .{ .hash = hash, .added = added };
+    return .{ .hash = hash, .added = added, .snapshots = 1 };
+}
+
+test "a bank window spanning two months stages one snapshot per month without replay" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const db = try ledger_mod.Ledger.open(":memory:");
+    defer db.close();
+    const rows = [_]Row{
+        .{ .date = "2026-11-02", .amount = 3100, .payee = "INVERSIONES DRA", .account = "1234", .category = "Other" },
+        .{ .date = "2026-10-31", .amount = 5500, .payee = "PEPE CH", .account = "1234", .category = "Other" },
+        .{ .date = "2026-10-27", .amount = 6540, .payee = "MANUEL MONTT", .account = "1234", .category = "Other" },
+    };
+    const first = try stage_bank_window(db, a, .santander, &rows);
+    try std.testing.expectEqual(@as(usize, 3), first.added);
+    try std.testing.expectEqual(@as(usize, 2), first.snapshots);
+    try std.testing.expectEqual(@as(usize, 2), (try sources(db, a)).len);
+    const newest = try review(db, a, first.hash.?);
+    try std.testing.expectEqual(@as(usize, 1), newest.len);
+    const again = try stage_bank_window(db, a, .santander, &rows);
+    try std.testing.expectEqual(@as(usize, 0), again.added);
+    try std.testing.expect(again.hash == null);
+    // Once posted, Santander lengthens the cut-off pending merchant name.
+    const posted = [_]Row{
+        .{ .date = "2026-10-27", .amount = 6540, .payee = "MANUEL MONTT SUPER", .account = "1234", .category = "Other" },
+        .{ .date = "2026-10-27", .amount = 6540, .payee = "MANUEL MONTT SUPER", .account = "1234", .category = "Other" },
+    };
+    const renamed = try stage_bank_window(db, a, .santander, &posted);
+    try std.testing.expectEqual(@as(usize, 1), renamed.added);
 }
 
 test "banks have separate capture identities and retain Santander fingerprint compatibility" {

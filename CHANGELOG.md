@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.21
+
+- Santander imports keep the whole unbilled cycle when it crosses a month
+  boundary (e.g. 26/10 to 02/11) instead of dropping last month's charges; each
+  month is staged as its own statement.
+- Recognise a pending Santander charge whose truncated merchant name is
+  lengthened once posted, so it is not offered again as a new charge.
+
 ## 0.2.20
 
 - Remember bank review decisions when merchant case or punctuation changes, while

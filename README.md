@@ -8,7 +8,7 @@ on your devices; there is no hosted account or cloud ledger.
 
 Built with **Zig 0.16.0** and **Oriel**, with two Linux interfaces: WebKit and
 compiled `.oriel` views. Android uses the compiled Oriel renderer. Application
-ID: `com.pennygoblin.app`. Current development version: **0.2.20**.
+ID: `com.pennygoblin.app`. Current development version: **0.2.21**.
 
 ## What it does
 
@@ -185,7 +185,7 @@ idempotent, while legitimate identical purchases are retained separately.
 BCI source IDs are distinct from Santander. Updated desktop/mobile builds are
 needed to sync the new BCI evidence format.
 
-### Santander current-month movements
+### Santander unbilled movements
 
 On the Linux desktop, open **Bank statements → Open Santander**. Choose
 or enter the account/card used in your ledger, sign in yourself in the isolated
@@ -193,8 +193,12 @@ WebKit window, and select the same card at Santander. The movements page opens
 after login; **Open card movements** is also available in the bank window.
 Choose **Review movements** once the correct card's movements are loaded.
 
-Penny Goblin imports current-calendar-month CLP debits into statement review.
-Opening balances and card repayments are excluded. Check possible matches to
+Penny Goblin imports the card's unbilled CLP debits (from the start of last
+month through today) into statement review. The billing cycle can cross a month
+boundary; each month becomes its own statement, and the newest opens for review.
+Opening balances and card repayments are excluded. A pending charge whose
+merchant name Santander later lengthens (MINIMARKET ANTO → MINIMARKET ANTONIA)
+on the same day, amount and card is recognised as already captured. Check possible matches to
 existing payments and confirm before anything is added to spending. Repeated
 payments with the same date, amount, currency, account and merchant (ignoring
 merchant case and punctuation) are matched once per occurrence and collapsed in
