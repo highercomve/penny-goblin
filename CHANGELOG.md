@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.23
+
+- Built on Oriel 0.20.16. Republishes 0.2.22, whose release never appeared:
+  its Android build stopped at the check that makes every Oriel upgrade
+  review the app's Android customizations. They are reviewed for 0.20.16,
+  and the Android APK builds again.
+
 ## 0.2.22
 
 - Built on Oriel 0.20.15. Release builds are checked to contain none of
