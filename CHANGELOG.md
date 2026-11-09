@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.22
+
+- Built on Oriel 0.20.15. Release builds are checked to contain none of
+  Oriel's development-only agent control, and the Linux executable published
+  next to the AppImage is the checked, stripped copy from Oriel's package step.
+
 ## 0.2.21
 
 - Santander imports keep the whole unbilled cycle when it crosses a month
