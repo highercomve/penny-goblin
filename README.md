@@ -122,7 +122,7 @@ use synthetic fixtures and do not touch a real ledger.
 | `scripts/` | Reproducible builds and acceptance fixtures |
 | `site/` | Zine website source |
 
-Oriel 0.18.0 supplies the native renderer and platform integrations. Zig fetches
+Oriel 0.20.15 supplies the native renderer and platform integrations. Zig fetches
 the tagged release and verifies its pinned package hash.
 See [contributing](CONTRIBUTING.md),
 [security](SECURITY.md), [sync](SYNC.md), [changelog](CHANGELOG.md), and the
