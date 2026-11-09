@@ -50,7 +50,7 @@ def customize(root: Path, test_profile=False):
 ''' + anchor)
         activity_file.write_text(text)
     native = source / "OrielNative.kt"
-    templates = list((root / "zig-pkg").glob("oriel-0.18.*/android/template/app/src/main/java/dev/oriel/OrielNative.kt"))
+    templates = list((root / "zig-pkg").glob("oriel-0.20.16-*/android/template/app/src/main/java/dev/oriel/OrielNative.kt"))
     assert len(templates) == 1, "Review customizations before upgrading Oriel"
     content = templates[0].read_text()
     marker = "    // Penny Goblin desktop native state and scale."
